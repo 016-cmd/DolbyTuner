@@ -6,3 +6,4 @@ app/build/
 .idea/
 .DS_Store
 output/
+app/dolbytuner.jks
