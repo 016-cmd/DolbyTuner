@@ -527,25 +527,7 @@ private fun GeqScreen(deviceLine: String) {
                             fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clip(RoundedCornerShape(8.dp))
-                            .clickable {
-                                val flat = IntArray(DapRealtime.BANDS) { 0 }
-                                curve = flat
-                                saveGeq(ctx, flat)
-                                status = "写入中…"
-                                kotlinx.coroutines.MainScope().launch {
-                                    val e = withContext(Dispatchers.IO) { DapRealtime.writeLive(flat) }
-                                    status = if (e == null) "已归零" else "归零失败：$e"
-                                }
-                            }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Icon(Icons.Default.RestartAlt, null, tint = Accent, modifier = Modifier.size(14.dp))
-                        Spacer(Modifier.width(3.dp))
-                        Text("归零", fontSize = 11.sp, color = Accent)
-                    }
+                    DolbyBadge(on = dolbyOn)
                 }
                 Spacer(Modifier.height(6.dp))
                 BandCurveCanvas(
@@ -612,6 +594,7 @@ private fun GeqScreen(deviceLine: String) {
                                 } else {
                                     status = "读取失败：该机型不支持回读（setter-only）"
                                 }
+                                dolbyOn = withContext(Dispatchers.IO) { DapRealtime.dolbyState() }
                             }
                         },
                         modifier = Modifier.weight(1f).height(44.dp),
@@ -622,10 +605,25 @@ private fun GeqScreen(deviceLine: String) {
                         Spacer(Modifier.width(4.dp))
                         Text("读取当前", fontSize = 11.sp)
                     }
-                    DolbyBadge(
-                        on = dolbyOn,
-                        modifier = Modifier.weight(1f).height(44.dp)
-                    )
+                    OutlinedButton(
+                        onClick = {
+                            val flat = IntArray(DapRealtime.BANDS) { 0 }
+                            curve = flat
+                            saveGeq(ctx, flat)
+                            status = "写入中…"
+                            scope.launch {
+                                val e = withContext(Dispatchers.IO) { DapRealtime.writeLive(flat) }
+                                status = if (e == null) "已置为平直曲线（点保存才会持久化）" else "失败：$e"
+                            }
+                        },
+                        modifier = Modifier.weight(1f).height(44.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFB45309))
+                    ) {
+                        Icon(Icons.Default.HorizontalRule, null, Modifier.size(15.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("重置平直", fontSize = 11.sp)
+                    }
                 }
                 TextButton(
                     onClick = {
@@ -1837,7 +1835,8 @@ private fun DolbyBadge(on: Boolean?, modifier: Modifier = Modifier) {
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
             .background(color.copy(alpha = 0.10f))
-            .border(1.dp, color.copy(alpha = 0.55f), RoundedCornerShape(10.dp)),
+            .border(1.dp, color.copy(alpha = 0.55f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
