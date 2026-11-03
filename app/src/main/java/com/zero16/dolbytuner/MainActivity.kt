@@ -955,12 +955,6 @@ private fun EffectsScreen() {
     var showSavedDialog by remember { mutableStateOf(false) }
     var showSaveConfirm by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
-    var presetName by remember { mutableStateOf("") }
-    var showSaveDialog by remember { mutableStateOf(false) }
-    var showLoadDialog by remember { mutableStateOf(false) }
-    var showExportDialog by remember { mutableStateOf(false) }
-    var exportText by remember { mutableStateOf("") }
-    var presets by remember { mutableStateOf(loadPresets(ctx)) }
     // 设备切换（主层套用预设）后，音效页的开关与滑杆跟着刷新
     LaunchedEffect(DeviceState.changeTick) {
         if (DeviceState.changeTick > 0) fx = loadFx(ctx)
@@ -988,7 +982,6 @@ private fun EffectsScreen() {
         }
     }
     DisposableEffect(Unit) { onDispose { DapRealtime.closeSession() } }
-    fun reloadPresets() { presets = loadPresets(ctx) }
 
     fun apply(next: FxState) {
         fx = next
@@ -1000,51 +993,7 @@ private fun EffectsScreen() {
         }
     }
 
-    val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) scope.launch {
-            val text = withContext(Dispatchers.IO) {
-                runCatching { ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.readText() }.getOrNull()
-            }
-            if (text == null) { status = "导入失败：读不到文件"; return@launch }
-            try {
-                val arr = org.json.JSONArray(text)
-                val incoming = mutableListOf<Preset>()
-                for (i in 0 until arr.length()) {
-                    val o = arr.getJSONObject(i)
-                    val g = o.getJSONArray("geq")
-                    val geq = IntArray(g.length()) { g.getInt(it) }
-                    if (geq.size == DapRealtime.BANDS) incoming += Preset(
-                        o.getString("name"), geq,
-                        FxState(o.optInt("hp", 0) == 1, o.optInt("sp", 0) == 1,
-                            o.optInt("bass", 0) == 1, o.optInt("gain", 0),
-                            o.optInt("cutoff", 150), o.optInt("width", 0),
-                            o.optInt("dialog", 0) == 1, o.optInt("damt", 4))
-                    )
-                }
-                val merged = (presets + incoming).distinctBy { it.name }
-                writePresets(ctx, merged)
-                reloadPresets()
-                status = "已导入 ${incoming.size} 个预设"
-            } catch (t: Throwable) { status = "导入失败：${t.message}" }
-        }
-    }
-
-    val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        if (uri != null) scope.launch {
-            withContext(Dispatchers.IO) {
-                runCatching {
-                    val text = exportText.ifBlank { presetFile(ctx).readText() }
-                    ctx.contentResolver.openOutputStream(uri)?.use {
-                        it.write(text.toByteArray())
-                    }
-                }
-            }
-            status = "已导出预设"
-            exportText = ""
-        }
-    }
-
-    Column(
+Column(
         Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState())
             .padding(horizontal = 14.dp).padding(bottom = 96.dp)
     ) {
@@ -1137,150 +1086,10 @@ private fun EffectsScreen() {
             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFB45309))
         ) { Text("重置为 DSP 默认值（GEQ + 音效）", fontSize = 11.sp) }
 
-        Spacer(Modifier.height(12.dp))
-        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = cs.surfaceVariant.copy(alpha = 0.85f))) {
-            Column(Modifier.padding(14.dp)) {
-                Text("预设", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                Text("保存时会把 GEQ 20 段一起收进去", fontSize = 9.sp, color = cs.onSurfaceVariant)
-                Spacer(Modifier.height(10.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    PresetButton(Icons.Default.Save, "保存预设", Modifier.weight(1f)) {
-                        presetName = ""
-                        showSaveDialog = true
-                    }
-                    PresetButton(Icons.Default.FolderOpen, "加载预设", Modifier.weight(1f)) {
-                        reloadPresets()
-                        showLoadDialog = true
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    PresetButton(Icons.Default.Share, "导出预设", Modifier.weight(1f)) {
-                        reloadPresets()
-                        showExportDialog = true
-                    }
-                    PresetButton(Icons.Default.Add, "导入预设", Modifier.weight(1f)) {
-                        importer.launch(arrayOf("application/json", "text/plain"))
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    if (presets.isEmpty()) "还没有预设" else "已保存 ${presets.size} 个预设",
-                    fontSize = 9.sp, color = cs.onSurfaceVariant
-                )
-            }
-        }
-Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(10.dp))
         Text(status, fontSize = 10.sp, color = cs.onSurfaceVariant)
         Spacer(Modifier.height(10.dp))
 
-        if (showSaveDialog) {
-            AlertDialog(
-                onDismissRequest = { showSaveDialog = false },
-                title = { Text("保存预设", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
-                text = {
-                    Column {
-                        Text("会把当前 GEQ 20 段与全部音效参数一起保存", fontSize = 10.sp, color = cs.onSurfaceVariant)
-                        Spacer(Modifier.height(10.dp))
-                        androidx.compose.material3.OutlinedTextField(
-                            value = presetName,
-                            onValueChange = { presetName = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
-                            label = { Text("预设名称", fontSize = 11.sp) }
-                        )
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        val name = presetName.trim().ifBlank { "预设 ${presets.size + 1}" }
-                        writePresets(ctx, presets.filterNot { it.name == name } + Preset(name, loadGeq(ctx), fx))
-                        reloadPresets()
-                        presetName = ""
-                        showSaveDialog = false
-                        status = "已保存预设：$name"
-                    }) { Text("保存", color = Accent, fontSize = 12.sp) }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showSaveDialog = false }) { Text("取消", fontSize = 12.sp) }
-                }
-            )
-        }
-
-        if (showLoadDialog) {
-            AlertDialog(
-                onDismissRequest = { showLoadDialog = false },
-                title = { Text("加载预设", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
-                text = {
-                    Column(Modifier.verticalScroll(rememberScrollState())) {
-                        if (presets.isEmpty()) Text("还没有预设", fontSize = 11.sp, color = cs.onSurfaceVariant)
-                        presets.forEach { p ->
-                            Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(p.name, fontSize = 12.sp)
-                                    Text(
-                                        "GEQ ${p.geq.count { it != 0 }} 段非零 · 环绕 ${listOf(p.fx.hpVirtual, p.fx.spVirtual).count { it }}/2 · 人声${if (p.fx.dialogOn) "开" else "关"} · 低音${if (p.fx.bassOn) "开" else "关"}",
-                                        fontSize = 9.sp, color = cs.onSurfaceVariant
-                                    )
-                                }
-                                TextButton(onClick = {
-                                    status = "正在加载：${p.name}"
-                                    showLoadDialog = false
-                                    scope.launch {
-                                        val e1 = withContext(Dispatchers.IO) { DapRealtime.writeLive(p.geq) }
-                                        val e2 = if (e1 == null) withContext(Dispatchers.IO) { DapRealtime.commit(p.geq) } else e1
-                                        val e3 = if (e2 == null) pushFx(p.fx) else e2
-                                        if (e3 == null) {
-                                            fx = p.fx
-                                            saveFx(ctx, p.fx)
-                                            saveGeq(ctx, p.geq)
-                                            status = "已加载：${p.name}"
-                                        } else status = "加载失败：$e3"
-                                    }
-                                }) { Text("应用", fontSize = 11.sp, color = Accent) }
-                                TextButton(onClick = {
-                                    writePresets(ctx, loadPresets(ctx).filterNot { it.name == p.name })
-                                    reloadPresets()
-                                    status = "已删除：${p.name}"
-                                }) { Text("删除", fontSize = 11.sp, color = Color(0xFFB45309)) }
-                            }
-                        }
-                    }
-                },
-                confirmButton = {},
-                dismissButton = {
-                    TextButton(onClick = { showLoadDialog = false }) { Text("关闭", fontSize = 12.sp) }
-                }
-            )
-        }
-
-        if (showExportDialog) {
-            AlertDialog(
-                onDismissRequest = { showExportDialog = false },
-                title = { Text("导出预设", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
-                text = {
-                    Column(Modifier.verticalScroll(rememberScrollState())) {
-                        if (presets.isEmpty()) Text("还没有预设", fontSize = 11.sp, color = cs.onSurfaceVariant)
-                        presets.forEach { p ->
-                            Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text(p.name, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                                TextButton(onClick = {
-                                    exportText = presetJsonString(p)
-                                    showExportDialog = false
-                                    exporter.launch("DolbyTuner_${p.name}.json")
-                                }) { Text("导出", fontSize = 11.sp, color = Accent) }
-                            }
-                        }
-                    }
-                },
-                confirmButton = {},
-                dismissButton = {
-                    TextButton(onClick = { showExportDialog = false }) { Text("关闭", fontSize = 12.sp) }
-                }
-            )
-        }
         if (showSaveConfirm) {
             AlertDialog(
                 onDismissRequest = { showSaveConfirm = false },
@@ -1384,20 +1193,6 @@ Spacer(Modifier.height(10.dp))
                 }
             )
         }
-    }
-}
-
-@Composable
-private fun PresetButton(icon: ImageVector, title: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = modifier.height(42.dp),
-        shape = RoundedCornerShape(10.dp),
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = Accent)
-    ) {
-        Icon(icon, null, Modifier.size(16.dp))
-        Spacer(Modifier.width(4.dp))
-        Text(title, fontSize = 11.sp)
     }
 }
 
