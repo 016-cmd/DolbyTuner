@@ -48,6 +48,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Close
@@ -114,7 +115,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 private val ALLOWED_BRANDS = setOf("xiaomi", "redmi", "poco")
-private val Accent = Color(0xFF22C55E)
+internal val Accent = Color(0xFF22C55E)
 
 private fun sysProp(key: String): String = runCatching {
     val c = Class.forName("android.os.SystemProperties")
@@ -336,6 +337,7 @@ private fun MainApp(activity: Activity, deviceLine: String) {
             when (tab) {
                 0 -> GeqScreen(deviceLine)
                 1 -> EffectsScreen()
+                2 -> ConfigScreen()
                 else -> SettingsScreen(activity)
             }
         }
@@ -374,6 +376,7 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                 listOf(
                     DockTab("GEQ", Icons.Default.Equalizer),
                     DockTab("音效", Icons.Default.Tune),
+                    DockTab("配置", Icons.Default.Bookmarks),
                     DockTab("设置", Icons.Default.Settings)
                 )
                     .forEachIndexed { index, tab ->
@@ -402,14 +405,14 @@ private fun MainApp(activity: Activity, deviceLine: String) {
     }
 }
 
-private fun loadGeq(ctx: Context): IntArray {
+internal fun loadGeq(ctx: Context): IntArray {
     val raw = ctx.getSharedPreferences("dolby_tuner", Context.MODE_PRIVATE).getString("geq", null)
         ?: return IntArray(DapRealtime.BANDS)
     val a = raw.split(",").mapNotNull { it.toIntOrNull() }
     return if (a.size == DapRealtime.BANDS) a.toIntArray() else IntArray(DapRealtime.BANDS)
 }
 
-private fun saveGeq(ctx: Context, gains: IntArray) {
+internal fun saveGeq(ctx: Context, gains: IntArray) {
     ctx.getSharedPreferences("dolby_tuner", Context.MODE_PRIVATE)
         .edit().putString("geq", gains.joinToString(",")).apply()
 }
@@ -731,7 +734,7 @@ internal data class Preset(
     val fx: FxState
 )
 
-private fun loadFx(ctx: Context): FxState {
+internal fun loadFx(ctx: Context): FxState {
     val a = ctx.getSharedPreferences("dolby_tuner", Context.MODE_PRIVATE)
         .getString("fx", null)?.split(",") ?: return FxState()
     return try {
@@ -746,7 +749,7 @@ private fun loadFx(ctx: Context): FxState {
     } catch (_: Exception) { FxState() }
 }
 
-private fun saveFx(ctx: Context, f: FxState) {
+internal fun saveFx(ctx: Context, f: FxState) {
     val v = listOf(
         if (f.hpVirtual) "1" else "0",
         if (f.spVirtual) "1" else "0",
@@ -783,7 +786,7 @@ internal fun loadPresets(ctx: Context): List<Preset> {
     } catch (_: Exception) { emptyList() }
 }
 
-private fun writePresets(ctx: Context, list: List<Preset>) {
+internal fun writePresets(ctx: Context, list: List<Preset>) {
     val arr = org.json.JSONArray()
     list.forEach { p ->
         arr.put(org.json.JSONObject().apply {
