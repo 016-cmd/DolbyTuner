@@ -25,6 +25,8 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -419,6 +421,7 @@ private fun GeqScreen(deviceLine: String) {
     val scope = rememberCoroutineScope()
     var curve by remember { mutableStateOf(loadGeq(ctx)) }
     var status by remember { mutableStateOf("正在连接 Dolby DSP…") }
+    var dolbyOn by remember { mutableStateOf<Boolean?>(null) }
     val device = DeviceState.device
     val allBindings = DeviceState.bindings
     val deviceBinding = DeviceState.binding
@@ -440,6 +443,7 @@ private fun GeqScreen(deviceLine: String) {
                 status = if (e == null) "已连接 · 20 段实时生效（DSP 不支持回读）" else "写入失败：$e"
             }
         }
+        dolbyOn = withContext(Dispatchers.IO) { DapRealtime.dolbyState() }
     }
     DisposableEffect(Unit) { onDispose { DapRealtime.closeSession() } }
 
@@ -618,25 +622,10 @@ private fun GeqScreen(deviceLine: String) {
                         Spacer(Modifier.width(4.dp))
                         Text("读取当前", fontSize = 11.sp)
                     }
-                    OutlinedButton(
-                        onClick = {
-                            val flat = IntArray(DapRealtime.BANDS) { 0 }
-                            curve = flat
-                            saveGeq(ctx, flat)
-                            status = "写入中…"
-                            scope.launch {
-                                val e = withContext(Dispatchers.IO) { DapRealtime.writeLive(flat) }
-                                status = if (e == null) "已置为平直曲线（点保存才会持久化）" else "失败：$e"
-                            }
-                        },
-                        modifier = Modifier.weight(1f).height(44.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFB45309))
-                    ) {
-                        Icon(Icons.Default.HorizontalRule, null, Modifier.size(15.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("重置平直", fontSize = 11.sp)
-                    }
+                    DolbyBadge(
+                        on = dolbyOn,
+                        modifier = Modifier.weight(1f).height(44.dp)
+                    )
                 }
                 TextButton(
                     onClick = {
@@ -1824,5 +1813,43 @@ private fun SettingRow(
         if (selected) {
             Icon(Icons.Default.Check, null, tint = Accent, modifier = Modifier.size(18.dp))
         }
+    }
+}
+
+/**
+ * 只读状态徽章：外形是按钮，但不可点击。
+ * 绿 = 杜比 DAP 生效中；红 = 杜比未生效；灰 = 无法判断（本机无 DAP）。
+ */
+@Composable
+private fun DolbyBadge(on: Boolean?, modifier: Modifier = Modifier) {
+    val cs = MaterialTheme.colorScheme
+    val color = when (on) {
+        true -> Color(0xFF22C55E)
+        false -> Color(0xFFEF4444)
+        null -> cs.onSurfaceVariant.copy(alpha = 0.55f)
+    }
+    val label = when (on) {
+        true -> "生效中"
+        false -> "未生效"
+        null -> "未知"
+    }
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(color.copy(alpha = 0.10f))
+            .border(1.dp, color.copy(alpha = 0.55f), RoundedCornerShape(10.dp)),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Box(
+            Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Spacer(Modifier.width(6.dp))
+        Text("Dolby", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = color)
+        Spacer(Modifier.width(6.dp))
+        Text(label, fontSize = 10.sp, color = color.copy(alpha = 0.85f))
     }
 }

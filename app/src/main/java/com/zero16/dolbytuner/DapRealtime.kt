@@ -250,6 +250,34 @@ object DapRealtime {
     }
 
     /**
+     * 只读：杜比 DAP 当前是否在生效。
+     *
+     * 判定顺序：
+     *   ① COMMAND_GET_DAP_ON（DSP 侧 DAP 开关，最接近「音频链上是否启用」）
+     *   ② 读不到时退回 AudioEffect.enabled（只代表 effect 实例被启用）
+     *
+     * @return true = 生效中，false = 未生效，null = 无法判断（本机无 DAP / 无控制权）
+     */
+    @Synchronized
+    fun dolbyState(): Boolean? {
+        var own = false
+        var e: AudioEffect? = null
+        return try {
+            e = session ?: openEffect().also { own = true }
+            val q = runCatching { queryInt(e, COMMAND_GET_DAP_ON) }.getOrNull()
+            when {
+                q != null && q > 0 -> true
+                q != null && q == 0 -> false
+                else -> runCatching { e.enabled }.getOrNull()
+            }
+        } catch (t: Throwable) {
+            null
+        } finally {
+            if (own) runCatching { e?.release() }
+        }
+    }
+
+    /**
      * 读回当前生效的 GEQ 曲线（优先复用常驻会话）。
      *
      * 顺序：当前 profile → 其余 profile（0..count-1）。
