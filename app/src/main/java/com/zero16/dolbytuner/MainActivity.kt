@@ -1115,7 +1115,7 @@ private fun EffectsScreen() {
      * 拖动滑杆时只写这一个参数（含它依赖的开关），
      * 不再每次把整套 A 类参数重发一遍 —— 避免打断了 Dolby 的实时状态。
      */
-    private fun dapDiffItems(prev: DapFx, next: DapFx): List<Pair<String, IntArray>> {
+    fun dapDiffItems(prev: DapFx, next: DapFx): List<Pair<String, IntArray>> {
         val out = ArrayList<Pair<String, IntArray>>(8)
 
         // A1 限幅
