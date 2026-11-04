@@ -1093,6 +1093,23 @@ private fun FxSection() {
         }
 
         EffectCard(
+            title = "人声增强",
+            subtitle = "deon 105 · 只提升人声频段",
+            icon = Icons.Default.RecordVoiceOver,
+            enabled = fx.dialogOn,
+            onEnabledChange = { apply(fx.copy(dialogOn = it)) },
+            accent = Color(0xFF22C55E)
+        ) {
+            FxSlider(
+                "增强量", fx.dialogAmt.toString(), fx.dialogAmt, 0..16, fx.dialogOn,
+                onLive = { fx = fx.copy(dialogAmt = it); liveFx.trySend(108 to it) }
+            ) { apply(fx.copy(dialogAmt = it)) }
+            Text("不压低背景（ded 未使用）", fontSize = 9.sp, color = cs.onSurfaceVariant)
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        EffectCard(
             title = "耳机虚拟环绕",
             subtitle = "vdhe 101 · 耳机下的声场扩展",
             icon = Icons.Default.Headphones,
@@ -1113,22 +1130,6 @@ private fun FxSection() {
         )
 
         // ── 人声组 ──────────────────────────────
-        EffectCard(
-            title = "人声增强",
-            subtitle = "deon 105 · 只提升人声频段",
-            icon = Icons.Default.RecordVoiceOver,
-            enabled = fx.dialogOn,
-            onEnabledChange = { apply(fx.copy(dialogOn = it)) },
-            accent = Color(0xFF22C55E)
-        ) {
-            FxSlider(
-                "增强量", fx.dialogAmt.toString(), fx.dialogAmt, 0..16, fx.dialogOn,
-                onLive = { fx = fx.copy(dialogAmt = it); liveFx.trySend(108 to it) }
-            ) { apply(fx.copy(dialogAmt = it)) }
-            Text("不压低背景（ded 未使用）", fontSize = 9.sp, color = cs.onSurfaceVariant)
-        }
-
-        Spacer(Modifier.height(10.dp))
         Button(
             onClick = { showSaveConfirm = true },
             modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -1277,7 +1278,7 @@ private fun EffectsScreen() {
     Column(
         Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 14.dp).padding(top = 18.dp)
     ) {
-        Text("DynamicsProcessing 音效", fontSize = 25.sp, fontWeight = FontWeight.Bold)
+        Text("DynamicsProcessing 音效", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
         Text(
             "依赖 APP 在后台运行",
@@ -1390,7 +1391,9 @@ private fun SettingsScreen(activity: Activity) {
         }
     }
 
-    Column(Modifier.fillMaxWidth()) {
+    Column(
+        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 96.dp)
+    ) {
         Spacer(Modifier.height(14.dp))
         Text("设置", fontSize = 25.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
