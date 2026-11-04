@@ -756,13 +756,21 @@ object DapRealtime {
     private fun allProfiles(e: AudioEffect): List<Int> = listOf(currentProfile(e))
 
     /**
-     * A 类写入使用的 profile —— 回到「当前档」。
+     * A 类写入使用的 profile —— **这是设备掩码，不是音效档号**。
      *
-     * 教训：v2.0.0 试过把它当设备掩码（0x40000000 / 0x20000000），
-     * 结果 Dolby 整条效果链被判异常，连 GEQ 都不响应了。
-     * 掩码这条路必须在独立的沙盒实例里验，不能直接压在正在用的链上。
+     * 探针实测（frida，audiohalservice.qti / libhwdapaidl.so）：
+     *   Dolby 自己下参数时是  DapHw::setParam(dev=0x40000000, 'gebs', …)  rc=0
+     *   DlbEffectDapHw 的缓存是按 audio_devices_t 分桶的：
+     *     SortedVector<key_value_pair_t<audio_devices_t, shared_ptr<DapParamCache>>>
+     *   而我们一直发 profile=4 → 值被塞进 device=4 那个桶，
+     *   commit(0x40000000) 永远取不到 → 参数进不了 DSP（rc 仍是 0，所以看起来“成功”）。
+     *
+     * 外放 = 0x40000000；耳机/USB/蓝牙 = 0x20000000。
      */
-    private fun profilesForWrite(e: AudioEffect): List<Int> = listOf(currentProfile(e))
+    private fun profilesForWrite(e: AudioEffect): List<Int> = listOf(DEVICE_SPEAKER)
+
+    /** 扬声器（Dolby 的 audio_devices_t 掩码，逆向 C0892eg.O 同值） */
+    private const val DEVICE_SPEAKER = 0x40000000
 
     /**
      * 逆向 APP 的"总开关"两步（C0650ag 启用分支）：

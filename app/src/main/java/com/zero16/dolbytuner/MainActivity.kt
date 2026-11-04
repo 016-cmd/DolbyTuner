@@ -1185,17 +1185,10 @@ private fun EffectsScreen() {
         return out
     }
 
-    // 虚拟低音「强度」变化时走最小实验通道：
-    // 只发 vbm / vbog 两条，profile = 0x40000000，command(0) 批量包。
-    fun pushItems(items: List<Pair<String, IntArray>>): String? {
-        val isVbStrength = items.any { it.first == "vbog" }
-        return if (isVbStrength) {
-            val vb = items.filter { it.first == "vbm" || it.first == "vbog" }
-            DapRealtime.writeFourCCMasked(vb)
-        } else {
-            DapRealtime.writeFourCCBatch(items)
-        }
-    }
+    // A 类统一走 command(5) 逐条 + 末尾 SAVE；
+    // profile 由 DapRealtime.profilesForWrite 统一给设备掩码 0x40000000。
+    fun pushItems(items: List<Pair<String, IntArray>>): String? =
+        DapRealtime.writeFourCCBatch(items)
 
     fun setDap(next: DapFx, live: Boolean) {
         val prev = dapFx
