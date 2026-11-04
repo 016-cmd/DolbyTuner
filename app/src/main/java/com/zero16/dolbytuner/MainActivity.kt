@@ -836,6 +836,50 @@ private suspend fun pushFx(next: FxState): String? = withContext(Dispatchers.IO)
     e
 }
 
+/**
+ * A 类：把 DapFx 一次批量写进 Dolby。
+ * 关闭态也必须写复位值，不能"什么都不写"（否则会停在上一次的值）。
+ */
+private suspend fun pushDapFx(next: DapFx): String? = withContext(Dispatchers.IO) {
+    val items = ArrayList<Pair<String, IntArray>>(20)
+
+    // A1 Peak Limiter
+    if (next.limiterOn) {
+        val lin = (Math.pow(10.0, next.dplpDb / 20.0) * 256.0).toInt().coerceIn(1, 256)
+        items += "dplp" to intArrayOf(lin)
+        items += "preg" to intArrayOf(if (next.pregOn) 1 else 0)
+        items += "preo" to intArrayOf((next.preoDb * 16).coerceIn(0, 192))
+        items += "vmb " to intArrayOf((next.vmbDb * 16).coerceIn(0, 96))
+    } else {
+        items += "dplp" to intArrayOf(256)
+        items += "preg" to intArrayOf(0)
+        items += "preo" to intArrayOf(0)
+        items += "vmb " to intArrayOf(0)
+    }
+
+    // A4 环绕
+    items += "dvle" to intArrayOf(if (next.surroundOn) 1 else 0)
+    items += "dvla" to intArrayOf(next.surroundBoost.coerceIn(0, 192))
+
+    // A2 虚拟低音（becf 两个值：上限、下限）
+    items += "beon" to intArrayOf(if (next.vbOn) 1 else 0)
+    items += "beb" to intArrayOf(next.vbStrength.coerceIn(0, 192))
+    items += "becf" to intArrayOf(
+        next.vbHighHz.coerceIn(60, 240),
+        next.vbLowHz.coerceIn(20, 160)
+    )
+
+    // A5 IEQ
+    items += "ieon" to intArrayOf(if (next.ieqOn) 1 else 0)
+    items += "iea" to intArrayOf(next.ieqAmount.coerceIn(0, 16))
+    items += "ieid" to intArrayOf(next.ieqPreset.coerceIn(0, 10))
+
+    // A8 后级增益
+    items += "vol" to intArrayOf(if (next.postGainOn) next.postGainDb.coerceIn(-12, 12) else 0)
+
+    DapRealtime.writeFourCCBatch(items)
+}
+
 /** 应用一条预设：GEQ 写入并提交 + 全部音效参数，成功时同步本地记录 */
 internal suspend fun applyPreset(ctx: Context, p: Preset): String? {
     val e1 = withContext(Dispatchers.IO) { DapRealtime.writeLive(p.geq) }
@@ -947,6 +991,14 @@ private fun EffectsScreen() {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var fx by remember { mutableStateOf(loadFx(ctx)) }
+    var dapFx by remember { mutableStateOf(DapFxStore.load(ctx)) }
+    // A 类参数实时通道：拖动只写最新一份，避免排队
+    val dapLive = remember { Channel<DapFx>(Channel.CONFLATED) }
+    LaunchedEffect(Unit) {
+        for (v in dapLive) {
+            withContext(Dispatchers.IO) { pushDapFx(v) }
+        }
+    }
     // 滑杆实时写入通道：只保留最新值，避免拖动时写入排队
     val liveFx = remember { Channel<Pair<Int, Int>>(Channel.CONFLATED) }
     LaunchedEffect(Unit) {
@@ -997,6 +1049,20 @@ private fun EffectsScreen() {
         }
     }
 
+    fun setDap(next: DapFx, live: Boolean) {
+        dapFx = next
+        if (live) {
+            dapLive.trySend(next)
+        } else {
+            DapFxStore.save(ctx, next)
+            status = "写入中…"
+            scope.launch {
+                val err = pushDapFx(next)
+                status = if (err == null) "已写入 · 重启后仍生效" else "写入失败：$err"
+            }
+        }
+    }
+
 Column(
         Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState())
             .padding(horizontal = 14.dp).padding(bottom = 96.dp)
@@ -1006,6 +1072,32 @@ Column(
         Text("Dolby 实时层 · 不写文件、不重启音频服务", fontSize = 11.sp, color = cs.onSurfaceVariant)
         Spacer(Modifier.height(12.dp))
         // ── 低音组 ──────────────────────────────
+        EffectCard(
+            title = "虚拟低音",
+            subtitle = "beon · 谐波增强 · 仅外放生效",
+            icon = Icons.Default.GraphicEq,
+            enabled = dapFx.vbOn,
+            onEnabledChange = { setDap(dapFx.copy(vbOn = it), false) },
+            accent = Color(0xFFB45309)
+        ) {
+            ParamSlider(
+                "强度", dapFx.vbStrength.toString(), dapFx.vbStrength.toFloat(), 0f..192f,
+                onValue = { setDap(dapFx.copy(vbStrength = it.toInt()), true) },
+                onFinished = { setDap(dapFx.copy(vbStrength = it.toInt()), false) }
+            )
+            ParamSlider(
+                "低频下限 · Hz", dapFx.vbLowHz.toString(), dapFx.vbLowHz.toFloat(), 20f..160f,
+                onValue = { setDap(dapFx.copy(vbLowHz = it.toInt()), true) },
+                onFinished = { setDap(dapFx.copy(vbLowHz = it.toInt()), false) }
+            )
+            ParamSlider(
+                "低频上限 · Hz", dapFx.vbHighHz.toString(), dapFx.vbHighHz.toFloat(), 60f..240f,
+                onValue = { setDap(dapFx.copy(vbHighHz = it.toInt()), true) },
+                onFinished = { setDap(dapFx.copy(vbHighHz = it.toInt()), false) }
+            )
+            Text("耳机 / 蓝牙下 Dolby 会自动旁路，只对外放有效", fontSize = 9.sp, color = cs.onSurfaceVariant)
+        }
+
         EffectCard(
             title = "低音增强",
             subtitle = "bass 111 · 增益 / 截止 / 带宽",
@@ -1029,6 +1121,21 @@ Column(
         }
 
         // ── 声场组 ──────────────────────────────
+        EffectCard(
+            title = "环绕声场",
+            subtitle = "dvle · 声场扩展强度",
+            icon = Icons.Default.Tune,
+            enabled = dapFx.surroundOn,
+            onEnabledChange = { setDap(dapFx.copy(surroundOn = it), false) }
+        ) {
+            ParamSlider(
+                "强度", dapFx.surroundBoost.toString(), dapFx.surroundBoost.toFloat(), 0f..192f,
+                onValue = { setDap(dapFx.copy(surroundBoost = it.toInt()), true) },
+                onFinished = { setDap(dapFx.copy(surroundBoost = it.toInt()), false) }
+            )
+            Text("与下面的虚拟环绕是两套，建议只开一个", fontSize = 9.sp, color = cs.onSurfaceVariant)
+        }
+
         EffectCard(
             title = "耳机虚拟环绕",
             subtitle = "vdhe 101 · 耳机下的声场扩展",
@@ -1060,6 +1167,73 @@ Column(
                 onLive = { fx = fx.copy(dialogAmt = it); liveFx.trySend(108 to it) }
             ) { apply(fx.copy(dialogAmt = it)) }
             Text("不压低背景（ded 未使用）", fontSize = 9.sp, color = cs.onSurfaceVariant)
+        }
+
+        // ── 均衡组 ──────────────────────────────
+        EffectCard(
+            title = "智能均衡 · IEQ",
+            subtitle = "ieon · 随内容自动补偿",
+            icon = Icons.Default.Equalizer,
+            enabled = dapFx.ieqOn,
+            onEnabledChange = { setDap(dapFx.copy(ieqOn = it), false) }
+        ) {
+            ParamSlider(
+                "强度", dapFx.ieqAmount.toString(), dapFx.ieqAmount.toFloat(), 0f..16f,
+                onValue = { setDap(dapFx.copy(ieqAmount = it.toInt()), true) },
+                onFinished = { setDap(dapFx.copy(ieqAmount = it.toInt()), false) }
+            )
+            ParamSlider(
+                "预设 ID", dapFx.ieqPreset.toString(), dapFx.ieqPreset.toFloat(), 0f..10f,
+                onValue = { setDap(dapFx.copy(ieqPreset = it.toInt()), true) },
+                onFinished = { setDap(dapFx.copy(ieqPreset = it.toInt()), false) }
+            )
+            Text("和 GEQ 是两套：GEQ 是你画的曲线，IEQ 是 Dolby 自己算", fontSize = 9.sp, color = cs.onSurfaceVariant)
+        }
+
+        // ── 动态组 ──────────────────────────────
+        EffectCard(
+            title = "峰值限幅",
+            subtitle = "dplp · 防破音",
+            icon = Icons.Default.Warning,
+            enabled = dapFx.limiterOn,
+            onEnabledChange = { setDap(dapFx.copy(limiterOn = it), false) }
+        ) {
+            ParamSlider(
+                "门限 · dBFS", String.format(java.util.Locale.US, "%.1f", dapFx.dplpDb),
+                dapFx.dplpDb, -12f..0f, step = 0.5f,
+                onValue = { setDap(dapFx.copy(dplpDb = it), true) },
+                onFinished = { setDap(dapFx.copy(dplpDb = it), false) }
+            )
+            ParamToggle(
+                "稳幅器", "preg", dapFx.pregOn,
+                onCheckedChange = { setDap(dapFx.copy(pregOn = it), false) }
+            )
+            ParamSlider(
+                "稳幅过载", "${dapFx.preoDb} dB", dapFx.preoDb.toFloat(), 0f..12f,
+                onValue = { setDap(dapFx.copy(preoDb = it.toInt()), true) },
+                onFinished = { setDap(dapFx.copy(preoDb = it.toInt()), false) }
+            )
+            ParamSlider(
+                "最大音量推限", "${dapFx.vmbDb} dB", dapFx.vmbDb.toFloat(), 0f..6f,
+                onValue = { setDap(dapFx.copy(vmbDb = it.toInt()), true) },
+                onFinished = { setDap(dapFx.copy(vmbDb = it.toInt()), false) }
+            )
+        }
+
+        // ── 增益组 ──────────────────────────────
+        EffectCard(
+            title = "后级增益",
+            subtitle = "vol · 整体电平补偿",
+            icon = Icons.Default.VolumeUp,
+            enabled = dapFx.postGainOn,
+            onEnabledChange = { setDap(dapFx.copy(postGainOn = it), false) }
+        ) {
+            ParamSlider(
+                "增益 · dB", "${dapFx.postGainDb} dB", dapFx.postGainDb.toFloat(), -12f..12f,
+                onValue = { setDap(dapFx.copy(postGainDb = it.toInt()), true) },
+                onFinished = { setDap(dapFx.copy(postGainDb = it.toInt()), false) }
+            )
+            Text("和手机音量键不是一回事：这个作用在杜比后级", fontSize = 9.sp, color = cs.onSurfaceVariant)
         }
 
         Spacer(Modifier.height(10.dp))
@@ -1120,7 +1294,12 @@ Column(
                             var e = withContext(Dispatchers.IO) { DapRealtime.writeLive(g) }
                             if (e == null) e = withContext(Dispatchers.IO) { DapRealtime.commit(g) }
                             val err = if (e == null) pushFx(fx) else e
-                            status = if (err == null) "已保存 · GEQ + 音效重启后沿用" else "保存失败：$err"
+                            val dapErr = if (err == null) pushDapFx(dapFx) else null
+                            status = when {
+                                err != null -> "保存失败：$err"
+                                dapErr != null -> "音效已保存，A 类参数写入失败：$dapErr"
+                                else -> "已保存 · GEQ + 音效重启后沿用"
+                            }
                             if (err == null) showSavedDialog = true
                             saving = false
                         }
@@ -1157,14 +1336,18 @@ Column(
                     TextButton(onClick = {
                         showResetConfirm = false
                         val def = if (hasBase) DspBaseline.fx(ctx) else FxState()
+                        val dapDef = DapFx()
+                        dapFx = dapDef
+                        DapFxStore.save(ctx, dapDef)
                         fx = def
                         saveFx(ctx, def)
                         saveGeq(ctx, IntArray(DapRealtime.BANDS))
                         status = "正在重置…"
                         scope.launch {
                             val e1 = resetToDefault(ctx)
+                            val e2 = if (e1 == null) pushDapFx(dapDef) else e1
                             status = when {
-                                e1 != null -> "重置失败：$e1"
+                                e2 != null -> "重置失败：$e2"
                                 hasBase -> "已恢复为本机 DSP 默认值"
                                 else -> "已恢复为内置默认值（未检测本机参数）"
                             }

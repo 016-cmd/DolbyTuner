@@ -3,6 +3,7 @@ package com.zero16.dolbytuner
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -58,14 +59,27 @@ internal fun EffectCard(
 ) {
     var expanded by rememberSaveable { mutableStateOf(initiallyExpanded) }
     val cs = MaterialTheme.colorScheme
+    val dark = androidx.compose.foundation.isSystemInDarkTheme()
+
+    // 开启 / 关闭两态用同一套"底 + 描边"规则，避免出现两张发白的卡片：
+    // 浅色模式：浅底 + 深描边；深色模式：深底 + 浅描边
+    val container = if (enabled) {
+        accent.copy(alpha = if (dark) 0.20f else 0.13f)
+    } else {
+        if (dark) Color.Black.copy(alpha = 0.45f) else Color.White.copy(alpha = 0.66f)
+    }
+    val borderColor = if (enabled) {
+        accent.copy(alpha = if (dark) 0.55f else 0.42f)
+    } else {
+        if (dark) Color.White.copy(alpha = 0.22f) else Color.Black.copy(alpha = 0.14f)
+    }
+    val subColor = if (dark) Color.White.copy(alpha = 0.72f) else Color.Black.copy(alpha = 0.58f)
 
     Card(
         Modifier.fillMaxWidth().padding(vertical = 4.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (enabled) accent.copy(alpha = 0.10f)
-            else cs.surfaceVariant.copy(alpha = 0.85f)
-        )
+        border = BorderStroke(1.dp, borderColor),
+        colors = CardDefaults.cardColors(containerColor = container)
     ) {
         Column {
             Row(
@@ -88,7 +102,7 @@ internal fun EffectCard(
                     if (subtitle.isNotBlank()) {
                         Text(
                             subtitle, fontSize = 9.sp, lineHeight = 11.sp,
-                            color = cs.onSurfaceVariant, maxLines = 1
+                            color = subColor, maxLines = 1
                         )
                     }
                 }
