@@ -926,17 +926,24 @@ object DapRealtime {
                 liveReady = true
             }
 
-            // ── 逆向 C0832dg.O 的批量包 + command(0)
-            //    [profile, count, (profile, fourcc, len, values)…]
-            // 探针实测：command(5) 对 A 类是“哑写”——rc=0，但值从不进 DapParamCache，
-            // updateEffectParams 下发时 vbog 仍是 0。command(0) 才会走 setParamValues 分支。
-            val payload = buildParamSetPayload(DEVICE_SPEAKER, items)
-            val st = e.setParam(CMD_SET_BATCH, payload)
+            // ── 回到 v1.7.1 那条「实测有效」的路：
+            //    单条 command(5) + profile = persist.audio.dolby.profile 的当前值。
+            //  旧笔记实测：profile=4 时写 4 有效、写 0 无效；
+            //  现在 getprop 是 0，所以必须写 0，写 0x40000000 只会落进一个没人读的桶。
+            val profile = propProfile() ?: 0
+            var bad = 0
+            var lastRc = 0
+            items.forEach { (tag, vs) ->
+                val st = e.setParam(CMD_PARAM, buildParamPayload(profile, fourcc(tag), vs))
+                lastRc = st
+                if (st < 0) bad = st
+                android.util.Log.i("DapWr", "single p=$profile $tag rc=$st")
+            }
             android.util.Log.i(
                 "DapWr",
-                "batch p=0x${DEVICE_SPEAKER.toString(16)} rc=$st ${items.joinToString(" ") { it.first }}"
+                "batch p=$profile n=${items.size} last=$lastRc ${items.joinToString(" ") { it.first }}"
             )
-            if (st < 0) return statusText(st, "A 类批量")
+            if (bad < 0) return statusText(bad, "A 类 / profile $profile")
             // 关键：普通参数（101/111/233…）每次写完都会补一条 COMMAND_SAVE，
             // 所以它能落进 DSP 的当前参数集；
             // A 类以前只写不提交，DSP 侧一直停在"待提交"状态 —— 这就是写成功没声音的原因。
