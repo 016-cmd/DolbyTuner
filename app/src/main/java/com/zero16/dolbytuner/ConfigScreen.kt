@@ -435,8 +435,6 @@ private fun PresetBigCard(
                 FxLine("增益", p.fx.bassGain.toString(), ink)
                 FxLine("截止", p.fx.bassCutoff.toString(), ink)
                 FxLine("带宽", p.fx.bassWidth.toString(), ink)
-                FxLine("IEQ", if (d.ieqOn) "●${d.ieqAmount}/${d.ieqPreset}" else "○", ink)
-                FxLine("后级", if (d.postGainOn) "●${d.postGainDb}" else "○", ink)
             }
 
             // 右 20%：名字 + 应用 / 删除（从上到下均分整列高度）
