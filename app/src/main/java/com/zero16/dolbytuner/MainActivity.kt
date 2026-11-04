@@ -1402,7 +1402,7 @@ private fun EffectsScreen() {
 
     fun toDynMbc(l: List<IntArray>) = l.map { a ->
         DynProc.MbcBandCfg(
-            enabled = a[9] == 1,
+            enabled = mbcOn && a[9] == 1,
             thresholdDb = a[0] / 10f,
             ratio = a[1] / 10f,
             attackMs = a[2] / 10f,
@@ -1775,9 +1775,7 @@ private fun EffectsScreen() {
     LaunchedEffect(Unit) {
         if (dpOn && !DynProc.running) {
             withContext(Dispatchers.IO) {
-                DynProc.start(gain.toFloat(), cfg(), toDynMbc(mbcStore))
-                DynProc.setMbcModuleEnabled(mbcOn)
-                if (postOn) DynProc.setPostEq(postData.copyOf(), true)
+                DynProc.start(gain.toFloat(), cfg(), toDynMbc(mbcStore))                if (postOn) DynProc.setPostEq(postData.copyOf(), true)
             }
             status = DynProc.status
         }
@@ -2100,7 +2098,7 @@ private fun EffectsScreen() {
             subtitle = "4段动态 · 250 / 2k / 8k / 20k",
             icon = Icons.Default.Equalizer,
             enabled = mbcOn,
-            onEnabledChange = { mbcOn = it; prefs.edit().putBoolean("mbc_on", it).apply(); DynProc.setMbcModuleEnabled(it); applyMbc() },
+            onEnabledChange = { mbcOn = it; prefs.edit().putBoolean("mbc_on", it).apply(); applyMbc() },
             accent = Color(0xFFA855F7)
         ) {
             val cMbc = Color(0xFFA855F7)

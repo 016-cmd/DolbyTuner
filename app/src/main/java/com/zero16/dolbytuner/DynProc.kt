@@ -36,7 +36,6 @@ object DynProc {
     private var lastGain: Float = 0f
     private var lastLimiter: LimiterCfg = LimiterCfg()
     private var lastMbc: List<MbcBandCfg> = defaultMbc()
-    private var lastMbcOn: Boolean = true
     private var lastPost: IntArray? = null
 
     /** 后置均衡 10 段中心频率 */
@@ -197,13 +196,6 @@ object DynProc {
     }
 
     /** 运行时改 MBC */
-    /** 多段压缩器模块总开关（不影响每段自己的 bypass 状态） */
-    @Synchronized
-    fun setMbcModuleEnabled(on: Boolean) {
-        val d = dp ?: return
-        runCatching { d.setMbcEnabled(on) }
-    }
-
     @Synchronized
     fun setMbc(bands: List<MbcBandCfg>) {
         lastMbc = bands
@@ -214,7 +206,7 @@ object DynProc {
         }
         // 整体替换：单段 setMbcBandAllChannelsTo 在部分机型上改 enabled 不生效
         val okAll = runCatching {
-            val mbc = d.mbc ?: DynamicsProcessing.Mbc(4)
+            val mbc = DynamicsProcessing.Mbc(4)
             for (i in 0 until 4) {
                 val c = bands.getOrNull(i) ?: continue
                 mbc.setBand(
