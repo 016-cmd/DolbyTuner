@@ -1035,6 +1035,8 @@ private fun EffectsScreen() {
     val scope = rememberCoroutineScope()
     var fx by remember { mutableStateOf(loadFx(ctx)) }
     var dapFx by remember { mutableStateOf(DapFxStore.load(ctx)) }
+    // 系统 Dolby 自己的配置（persist 属性，每次进页面重新读）
+    var sysDolby by remember { mutableStateOf<SysDolby.State?>(null) }
     // A 类参数实时通道：拖动只写最新一份，避免排队
     val dapLive = remember { Channel<DapFx>(Channel.CONFLATED) }
     LaunchedEffect(Unit) {
@@ -1060,6 +1062,9 @@ private fun EffectsScreen() {
     }
     // 进入音效页时先读 DSP 真实值；读不到（或数值越界）就保留本地记录
     LaunchedEffect(Unit) {
+        // 系统 Dolby 自己的配置：每次进页面重新读一遍
+        sysDolby = withContext(Dispatchers.IO) { SysDolby.read() }
+
         val synced = withContext(Dispatchers.IO) {
             fun pick(v: Int?, lo: Int, hi: Int) = v?.takeIf { it in lo..hi }
             var next = fx
@@ -1124,6 +1129,11 @@ Column(
         Spacer(Modifier.height(14.dp))
         Text("音效", fontSize = 25.sp, fontWeight = FontWeight.Bold)
         Text("Dolby 实时层 · 不写文件、不重启音频服务", fontSize = 11.sp, color = cs.onSurfaceVariant)
+        Text(
+            "系统 Dolby：${sysDolby?.summary() ?: "读取中…"}",
+            fontSize = 9.sp, lineHeight = 12.sp,
+            color = cs.onSurfaceVariant.copy(alpha = 0.85f)
+        )
         Spacer(Modifier.height(12.dp))
         // ── 低音组 ──────────────────────────────
         EffectCard(
