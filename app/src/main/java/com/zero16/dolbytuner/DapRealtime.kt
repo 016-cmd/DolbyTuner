@@ -603,6 +603,16 @@ object DapRealtime {
         }
     }
 
+    /** command(int, byte[], byte[]) —— 带输出缓冲，读回测试要用 */
+    private val commandMethod: Method by lazy {
+        findEffectMethod(
+            "command",
+            Int::class.javaPrimitiveType!!,
+            ByteArray::class.java,
+            ByteArray::class.java
+        )
+    }
+
     /** 读回 FourCC 参数；读不到返回 null（不代表写入失败） */
     @Synchronized
     fun readFourCC(tag: String, count: Int = 1): IntArray? {
@@ -622,6 +632,72 @@ object DapRealtime {
         } catch (t: Throwable) {
             null
         }
+    }
+
+    /**
+     * 读回探测：不改任何参数，只试 5 种读法，把返回码和原始回包打出来。
+     * 用于判断本机 Dolby 到底有没有回读通道。
+     */
+    @Synchronized
+    fun probeReadback(tag: String = "dplp"): String {
+        val sb = StringBuilder()
+        val fc = fourcc(tag)
+        sb.append("Dolby DAP FourCC 读回测试\n")
+        sb.append("tag=\"").append(tag).append("\"  fourcc=0x")
+            .append(Integer.toHexString(fc)).append("\n\n")
+
+        fun hex(b: ByteArray, n: Int = 48): String {
+            val m = minOf(n, b.size)
+            if (m <= 0) return "(空)"
+            val out = StringBuilder()
+            for (i in 0 until m) out.append(String.format(java.util.Locale.US, "%02X ", b[i]))
+            return out.toString().trim()
+        }
+
+        fun buf(vararg v: Int): ByteArray {
+            val bb = ByteBuffer.allocate(v.size * 4).order(ByteOrder.LITTLE_ENDIAN)
+            v.forEach { bb.putInt(it) }
+            return bb.array()
+        }
+
+        try {
+            val e = session ?: openEffect().also { session = it }
+            sb.append("effect id=").append(e.id)
+                .append("  enabled=").append(e.enabled)
+                .append("  hasControl=").append(e.hasControl()).append("\n\n")
+
+            fun runCmd(label: String, key: Int, payload: ByteArray) {
+                val out = ByteArray(64)
+                val rc = try {
+                    commandMethod.invoke(e, key, payload, out) as Int
+                } catch (t: Throwable) {
+                    -999
+                }
+                sb.append(label).append("  rc=").append(rc)
+                    .append("  out=").append(hex(out)).append('\n')
+            }
+
+            runCmd("A cmd(5,[0,fourcc])", 5, buf(0, fc))
+            runCmd("B cmd(5,[0x01000000,0,0,fourcc])", 5, buf(0x01000000, 0, 0, fc))
+            runCmd("C cmd(5,[0x03000000,fourcc])", 5, buf(0x03000000, fc))
+            runCmd("D cmd(20,[0,fourcc])", 20, buf(0, fc))
+
+            val out2 = ByteArray(64)
+            val rc2 = try {
+                getParamFullMethod.invoke(e, 20, buf(0, fc), out2) as Int
+            } catch (t: Throwable) {
+                -999
+            }
+            sb.append("E getParam(20,..)  rc=").append(rc2)
+                .append("  out=").append(hex(out2)).append('\n')
+
+            val dapOn = runCatching { queryInt(e, COMMAND_GET_DAP_ON) }.getOrNull()
+            sb.append("\n[对照] DAP_ON（PARA 通道）=").append(dapOn)
+            if (dapOn != null) sb.append("   ← 说明整数 ID 那套是可读的") else sb.append("   ← 对照也没读到")
+        } catch (t: Throwable) {
+            sb.append("异常：").append(rootCause(t))
+        }
+        return sb.toString()
     }
 
     /** 拖动时用：写全部 profile，不释放实例；句柄失效时自动重开并重试一次 */
