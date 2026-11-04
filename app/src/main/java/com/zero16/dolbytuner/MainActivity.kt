@@ -1674,26 +1674,6 @@ private fun EffectsScreen() {
             )
         } else raw
 
-    /**
-     * 当前 EQ 的原始曲线（未套等响补偿）：
-     * AutoEQ 导入 > GEQ(20 段 × 逐段强度) > PEQ，最后统一乘整体强度。
-     */
-    fun rawCurve(peqOverride: List<PeqBand>? = null): FloatArray {
-        val ae = aeqCurve
-        val base: FloatArray = if (ae != null) {
-            ae.copyOf()
-        } else if (eqTab == 0) {
-            val scaled = IntArray(DapRealtime.BANDS) { i ->
-                (geqQ4.getOrElse(i) { 0 } * geqInt.getOrElse(i) { 100 } / 100f).toInt()
-            }
-            EqMath.geq20To127(scaled, geqQ / 10f, geqMaster / 10f)
-        } else {
-            EqMath.peqTo127(peqOverride ?: peqData)
-        }
-        return AutoEq.scale(base, eqIntensity)
-    }
-
-
     var sel by remember { mutableIntStateOf(prefs.getInt("mbc_sel", 0)) }
     var mbcStore by remember { mutableStateOf(loadMbc(prefs)) }
     var status by remember { mutableStateOf(DynProc.status) }
@@ -1879,6 +1859,25 @@ private fun EffectsScreen() {
 
     var geqQ by remember { mutableIntStateOf(prefs.getInt("geq_q", 10)) }
     var geqMaster by remember { mutableIntStateOf(prefs.getInt("geq_master", 0)) }
+
+    /**
+     * 当前 EQ 的原始曲线（未套等响补偿）：
+     * AutoEQ 导入 > GEQ(20 段 × 逐段强度) > PEQ，最后统一乘整体强度。
+     */
+    fun rawCurve(peqOverride: List<PeqBand>? = null): FloatArray {
+        val ae = aeqCurve
+        val base: FloatArray = if (ae != null) {
+            ae.copyOf()
+        } else if (eqTab == 0) {
+            val scaled = IntArray(DapRealtime.BANDS) { i ->
+                (geqQ4.getOrElse(i) { 0 } * geqInt.getOrElse(i) { 100 } / 100f).toInt()
+            }
+            EqMath.geq20To127(scaled, geqQ / 10f, geqMaster / 10f)
+        } else {
+            EqMath.peqTo127(peqOverride ?: peqData)
+        }
+        return AutoEq.scale(base, eqIntensity)
+    }
 
     var pendFreq by remember { mutableIntStateOf(500) }
     var pendGain by remember { mutableIntStateOf(0) }
@@ -2964,7 +2963,7 @@ private fun EffectsScreen() {
                         status = "已导入 AutoEQ 曲线（127 点）"
                         showAeqDlg = false
                     }
-                }) { Text("导入", color = cEq, fontSize = 12.sp) }
+                }) { Text("导入", color = Color(0xFF6366F1), fontSize = 12.sp) }
             },
             dismissButton = {
                 TextButton(onClick = { showAeqDlg = false }) { Text("取消", fontSize = 12.sp) }
