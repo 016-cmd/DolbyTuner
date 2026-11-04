@@ -403,7 +403,7 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 listOf(
-                    DockTab("GEQ", Icons.Default.Equalizer),
+                    DockTab("Dolby", Icons.Default.Equalizer),
                     DockTab("音效", Icons.Default.Tune),
                     DockTab("配置", Icons.Default.Bookmarks),
                     DockTab("设置", Icons.Default.Settings)
@@ -496,10 +496,7 @@ private fun GeqScreen(deviceLine: String) {
         }
     }
 
-    Column(
-        Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp).padding(bottom = 96.dp)
-    ) {
+    Column(Modifier.fillMaxWidth()) {
         Spacer(Modifier.height(14.dp))
         Text("Dolby Tuner", fontSize = 25.sp, fontWeight = FontWeight.Bold)
         Text(deviceLine, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -672,6 +669,15 @@ private fun GeqScreen(deviceLine: String) {
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(status, fontSize = 10.sp, color = cs.onSurfaceVariant, maxLines = 2)
+
+                Spacer(Modifier.height(18.dp))
+                FxSection()
+
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "已同步 · DSP 实时参数",
+                    fontSize = 9.sp, color = cs.onSurfaceVariant.copy(alpha = 0.75f)
+                )
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -995,7 +1001,7 @@ internal suspend fun resetToDefault(ctx: Context): String? {
 
 /** 音效页：环绕 / 低音 / 重置 / 预设 */
 @Composable
-private fun EffectsScreen() {
+private fun FxSection() {
     val cs = MaterialTheme.colorScheme
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1061,15 +1067,7 @@ Column(
         Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState())
             .padding(horizontal = 14.dp).padding(bottom = 96.dp)
     ) {
-        Spacer(Modifier.height(14.dp))
-        Text("音效", fontSize = 25.sp, fontWeight = FontWeight.Bold)
-        Text("Dolby 实时层 · 不写文件、不重启音频服务", fontSize = 11.sp, color = cs.onSurfaceVariant)
-        Text(
-            "系统 Dolby：${sysDolby?.summary() ?: "读取中…"}",
-            fontSize = 9.sp, lineHeight = 12.sp,
-            color = cs.onSurfaceVariant.copy(alpha = 0.85f)
-        )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(4.dp))
         EffectCard(
             title = "低音增强",
             subtitle = "bass 111 · 增益 / 截止 / 带宽",
@@ -1144,11 +1142,6 @@ Column(
                 Text("保存到 Dolby（GEQ + 音效）", fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "写入杜比引擎 + 参数存储 · 不重启音频服务 · 重启后沿用",
-            fontSize = 9.sp, color = cs.onSurfaceVariant.copy(alpha = 0.7f)
-        )
         Spacer(Modifier.height(10.dp))
         OutlinedButton(
             onClick = { showResetConfirm = true },
@@ -1258,6 +1251,11 @@ Column(
                         Text("① 杜比引擎内存（立刻生效）", fontSize = 11.sp, color = cs.onSurfaceVariant, lineHeight = 16.sp)
                         Text("② Dolby DAP 参数存储（重启后沿用）", fontSize = 11.sp, color = cs.onSurfaceVariant, lineHeight = 16.sp)
                         Spacer(Modifier.height(8.dp))
+                        Text(
+                            "写入杜比引擎 + 参数存储 · 不重启音频服务 · 重启后沿用",
+                            fontSize = 10.sp, color = cs.onSurfaceVariant, lineHeight = 15.sp
+                        )
+                        Spacer(Modifier.height(4.dp))
                         Text("重启手机后会继续沿用这次保存的参数。", fontSize = 11.sp, color = Accent, lineHeight = 16.sp)
                     }
                 },
@@ -1268,6 +1266,21 @@ Column(
                 }
             )
         }
+    }
+}
+
+@Composable
+private fun EffectsScreen() {
+    val cs = MaterialTheme.colorScheme
+    Column(
+        Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 14.dp).padding(top = 18.dp)
+    ) {
+        Text("DynamicsProcessing 音效", fontSize = 25.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "依赖 APP 在后台运行",
+            fontSize = 11.sp, color = cs.onSurfaceVariant
+        )
     }
 }
 
