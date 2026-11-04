@@ -21,7 +21,7 @@ import kotlin.math.ln
 /**
  * DP 侧 EQ 曲线画布（自绘）：
  *  - X 轴按频率对数排布，只标少量刻度，不会像 127 点那样糊成一片
- *  - 纵向 ±20 dB，中间一条 0 dB 基线
+ *  - 纵向 ±30 dB，中间一条 0 dB 基线
  *
  * @param curve 127 点曲线（dB）
  * @param fMin / fMax 显示范围（GEQ 用 47…19700，PEQ 用 20…20000）
@@ -53,7 +53,7 @@ fun DpEqCanvas(
         }
 
         fun yOf(db: Float): Float {
-            val t = ((db + 20f) / 40f).coerceIn(0f, 1f)
+            val t = ((db + 30f) / 60f).coerceIn(0f, 1f)
             return (h - padBottom) - t * (h - padBottom)
         }
 

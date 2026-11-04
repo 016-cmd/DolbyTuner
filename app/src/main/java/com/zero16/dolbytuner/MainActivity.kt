@@ -2062,106 +2062,95 @@ private fun EffectsScreen() {
 
         // ===== 等响补偿 =====
         val cEl = Color(0xFF8B5CF6)
-        Card(
-            Modifier.fillMaxWidth().padding(vertical = 4.dp),
-            shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, cEl.copy(alpha = if (elOn) 0.7f else 0.3f)),
-            colors = CardDefaults.cardColors(
-                containerColor = cEl.copy(alpha = if (elOn) 0.16f else 0.07f)
-            )
+        EffectCard(
+            title = "等响补偿",
+            subtitle = if (elBase < 0) "请先设定基准音量"
+            else "低于基准音量时自动增强低频与高频",
+            icon = Icons.Default.GraphicEq,
+            enabled = elOn,
+            onEnabledChange = { on ->
+                if (on && elBase <= 0) {
+                    elBase = curVolPct
+                    prefs.edit().putInt("el_base", elBase).apply()
+                }
+                elOn = on
+                prefs.edit().putBoolean("el_on", on).apply()
+                if (on) {
+                    pushEq()
+                } else {
+                    eqRaw = if (eqTab == 0) {
+                        EqMath.geq20To127(geqQ4, geqQ / 10f, geqMaster / 10f)
+                    } else EqMath.peqTo127(peqData)
+                    eqCurve = eqRaw
+                    scope.launch {
+                        withContext(Dispatchers.IO) { DynProc.setPreEq(eqRaw) }
+                        status = DynProc.status
+                    }
+                }
+            },
+            accent = cEl
         ) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("等响补偿", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.weight(1f))
-                    androidx.compose.material3.Switch(
-                        checked = elOn,
-                        enabled = dpOn && elBase > 0,
-                        onCheckedChange = {
-                            elOn = it
-                            prefs.edit().putBoolean("el_on", it).apply()
-                            if (it) pushEq() else {
-                                eqRaw = if (eqTab == 0) {
-                                    EqMath.geq20To127(geqQ4, geqQ / 10f, geqMaster / 10f)
-                                } else EqMath.peqTo127(peqData)
-                                eqCurve = eqRaw
-                                scope.launch {
-                                    withContext(Dispatchers.IO) { DynProc.setPreEq(eqRaw) }
-                                    status = DynProc.status
-                                }
-                            }
-                        }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("当前音量", fontSize = 9.sp, color = cs.onSurfaceVariant)
+                    Text("$curVolPct%", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                }
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("基准音量", fontSize = 9.sp, color = cs.onSurfaceVariant)
+                    Text(
+                        if (elBase > 0) "$elBase%" else "--",
+                        fontSize = 14.sp, fontWeight = FontWeight.Bold
                     )
                 }
-                Spacer(Modifier.height(3.dp))
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("补偿幅度", fontSize = 9.sp, color = cs.onSurfaceVariant)
+                    Text(
+                        if (elBase > 0) String.format("%.1f dB", elMaxDb / 10f) else "--",
+                        fontSize = 14.sp, fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            OutlinedButton(
+                onClick = {
+                    elBase = curVolPct
+                    prefs.edit().putInt("el_base", elBase).apply()
+                    if (elOn) pushEq()
+                },
+                modifier = Modifier.fillMaxWidth().height(38.dp),
+                shape = RoundedCornerShape(10.dp),
+                enabled = dpOn,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = cEl)
+            ) {
+                Text("设定当前系统音量为基准（$curVolPct%）", fontSize = 11.sp)
+            }
+            if (elBase > 0) {
+                Spacer(Modifier.height(4.dp))
+                FxSlider(
+                    "补偿强度", String.format("%.1f", elStrength / 10f), elStrength, 1..30,
+                    dpOn && elBase > 0,
+                    onLive = { elStrength = it },
+                    onDone = {
+                        elStrength = it
+                        prefs.edit().putInt("el_strength", it).apply()
+                        if (elOn) pushEq()
+                    }
+                )
+                FxSlider(
+                    "最大补偿幅度", String.format("%.1f dB", elMaxDb / 10f), elMaxDb, 10..200,
+                    dpOn && elBase > 0,
+                    onLive = { elMaxDb = it },
+                    onDone = {
+                        elMaxDb = it
+                        prefs.edit().putInt("el_maxdb", it).apply()
+                        if (elOn) pushEq()
+                    }
+                )
+                Spacer(Modifier.height(2.dp))
                 Text(
-                    if (elBase < 0) "请先设定基准音量"
-                    else "低于基准音量时自动增强低频与高频",
+                    "音量越低补偿越多",
                     fontSize = 9.sp, color = cs.onSurfaceVariant
                 )
-                Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("当前音量", fontSize = 9.sp, color = cs.onSurfaceVariant)
-                        Text("$curVolPct%", fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("基准音量", fontSize = 9.sp, color = cs.onSurfaceVariant)
-                        Text(
-                            if (elBase > 0) "$elBase%" else "--",
-                            fontSize = 14.sp, fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("补偿幅度", fontSize = 9.sp, color = cs.onSurfaceVariant)
-                        Text(
-                            if (elBase > 0) String.format("%.1f dB", elMaxDb / 10f) else "--",
-                            fontSize = 14.sp, fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-                OutlinedButton(
-                    onClick = {
-                        elBase = curVolPct
-                        prefs.edit().putInt("el_base", elBase).apply()
-                        if (elOn) pushEq()
-                    },
-                    modifier = Modifier.fillMaxWidth().height(38.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    enabled = dpOn,
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = cEl)
-                ) {
-                    Text("设定当前系统音量为基准（$curVolPct%）", fontSize = 11.sp)
-                }
-                if (elBase > 0) {
-                    Spacer(Modifier.height(4.dp))
-                    FxSlider(
-                        "补偿强度", String.format("%.1f", elStrength / 10f), elStrength, 1..30,
-                        dpOn && elBase > 0,
-                        onLive = { elStrength = it },
-                        onDone = {
-                            elStrength = it
-                            prefs.edit().putInt("el_strength", it).apply()
-                            if (elOn) pushEq()
-                        }
-                    )
-                    FxSlider(
-                        "最大补偿幅度", String.format("%.1f dB", elMaxDb / 10f), elMaxDb, 10..200,
-                        dpOn && elBase > 0,
-                        onLive = { elMaxDb = it },
-                        onDone = {
-                            elMaxDb = it
-                            prefs.edit().putInt("el_maxdb", it).apply()
-                            if (elOn) pushEq()
-                        }
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        "音量越低补偿越多（ISO 226 等响曲线）",
-                        fontSize = 9.sp, color = cs.onSurfaceVariant
-                    )
-                }
             }
         }
 
@@ -2174,7 +2163,6 @@ private fun EffectsScreen() {
             onEnabledChange = {},
             accent = Color(0xFF22C55E),
             showSwitch = false,
-            initiallyExpanded = true
         ) {
             FxSlider(
                 "增益", (if (gain > 0) "+$gain" else "$gain") + " dB",
