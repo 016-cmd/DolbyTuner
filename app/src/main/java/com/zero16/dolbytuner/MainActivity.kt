@@ -1143,18 +1143,18 @@ Column(
         ) {
             ParamSlider(
                 "强度", dapFx.vbStrength.toString(), dapFx.vbStrength.toFloat(), 0f..192f,
-                onValue = { setDap(dapFx.copy(vbStrength = it.toInt()), true) },
-                onFinished = { setDap(dapFx.copy(vbStrength = it.toInt()), false) }
+                onValue = { setDap(dapFx.copy(vbStrength = it.toInt(), vbOn = true), true) },
+                onFinished = { setDap(dapFx.copy(vbStrength = it.toInt(), vbOn = true), false) }
             )
             ParamSlider(
                 "低频下限 · Hz", dapFx.vbLowHz.toString(), dapFx.vbLowHz.toFloat(), 20f..160f,
-                onValue = { setDap(dapFx.copy(vbLowHz = it.toInt()), true) },
-                onFinished = { setDap(dapFx.copy(vbLowHz = it.toInt()), false) }
+                onValue = { setDap(dapFx.copy(vbLowHz = it.toInt(), vbOn = true), true) },
+                onFinished = { setDap(dapFx.copy(vbLowHz = it.toInt(), vbOn = true), false) }
             )
             ParamSlider(
                 "低频上限 · Hz", dapFx.vbHighHz.toString(), dapFx.vbHighHz.toFloat(), 60f..240f,
-                onValue = { setDap(dapFx.copy(vbHighHz = it.toInt()), true) },
-                onFinished = { setDap(dapFx.copy(vbHighHz = it.toInt()), false) }
+                onValue = { setDap(dapFx.copy(vbHighHz = it.toInt(), vbOn = true), true) },
+                onFinished = { setDap(dapFx.copy(vbHighHz = it.toInt(), vbOn = true), false) }
             )
             Text("耳机 / 蓝牙下 Dolby 会自动旁路，只对外放有效", fontSize = 9.sp, color = cs.onSurfaceVariant)
         }
@@ -1192,8 +1192,8 @@ Column(
         ) {
             ParamSlider(
                 "强度", dapFx.surroundBoost.toString(), dapFx.surroundBoost.toFloat(), 0f..192f,
-                onValue = { setDap(dapFx.copy(surroundBoost = it.toInt()), true) },
-                onFinished = { setDap(dapFx.copy(surroundBoost = it.toInt()), false) }
+                onValue = { setDap(dapFx.copy(surroundBoost = it.toInt(), surroundOn = true), true) },
+                onFinished = { setDap(dapFx.copy(surroundBoost = it.toInt(), surroundOn = true), false) }
             )
             Text("与下面的虚拟环绕是两套，建议只开一个", fontSize = 9.sp, color = cs.onSurfaceVariant)
         }
@@ -1245,13 +1245,13 @@ Column(
         ) {
             ParamSlider(
                 "强度", dapFx.ieqAmount.toString(), dapFx.ieqAmount.toFloat(), 0f..16f,
-                onValue = { setDap(dapFx.copy(ieqAmount = it.toInt()), true) },
-                onFinished = { setDap(dapFx.copy(ieqAmount = it.toInt()), false) }
+                onValue = { setDap(dapFx.copy(ieqAmount = it.toInt(), ieqOn = true), true) },
+                onFinished = { setDap(dapFx.copy(ieqAmount = it.toInt(), ieqOn = true), false) }
             )
             ParamSlider(
                 "预设 ID", dapFx.ieqPreset.toString(), dapFx.ieqPreset.toFloat(), 0f..10f,
-                onValue = { setDap(dapFx.copy(ieqPreset = it.toInt()), true) },
-                onFinished = { setDap(dapFx.copy(ieqPreset = it.toInt()), false) }
+                onValue = { setDap(dapFx.copy(ieqPreset = it.toInt(), ieqOn = true), true) },
+                onFinished = { setDap(dapFx.copy(ieqPreset = it.toInt(), ieqOn = true), false) }
             )
             Text("和 GEQ 是两套：GEQ 是你画的曲线，IEQ 是 Dolby 自己算", fontSize = 9.sp, color = cs.onSurfaceVariant)
         }
@@ -1268,8 +1268,8 @@ Column(
             ParamSlider(
                 "门限 · dBFS", String.format(java.util.Locale.US, "%.1f", dapFx.dplpDb),
                 dapFx.dplpDb, -12f..0f, step = 0.5f,
-                onValue = { setDap(dapFx.copy(dplpDb = it), true) },
-                onFinished = { setDap(dapFx.copy(dplpDb = it), false) }
+                onValue = { setDap(dapFx.copy(dplpDb = it, limiterOn = true), true) },
+                onFinished = { setDap(dapFx.copy(dplpDb = it, limiterOn = true), false) }
             )
             ParamToggle(
                 "稳幅器", "preg", dapFx.pregOn,
@@ -1277,13 +1277,13 @@ Column(
             )
             ParamSlider(
                 "稳幅过载", "${dapFx.preoDb} dB", dapFx.preoDb.toFloat(), 0f..12f,
-                onValue = { setDap(dapFx.copy(preoDb = it.toInt()), true) },
-                onFinished = { setDap(dapFx.copy(preoDb = it.toInt()), false) }
+                onValue = { setDap(dapFx.copy(preoDb = it.toInt(), limiterOn = true), true) },
+                onFinished = { setDap(dapFx.copy(preoDb = it.toInt(), limiterOn = true), false) }
             )
             ParamSlider(
                 "最大音量推限", "${dapFx.vmbDb} dB", dapFx.vmbDb.toFloat(), 0f..6f,
-                onValue = { setDap(dapFx.copy(vmbDb = it.toInt()), true) },
-                onFinished = { setDap(dapFx.copy(vmbDb = it.toInt()), false) }
+                onValue = { setDap(dapFx.copy(vmbDb = it.toInt(), limiterOn = true), true) },
+                onFinished = { setDap(dapFx.copy(vmbDb = it.toInt(), limiterOn = true), false) }
             )
         }
 
@@ -1298,8 +1298,8 @@ Column(
         ) {
             ParamSlider(
                 "增益 · dB", "${dapFx.postGainDb} dB", dapFx.postGainDb.toFloat(), -12f..12f,
-                onValue = { setDap(dapFx.copy(postGainDb = it.toInt()), true) },
-                onFinished = { setDap(dapFx.copy(postGainDb = it.toInt()), false) }
+                onValue = { setDap(dapFx.copy(postGainDb = it.toInt(), postGainOn = true), true) },
+                onFinished = { setDap(dapFx.copy(postGainDb = it.toInt(), postGainOn = true), false) }
             )
             Text("和手机音量键不是一回事：这个作用在杜比后级", fontSize = 9.sp, color = cs.onSurfaceVariant)
         }
