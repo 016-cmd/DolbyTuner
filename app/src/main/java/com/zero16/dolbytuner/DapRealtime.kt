@@ -45,6 +45,10 @@ object DapRealtime {
     private const val COMMAND_GET_DAP_ON = 0x00000000
     private const val PARAM_GEQ_BAND_GAINS = 110
 
+    // ── FourCC 通道（A 类音效）──
+    private const val CMD_SET_BATCH = 0     // command(0)：批量设置参数
+    private const val CMD_READ_FOURCC = 20  // getParameter(20, in, out)：读回
+
     private val TYPE_UUID = UUID.fromString("ec7178ec-e5e1-4432-a3f4-4657e6795210")
     private val IMPL_UUID = UUID.fromString("9d4921da-8225-4f29-aefa-39537a04bcaa")
     private val PROXY_TYPE_UUID = UUID.fromString("fa81dbde-588b-11ed-9b6a-0242ac120002")
@@ -105,6 +109,16 @@ object DapRealtime {
 
     private val getParamMethod: Method by lazy {
         findEffectMethod("getParameter", Int::class.javaPrimitiveType!!, ByteArray::class.java)
+    }
+
+    /** getParameter(int, byte[], byte[]) —— 带出入参的读法，FourCC 读回要用 */
+    private val getParamFullMethod: Method by lazy {
+        findEffectMethod(
+            "getParameter",
+            Int::class.javaPrimitiveType!!,
+            ByteArray::class.java,
+            ByteArray::class.java
+        )
     }
 
     private fun findDescriptor(): AudioEffect.Descriptor? =
@@ -524,6 +538,92 @@ object DapRealtime {
             rootCause(t)
         }
     }
+    // ────────────────────────────────────────────────────────────
+    //  FourCC 通道（A 类音效：dplp / beon / dvle / ieon / vol …）
+    //
+    //  写：command(5, [0x01000000, count, 0, fourcc, values…])
+    //  批：command(0, [0, N, (0, fourcc, len, values…)…])
+    //  读：getParameter(20, [0, fourcc], out)
+    //
+    //  读回格式各固件不完全一致，读不到时返回 null，
+    //  调用方按「未校验」处理，不要当成写入失败。
+    // ────────────────────────────────────────────────────────────
+
+    /** 四字符 → int（小端：'d' | 'p'<<8 | 'l'<<16 | 'p'<<24） */
+    private fun fourcc(tag: String): Int {
+        var v = 0
+        val n = tag.length.coerceIn(1, 4)
+        for (i in 0 until n) v = v or ((tag[i].code and 0xFF) shl (i * 8))
+        return v
+    }
+
+    /** 写一个 FourCC 参数；成功返回 null */
+    @Synchronized
+    fun writeFourCC(tag: String, vararg values: Int): String? {
+        return try {
+            val e = session ?: openEffect().also { session = it }
+            if (!e.hasControl()) return "无控制权"
+            if (!e.enabled) return "杜比音效未启用"
+            val buf = ByteBuffer.allocate((values.size + 4) * 4).order(ByteOrder.LITTLE_ENDIAN)
+            buf.putInt(COMMAND_SET_PROFILE)
+            buf.putInt(values.size + 1)
+            buf.putInt(0)
+            buf.putInt(fourcc(tag))
+            values.forEach { buf.putInt(it) }
+            val st = e.setParam(CMD_PARAM, buf.array())
+            if (st < 0) statusText(st, tag) else null
+        } catch (t: Throwable) {
+            rootCause(t)
+        }
+    }
+
+    /** 批量写多个 FourCC 参数（一条 command(0)）；成功返回 null */
+    @Synchronized
+    fun writeFourCCBatch(items: List<Pair<String, IntArray>>): String? {
+        if (items.isEmpty()) return null
+        return try {
+            val e = session ?: openEffect().also { session = it }
+            if (!e.hasControl()) return "无控制权"
+            if (!e.enabled) return "杜比音效未启用"
+            var size = 8
+            items.forEach { size += 4 + it.second.size }
+            val buf = ByteBuffer.allocate(size * 4).order(ByteOrder.LITTLE_ENDIAN)
+            buf.putInt(CMD_SET_BATCH)
+            buf.putInt(items.size)
+            items.forEach { (tag, vs) ->
+                buf.putInt(0)
+                buf.putInt(fourcc(tag))
+                buf.putInt(vs.size)
+                vs.forEach { buf.putInt(it) }
+            }
+            val st = e.setParam(CMD_PARAM, buf.array())
+            if (st < 0) statusText(st, "批量参数") else null
+        } catch (t: Throwable) {
+            rootCause(t)
+        }
+    }
+
+    /** 读回 FourCC 参数；读不到返回 null（不代表写入失败） */
+    @Synchronized
+    fun readFourCC(tag: String, count: Int = 1): IntArray? {
+        return try {
+            val e = session ?: openEffect().also { session = it }
+            val inBuf = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+                .putInt(0)
+                .putInt(fourcc(tag))
+                .array()
+            val out = ByteArray((count + 2) * 4)
+            val st = getParamFullMethod.invoke(e, CMD_READ_FOURCC, inBuf, out) as Int
+            if (st < 0) return null
+            val b = ByteBuffer.wrap(out).order(ByteOrder.LITTLE_ENDIAN)
+            val first = b.int
+            val n = if (first in 0..count) first else count
+            IntArray(n) { b.int }
+        } catch (t: Throwable) {
+            null
+        }
+    }
+
     /** 拖动时用：写全部 profile，不释放实例；句柄失效时自动重开并重试一次 */
     @Synchronized
     fun writeLive(curve: IntArray): String? {

@@ -49,6 +49,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.Speaker
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Close
@@ -1001,60 +1005,61 @@ Column(
         Text("音效", fontSize = 25.sp, fontWeight = FontWeight.Bold)
         Text("Dolby 实时层 · 不写文件、不重启音频服务", fontSize = 11.sp, color = cs.onSurfaceVariant)
         Spacer(Modifier.height(12.dp))
-
-        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = cs.surfaceVariant.copy(alpha = 0.85f))) {
-            Column(Modifier.padding(14.dp)) {
-                Text("环绕 / 声场", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                FxSwitch("耳机虚拟环绕", "vdhe 101", fx.hpVirtual) { apply(fx.copy(hpVirtual = it)) }
-                FxSwitch("扬声器虚拟环绕", "vspe 102", fx.spVirtual) { apply(fx.copy(spVirtual = it)) }
-            }
+        // ── 低音组 ──────────────────────────────
+        EffectCard(
+            title = "低音增强",
+            subtitle = "bass 111 · 增益 / 截止 / 带宽",
+            icon = Icons.Default.GraphicEq,
+            enabled = fx.bassOn,
+            onEnabledChange = { apply(fx.copy(bassOn = it)) },
+            accent = Color(0xFFB45309)
+        ) {
+            FxSlider(
+                "低音增益", fx.bassGain.toString(), fx.bassGain, 0..192, fx.bassOn,
+                onLive = { fx = fx.copy(bassGain = it); liveFx.trySend(233 to it) }
+            ) { apply(fx.copy(bassGain = it)) }
+            FxSlider(
+                "低音截止 · Hz", fx.bassCutoff.toString(), fx.bassCutoff, 80..300, fx.bassOn,
+                onLive = { fx = fx.copy(bassCutoff = it); liveFx.trySend(234 to it) }
+            ) { apply(fx.copy(bassCutoff = it)) }
+            FxSlider(
+                "低带宽", fx.bassWidth.toString(), fx.bassWidth, 0..64, fx.bassOn,
+                onLive = { fx = fx.copy(bassWidth = it); liveFx.trySend(235 to it) }
+            ) { apply(fx.copy(bassWidth = it)) }
         }
 
-        Spacer(Modifier.height(10.dp))
-        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = cs.surfaceVariant.copy(alpha = 0.85f))) {
-            Column(Modifier.padding(14.dp)) {
-                Text("人声增强", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                FxSwitch("启用", "deon 105", fx.dialogOn) { apply(fx.copy(dialogOn = it)) }
-                FxSlider(
-                    "增强量", fx.dialogAmt.toString(), fx.dialogAmt, 0..16, fx.dialogOn,
-                    onLive = { fx = fx.copy(dialogAmt = it); liveFx.trySend(108 to it) }
-                ) {
-                    apply(fx.copy(dialogAmt = it))
-                }
-                Text("只提升人声频段，不压低背景（ded 未使用）", fontSize = 9.sp, color = cs.onSurfaceVariant)
-            }
-        }
+        // ── 声场组 ──────────────────────────────
+        EffectCard(
+            title = "耳机虚拟环绕",
+            subtitle = "vdhe 101 · 耳机下的声场扩展",
+            icon = Icons.Default.Headphones,
+            enabled = fx.hpVirtual,
+            onEnabledChange = { apply(fx.copy(hpVirtual = it)) },
+            toggleOnly = true
+        )
 
-        Spacer(Modifier.height(10.dp))
-        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = cs.surfaceVariant.copy(alpha = 0.85f))) {
-            Column(Modifier.padding(14.dp)) {
-                Text("低音", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                FxSwitch("低音增强", "beon 111", fx.bassOn) { apply(fx.copy(bassOn = it)) }
-                FxSlider(
-                    "低音增益", fx.bassGain.toString(), fx.bassGain, 0..192, fx.bassOn,
-                    onLive = { fx = fx.copy(bassGain = it); liveFx.trySend(233 to it) }
-                ) {
-                    apply(fx.copy(bassGain = it))
-                }
-                FxSlider(
-                    "低音截止 · Hz", fx.bassCutoff.toString(), fx.bassCutoff, 80..300, fx.bassOn,
-                    onLive = { fx = fx.copy(bassCutoff = it); liveFx.trySend(234 to it) }
-                ) {
-                    apply(fx.copy(bassCutoff = it))
-                }
-                FxSlider(
-                    "低带宽", fx.bassWidth.toString(), fx.bassWidth, 0..64, fx.bassOn,
-                    onLive = { fx = fx.copy(bassWidth = it); liveFx.trySend(235 to it) }
-                ) {
-                    apply(fx.copy(bassWidth = it))
-                }
-            }
+        EffectCard(
+            title = "扬声器虚拟环绕",
+            subtitle = "vspe 102 · 外放下的声场扩展",
+            icon = Icons.Default.Speaker,
+            enabled = fx.spVirtual,
+            onEnabledChange = { apply(fx.copy(spVirtual = it)) },
+            toggleOnly = true
+        )
+
+        // ── 人声组 ──────────────────────────────
+        EffectCard(
+            title = "人声增强",
+            subtitle = "deon 105 · 只提升人声频段",
+            icon = Icons.Default.RecordVoiceOver,
+            enabled = fx.dialogOn,
+            onEnabledChange = { apply(fx.copy(dialogOn = it)) }
+        ) {
+            FxSlider(
+                "增强量", fx.dialogAmt.toString(), fx.dialogAmt, 0..16, fx.dialogOn,
+                onLive = { fx = fx.copy(dialogAmt = it); liveFx.trySend(108 to it) }
+            ) { apply(fx.copy(dialogAmt = it)) }
+            Text("不压低背景（ded 未使用）", fontSize = 9.sp, color = cs.onSurfaceVariant)
         }
 
         Spacer(Modifier.height(10.dp))
