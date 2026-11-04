@@ -1825,37 +1825,6 @@ private fun SettingsScreen(activity: Activity) {
                 fontSize = 9.sp, lineHeight = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = {
-                    scope.launch {
-                        val txt = withContext(Dispatchers.IO) { DapRealtime.diagReport() }
-                        val path = withContext(Dispatchers.IO) {
-                            saveTextReport(ctx, "dap_profile_diag.txt", txt)
-                        }
-                        android.widget.Toast.makeText(
-                            ctx,
-                            if (path != null) "已写入 $path" else "写入失败",
-                            android.widget.Toast.LENGTH_LONG
-                        ).show()
-                    }
-                },
-                modifier = Modifier.fillMaxWidth().height(40.dp),
-                shape = RoundedCornerShape(10.dp)
-            ) { Text("写入 profile 诊断文件", fontSize = 11.sp) }
-
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = {
-                    scope.launch {
-                        val txt = withContext(Dispatchers.IO) { DapRealtime.takeOverAndProbe() }
-                        android.widget.Toast.makeText(
-                            ctx, txt, android.widget.Toast.LENGTH_LONG
-                        ).show()
-                    }
-                },
-                modifier = Modifier.fillMaxWidth().height(40.dp),
-                shape = RoundedCornerShape(10.dp)
-            ) { Text("发送 Dolby 接管包 + A 类测试值", fontSize = 11.sp) }
         }
 
         Spacer(Modifier.height(12.dp))

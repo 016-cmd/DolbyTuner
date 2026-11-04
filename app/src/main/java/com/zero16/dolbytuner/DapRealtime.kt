@@ -866,6 +866,14 @@ object DapRealtime {
                     if (st < 0) return statusText(st, tag)
                 }
             }
+            // 关键：普通参数（101/111/233…）每次写完都会补一条 COMMAND_SAVE，
+            // 所以它能落进 DSP 的当前参数集；
+            // A 类以前只写不提交，DSP 侧一直停在"待提交"状态 —— 这就是写成功没声音的原因。
+            val save = e.setParam(CMD_PARAM, buildSavePayload())
+            android.util.Log.i("DapWr", "save rc=$save")
+            if (save < 0 && save != AudioEffect.ERROR_INVALID_OPERATION) {
+                return statusText(save, "保存")
+            }
             null
         } catch (t: Throwable) {
             rootCause(t)
