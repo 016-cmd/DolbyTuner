@@ -1275,15 +1275,230 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
 @Composable
 private fun EffectsScreen() {
     val cs = MaterialTheme.colorScheme
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val prefs = remember { ctx.getSharedPreferences("dynproc", Context.MODE_PRIVATE) }
+
+    var dpOn by remember { mutableStateOf(prefs.getBoolean("on", false)) }
+    var gain by remember { mutableIntStateOf(prefs.getInt("gain", 0)) }
+    var limOn by remember { mutableStateOf(prefs.getBoolean("lim_on", true)) }
+    var thr by remember { mutableIntStateOf(prefs.getInt("lim_thr", -20)) }
+    var atk by remember { mutableIntStateOf(prefs.getInt("lim_atk", 10)) }
+    var rel by remember { mutableIntStateOf(prefs.getInt("lim_rel", 60)) }
+    var rat by remember { mutableIntStateOf(prefs.getInt("lim_rat", 100)) }
+    var post by remember { mutableIntStateOf(prefs.getInt("lim_post", 0)) }
+    var link by remember { mutableIntStateOf(prefs.getInt("lim_link", 0)) }
+    var status by remember { mutableStateOf(DynProc.status) }
+    var busy by remember { mutableStateOf(false) }
+
+    fun cfg() = DynProc.LimiterCfg(
+        enabled = limOn,
+        thresholdDb = thr / 10f,
+        attackMs = atk / 10f,
+        releaseMs = rel.toFloat(),
+        ratio = rat / 10f,
+        postGainDb = post / 10f,
+        linkGroup = link
+    )
+
+    fun applyLim(commit: Boolean) {
+        val c = cfg()
+        scope.launch {
+            withContext(Dispatchers.IO) { DynProc.setLimiter(c) }
+            status = DynProc.status
+            if (commit) {
+                prefs.edit().putBoolean("lim_on", limOn)
+                    .putInt("lim_thr", thr).putInt("lim_atk", atk)
+                    .putInt("lim_rel", rel).putInt("lim_rat", rat)
+                    .putInt("lim_post", post).putInt("lim_link", link).apply()
+            }
+        }
+    }
+
+    fun toggleEngine(on: Boolean) {
+        if (busy) return
+        dpOn = on
+        prefs.edit().putBoolean("on", on).apply()
+        scope.launch {
+            busy = true
+            withContext(Dispatchers.IO) {
+                if (on) DynProc.start(gain.toFloat(), cfg()) else DynProc.stop()
+            }
+            status = DynProc.status
+            busy = false
+        }
+    }
+
+    fun applyGain() {
+        val g = gain.toFloat()
+        scope.launch {
+            withContext(Dispatchers.IO) { DynProc.setInputGain(g) }
+            status = DynProc.status
+            prefs.edit().putInt("gain", gain).apply()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (dpOn && !DynProc.running) {
+            withContext(Dispatchers.IO) { DynProc.start(gain.toFloat(), cfg()) }
+            status = DynProc.status
+        }
+    }
+
+    val accent = Color(0xFF38BDF8)
+    val cLim = Color(0xFFF59E0B)
+
     Column(
-        Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 14.dp).padding(top = 18.dp)
+        Modifier.fillMaxSize().statusBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 14.dp).padding(top = 18.dp).padding(bottom = 120.dp)
     ) {
-        Text("DynamicsProcessing 音效", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text("DynamicsProcessing音效", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
         Text(
-            "依赖 APP 在后台运行",
+            "Android原生 DP · 127段管线 · 依赖 APP在后台运行",
             fontSize = 11.sp, color = cs.onSurfaceVariant
         )
+        Spacer(Modifier.height(14.dp))
+
+        // ===== 引擎总开关 =====
+        Card(
+            Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, accent.copy(alpha = if (dpOn) 0.7f else 0.3f)),
+            colors = CardDefaults.cardColors(
+                containerColor = accent.copy(alpha = if (dpOn) 0.18f else 0.08f)
+            )
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Tune, null, Modifier.size(22.dp),
+                    tint = if (dpOn) accent else cs.onSurfaceVariant
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("DynamicsProcessing 引擎", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (dpOn) status else "音效已关闭（音频管线休眠）",
+                        fontSize = 9.sp, lineHeight = 11.sp,
+                        color = if (dpOn) accent else cs.onSurfaceVariant
+                    )
+                    Text(
+                        "session 0 · 全局全频 · 由进程保持",
+                        fontSize = 8.5.sp, color = cs.onSurfaceVariant
+                    )
+                }
+                androidx.compose.material3.Switch(
+                    checked = dpOn, enabled = !busy,
+                    onCheckedChange = { toggleEngine(it) }
+                )
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // ===== 输入增益 =====
+        EffectCard(
+            title = "输入增益",
+            subtitle = "Master Gain · 进入 DP 前的总电平",
+            icon = Icons.Default.VolumeUp,
+            enabled = dpOn,
+            onEnabledChange = {},
+            accent = Color(0xFF22C55E),
+            showSwitch = false,
+            initiallyExpanded = true
+        ) {
+            FxSlider(
+                "增益", (if (gain > 0) "+$gain" else "$gain") + " dB",
+                gain, -15..15, dpOn,
+                onLive = { gain = it; applyGain() },
+                onDone = { gain = it; applyGain() }
+            )
+        }
+
+        // ===== Limiter =====
+        EffectCard(
+            title = "动态限制器",
+            subtitle = "Limiter · 防削波与峰值压制",
+            icon = Icons.Default.GraphicEq,
+            enabled = limOn,
+            onEnabledChange = { limOn = it; applyLim(true) },
+            accent = cLim
+        ) {
+            val presets = listOf(
+                Triple("标准", intArrayOf(-20, 10, 60, 100, 0), "10:1 · -2dB"),
+                Triple("砖墙", intArrayOf(-5, 1, 30, 500, 0), "50:1 · -0.5dB"),
+                Triple("紧实", intArrayOf(-40, 5, 100, 80, 0), "8:1 · -4dB"),
+                Triple("柔和", intArrayOf(-30, 50, 200, 40, 0), "4:1 · -3dB")
+            )
+            Row(
+                Modifier.fillMaxWidth().padding(top = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                presets.forEach { pr ->
+                    Surface(
+                        Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
+                            .clickable(enabled = limOn) {
+                                thr = pr.second[0]; atk = pr.second[1]; rel = pr.second[2]
+                                rat = pr.second[3]; post = pr.second[4]
+                                applyLim(true)
+                            },
+                        color = cLim.copy(alpha = 0.14f),
+                        border = BorderStroke(1.dp, cLim.copy(alpha = 0.4f))
+                    ) {
+                        Column(
+                            Modifier.padding(vertical = 7.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(pr.first, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text(pr.third, fontSize = 8.sp, color = cs.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+
+            FxSlider(
+                "门限阈值 · Threshold", String.format("%+.1f dB", thr / 10f), thr, -600..0, limOn,
+                onLive = { thr = it; applyLim(false) },
+                onDone = { thr = it; applyLim(true) }
+            )
+            FxSlider(
+                "启动时间 · Attack", String.format("%.1f ms", atk / 10f), atk, 1..1000, limOn,
+                onLive = { atk = it; applyLim(false) },
+                onDone = { atk = it; applyLim(true) }
+            )
+            FxSlider(
+                "释放时间 · Release", "$rel ms", rel, 1..5000, limOn,
+                onLive = { rel = it; applyLim(false) },
+                onDone = { rel = it; applyLim(true) }
+            )
+            FxSlider(
+                "压缩比 · Ratio", String.format("%.1f:1", rat / 10f), rat, 10..300, limOn,
+                onLive = { rat = it; applyLim(false) },
+                onDone = { rat = it; applyLim(true) }
+            )
+            FxSlider(
+                "后级增益 · Post Gain", String.format("%+.1f dB", post / 10f), post, -400..400, limOn,
+                onLive = { post = it; applyLim(false) },
+                onDone = { post = it; applyLim(true) }
+            )
+            FxSlider(
+                "联动组 · Link Group", if (link == 0) "0 · 立体声联动" else "$link", link, 0..3, limOn,
+                onLive = { link = it; applyLim(false) },
+                onDone = { link = it; applyLim(true) }
+            )
+        }
+
+        Spacer(Modifier.height(8.dp))
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Text(
+                if (busy) "正在下发…" else status,
+                fontSize = 10.sp, color = cs.onSurfaceVariant
+            )
+        }
     }
 }
 

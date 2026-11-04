@@ -54,6 +54,7 @@ internal fun EffectCard(
     onEnabledChange: (Boolean) -> Unit,
     accent: Color = Accent,
     toggleOnly: Boolean = false,
+    showSwitch: Boolean = true,
     initiallyExpanded: Boolean = false,
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
@@ -113,7 +114,9 @@ internal fun EffectCard(
                         )
                     }
                 }
-                Switch(checked = enabled, onCheckedChange = onEnabledChange)
+                if (showSwitch) {
+                    Switch(checked = enabled, onCheckedChange = onEnabledChange)
+                }
             }
 
             if (!toggleOnly) {
