@@ -782,6 +782,7 @@ object DapRealtime {
                     buf.putInt(fourcc(tag))
                     vs.forEach { buf.putInt(it) }
                     val st = e.setParam(CMD_PARAM, buf.array())
+                    android.util.Log.i("DapWr", "$tag p=$prof rc=$st ${vs.joinToString(",")}")
                     if (st < 0) return statusText(st, tag)
                 }
             }

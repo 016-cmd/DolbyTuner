@@ -873,12 +873,18 @@ private suspend fun pushDapFx(next: DapFx): String? = withContext(Dispatchers.IO
     items += "dvle" to intArrayOf(if (next.surroundOn) 1 else 0)
     items += "dvla" to intArrayOf(next.surroundBoost.coerceIn(0, 192))
 
-    // A2 虚拟低音（becf 两个值：上限、下限）
-    items += "beon" to intArrayOf(if (next.vbOn) 1 else 0)
-    items += "beb" to intArrayOf(next.vbStrength.coerceIn(0, 192))
-    items += "becf" to intArrayOf(
-        next.vbHighHz.coerceIn(60, 240),
-        next.vbLowHz.coerceIn(20, 160)
+    // A2 虚拟低音（Dolby Virtual Bass）
+    // 逆向证据（C0650ag.II 第4块）：虚拟低音用的是
+    //   vbm  = 开关 / 模式      ← 不是 beon
+    //   vbog = overall gain 强度
+    //   vbsf = src freq (low, high)
+    // 而 beon / beb / becf 属于 Bass Enhancer（低音增强），
+    // 本机 profile 的 bass_enhancer_enable = 0，写它永远不会有声音变化。
+    items += "vbm" to intArrayOf(if (next.vbOn) 1 else 0)
+    items += "vbog" to intArrayOf(if (next.vbOn) next.vbStrength.coerceIn(0, 192) else 0)
+    items += "vbsf" to intArrayOf(
+        next.vbLowHz.coerceIn(20, 160),
+        next.vbHighHz.coerceIn(60, 240)
     )
 
     // A5 IEQ
