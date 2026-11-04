@@ -658,23 +658,15 @@ object DapRealtime {
     /**
      * 统一写入的 profile。
      *
-     * 依据：
-     *   · dumpsys audio → "Dolby current params: [profile: 0, port: 0, …]"
-     *     → 0 就是当前实际生效的档（不是"全局开关"，只是默认档）
-     *   · 逆向 APP 也是从 0 开始循环写
+     * 实测结论（主人真机对比）：
+     *   · v1.7.1 写 profile 4 → A 类有效
+     *   · v1.8.0 写 profile 0 → A 类完全没反应
+     * 所以真正生效的是 persist.audio.dolby.profile（本机 4），不是 0。
+     *   dumpsys 里的 "profile: 0" 只是 AudioService 那份缓存，不代表实际档。
      *
-     * 普通参数与 A 类都用它，保证落在同一档，不会互相顶掉。
-     * GEQ 仍然 0..count-1 全写（含 0），所以也一致。
+     * 取 propProfile()，读不到再退回 4（本机官方值）。
      */
-    private const val WRITE_PROFILE = 0
-
-    /**
-     * 普通参数（101/102/…）与 A 类（FourCC）统一使用同一个 profile。
-     *
-     * 以前：普通参数写死 0、A 类写 4 → 一动普通参数，A 类就落空。
-     * 现在：两边都用 WRITE_PROFILE。
-     */
-    private fun currentProfile(e: AudioEffect): Int = WRITE_PROFILE
+    private fun currentProfile(e: AudioEffect): Int = propProfile() ?: 4
 
     private fun allProfiles(e: AudioEffect): List<Int> = listOf(currentProfile(e))
 
