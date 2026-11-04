@@ -633,6 +633,16 @@ object DapRealtime {
         return runCatching { queryInt(e, COMMAND_GET_CURRENT) }
             .getOrNull()?.takeIf { it in 0..31 } ?: 0
     }
+    /**
+     * A 类写入要覆盖的 profile 列表。
+     * 光写"属性里那个"不够：实际播放的档可能是别的编号，
+     * 所以跟 GEQ 一样，把所有可能生效的档全写一遍。
+     */
+    private fun profilesForWrite(e: AudioEffect): List<Int> {
+        val cnt = runCatching { queryInt(e, COMMAND_GET_PROFILE_COUNT) }.getOrNull() ?: 0
+        val n = maxOf(cnt, curProfile(e) + 1).coerceIn(1, 16)
+        return (0 until n).toList()
+    }
 
     /** 读 persist.audio.dolby.profile（普通 App 可用 getprop，不需要权限） */
     private fun propProfile(): Int? = runCatching {
@@ -679,17 +689,22 @@ object DapRealtime {
             val e = session ?: openEffect().also { session = it }
             if (!e.hasControl()) return "无控制权"
             if (!e.enabled) return "杜比音效未启用"
+            // 关键：Dolby 有多个 profile，实际播放用哪一个不一定等于属性里的值。
+            // GEQ 之所以有效，就是因为它把 0..N 全部写了一遍；
+            // A 类也照这个来，否则会写进"备用档"，听感没有变化。
+            val profs = profilesForWrite(e)
             var size = 8
-            items.forEach { size += 4 + it.second.size }
+            profs.forEach { _ -> items.forEach { size += 3 + it.second.size } }
             val buf = ByteBuffer.allocate(size * 4).order(ByteOrder.LITTLE_ENDIAN)
             buf.putInt(CMD_SET_BATCH)
-            buf.putInt(items.size)
-            val prof = curProfile(e)
-            items.forEach { (tag, vs) ->
-                buf.putInt(prof)
-                buf.putInt(fourcc(tag))
-                buf.putInt(vs.size)
-                vs.forEach { buf.putInt(it) }
+            buf.putInt(items.size * profs.size)
+            profs.forEach { prof ->
+                items.forEach { (tag, vs) ->
+                    buf.putInt(prof)
+                    buf.putInt(fourcc(tag))
+                    buf.putInt(vs.size)
+                    vs.forEach { buf.putInt(it) }
+                }
             }
             val st = e.setParam(CMD_PARAM, buf.array())
             if (st < 0) statusText(st, "批量参数") else null
