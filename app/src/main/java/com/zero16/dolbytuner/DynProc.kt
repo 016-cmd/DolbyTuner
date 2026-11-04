@@ -36,6 +36,10 @@ object DynProc {
     private var lastGain: Float = 0f
     private var lastLimiter: LimiterCfg = LimiterCfg()
     private var lastMbc: List<MbcBandCfg> = defaultMbc()
+    private var lastPost: IntArray? = null
+
+    /** 后置均衡 10 段中心频率 */
+    val POST_FREQS = floatArrayOf(31f, 62f, 125f, 250f, 500f, 1000f, 2000f, 4000f, 8000f, 16000f)
 
     data class LimiterCfg(
         var enabled: Boolean = true,
@@ -207,6 +211,45 @@ object DynProc {
             if (prev.getOrNull(i) != cur) applyMbcBand(d, i, cur)
         }
     }
+
+    /** data = [10 段增益 x0.1dB, 左右平衡 x0.1dB] */
+    private fun applyPostEqTo(d: DynamicsProcessing, data: IntArray) {
+        val eqL = DynamicsProcessing.Eq(true, true, 10)
+        val eqR = DynamicsProcessing.Eq(true, true, 10)
+        val bal = (data.getOrNull(10) ?: 0) / 10f
+        for (i in 0 until 10) {
+            val base = (data.getOrNull(i) ?: 0) / 10f
+            val l = (base + bal).coerceIn(-20f, 20f)
+            val r = (base - bal).coerceIn(-20f, 20f)
+            eqL.setBand(i, DynamicsProcessing.EqBand(true, POST_FREQS[i], l))
+            eqR.setBand(i, DynamicsProcessing.EqBand(true, POST_FREQS[i], r))
+        }
+        runCatching { d.setPostEqByChannelIndex(0, eqL) }
+        runCatching { d.setPostEqByChannelIndex(1, eqR) }
+    }
+
+    @Synchronized
+    fun setPostEq(data: IntArray, enabled: Boolean) {
+        val prev = lastPost
+        lastPost = data.copyOf()
+        val d = dp ?: return
+        if (!runCatching { d.hasControl() }.getOrDefault(false)) {
+            status = "被其他应用占用 · 未写入"
+            return
+        }
+        if (!enabled) {
+            val eq = DynamicsProcessing.Eq(true, false, 10)
+            for (i in 0 until 10) {
+                eq.setBand(i, DynamicsProcessing.EqBand(false, POST_FREQS[i], 0f))
+            }
+            runCatching { d.setPostEqAllChannelsTo(eq) }
+            return
+        }
+        if (prev != null && prev.contentEquals(data)) return
+        applyPostEqTo(d, data)
+    }
+
+    fun lastPostData(): IntArray? = lastPost?.copyOf()
 
     private fun flatLimiter() = DynamicsProcessing.Limiter(
         false, false, 0, 1f, 60f, 1f, 0f, 0f

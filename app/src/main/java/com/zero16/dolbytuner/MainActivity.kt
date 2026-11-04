@@ -1273,6 +1273,17 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
     }
 }
 
+private fun loadPost(prefs: android.content.SharedPreferences): IntArray {
+    val s = prefs.getString("post_data", "").orEmpty()
+    if (s.isBlank()) return IntArray(11)
+    val a = s.split(",").mapNotNull { it.trim().toIntOrNull() }
+    return if (a.size == 11) a.toIntArray() else IntArray(11)
+}
+
+private fun savePost(prefs: android.content.SharedPreferences, a: IntArray) {
+    prefs.edit().putString("post_data", a.joinToString(",")).apply()
+}
+
 private fun loadRev(prefs: android.content.SharedPreferences): IntArray {
     val s = prefs.getString("rev_data", "").orEmpty()
     if (s.isBlank()) return DynReverb.DEFAULTS.copyOf()
@@ -1325,6 +1336,8 @@ private fun EffectsScreen() {
     var mbcOn by remember { mutableStateOf(prefs.getBoolean("mbc_on", false)) }
     var revOn by remember { mutableStateOf(prefs.getBoolean("rev_on", false)) }
     var revData by remember { mutableStateOf(loadRev(prefs)) }
+    var postOn by remember { mutableStateOf(prefs.getBoolean("post_on", false)) }
+    var postData by remember { mutableStateOf(loadPost(prefs)) }
     var sel by remember { mutableIntStateOf(prefs.getInt("mbc_sel", 0)) }
     var mbcStore by remember { mutableStateOf(loadMbc(prefs)) }
     var status by remember { mutableStateOf(DynProc.status) }
@@ -1482,6 +1495,32 @@ private fun EffectsScreen() {
         throttle.post(revTick)
     }
 
+    val pendPost = remember { postData.copyOf() }
+    val postTick = remember {
+        Runnable {
+            val d = pendPost.copyOf()
+            val on = postOn
+            scope.launch {
+                withContext(Dispatchers.IO) { DynProc.setPostEq(d, on) }
+                status = DynProc.status
+            }
+        }
+    }
+
+    fun livePost(i: Int, v: Int) {
+        pendPost[i] = v
+        throttle.removeCallbacks(postTick)
+        throttle.postDelayed(postTick, 60L)
+    }
+
+    fun commitPost(i: Int, v: Int) {
+        pendPost[i] = v
+        postData = pendPost.copyOf()
+        savePost(prefs, postData)
+        throttle.removeCallbacks(postTick)
+        throttle.post(postTick)
+    }
+
     fun cfg() = DynProc.LimiterCfg(
         enabled = limOn,
         thresholdDb = thr / 10f,
@@ -1513,7 +1552,10 @@ private fun EffectsScreen() {
         scope.launch {
             busy = true
             withContext(Dispatchers.IO) {
-                if (on) DynProc.start(gain.toFloat(), cfg(), toDynMbc(mbcStore)) else DynProc.stop()
+                if (on) {
+                    DynProc.start(gain.toFloat(), cfg(), toDynMbc(mbcStore))
+                    if (postOn) DynProc.setPostEq(postData.copyOf(), true)
+                } else DynProc.stop()
             }
             status = DynProc.status
             busy = false
@@ -1531,7 +1573,10 @@ private fun EffectsScreen() {
 
     LaunchedEffect(Unit) {
         if (dpOn && !DynProc.running) {
-            withContext(Dispatchers.IO) { DynProc.start(gain.toFloat(), cfg(), toDynMbc(mbcStore)) }
+            withContext(Dispatchers.IO) {
+                DynProc.start(gain.toFloat(), cfg(), toDynMbc(mbcStore))
+                if (postOn) DynProc.setPostEq(postData.copyOf(), true)
+            }
             status = DynProc.status
         }
         if (revOn && !DynReverb.running) {
@@ -1881,6 +1926,33 @@ private fun EffectsScreen() {
             FxSlider(
                 "密度 · Density", String.format("%.2f", revData[9] / 1000f), revData[9], 0..1000, revOn,
                 onLive = { liveRev(9, it) }, onDone = { commitRev(9, it) }
+            )
+        }
+
+        // ===== 后置均衡器 =====
+        EffectCard(
+            title = "后置均衡器",
+            subtitle = "Post EQ · 10段精细修形",
+            icon = Icons.Default.Equalizer,
+            enabled = postOn,
+            onEnabledChange = {
+                postOn = it
+                prefs.edit().putBoolean("post_on", it).apply()
+                throttle.removeCallbacks(postTick)
+                throttle.post(postTick)
+            },
+            accent = Color(0xFF14B8A6)
+        ) {
+            val freqs = listOf("31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k")
+            freqs.forEachIndexed { i, f ->
+                FxSlider(
+                    "$f Hz", String.format("%+.1f dB", postData[i] / 10f), postData[i], -200..200, postOn,
+                    onLive = { livePost(i, it) }, onDone = { commitPost(i, it) }
+                )
+            }
+            FxSlider(
+                "左右平衡 · Balance", String.format("%+.1f dB", postData[10] / 10f), postData[10], -100..100, postOn,
+                onLive = { livePost(10, it) }, onDone = { commitPost(10, it) }
             )
         }
 
