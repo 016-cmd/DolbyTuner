@@ -607,6 +607,78 @@ object DapRealtime {
         writeLive(c)
     }
 
+    /**
+     * 一次性诊断：把 profile 结构、当前档、每档写入后的 DAP 状态全部记下来。
+     * 只写 beon（虚拟低音开关）这一条，写完复位，不改其它参数。
+     */
+    @Synchronized
+    fun diagReport(): String {
+        val sb = StringBuilder()
+        fun line(s: String) {
+            sb.append(s).append('\n')
+            android.util.Log.i("DapDiag", s)
+        }
+        try {
+            line("Dolby profile 诊断")
+            line("prop(persist.audio.dolby.profile)=${propProfile() ?: "读不到"}")
+            val e = session ?: openEffect().also { session = it }
+            line("enabled=${runCatching { e.enabled }.getOrNull()}")
+            line("hasControl=${runCatching { e.hasControl() }.getOrNull()}")
+            val count = runCatching { queryInt(e, COMMAND_GET_PROFILE_COUNT) }.getOrNull()
+            val cur = runCatching { queryInt(e, COMMAND_GET_CURRENT) }.getOrNull()
+            val on0 = runCatching { queryInt(e, COMMAND_GET_DAP_ON) }.getOrNull()
+            line("queryInt(GET_PROFILE_COUNT)=$count")
+            line("queryInt(GET_CURRENT)=$cur")
+            line("queryInt(GET_DAP_ON)=$on0")
+            line("")
+
+            fun onNow(): String =
+                runCatching { queryInt(e, COMMAND_GET_DAP_ON) }.getOrNull()?.toString() ?: "err"
+
+            fun writeBeon(prof: Int, v: Int): String {
+                val buf = ByteBuffer.allocate((1 + 4) * 4).order(ByteOrder.LITTLE_ENDIAN)
+                buf.putInt(COMMAND_SET_PROFILE)
+                buf.putInt(2)
+                buf.putInt(prof)
+                buf.putInt(fourcc("beon"))
+                buf.putInt(v)
+                val st = runCatching { e.setParam(CMD_PARAM, buf.array()) }.getOrElse { -999 }
+                return "profile=$prof beon=$v → rc=$st  之后 GET_DAP_ON=${onNow()}"
+            }
+
+            val tryProfs = listOf(0, 1, 2, 3, 4, 5)
+            tryProfs.forEach { p -> line(writeBeon(p, 1)) }
+            line("")
+            tryProfs.forEach { p -> line(writeBeon(p, 0)) }
+            line("")
+            line("复位后 GET_DAP_ON=${onNow()}")
+        } catch (t: Throwable) {
+            line("异常：${rootCause(t)}")
+        }
+        return sb.toString()
+    }
+
+    /**
+     * 主动丢弃当前句柄。
+     * A 类写入后 Dolby 可能已经重建效果链，旧句柄写不进 GEQ，
+     * 丢掉它，下一次操作会自动重开。
+     */
+    @Synchronized
+    fun dropSession() {
+        runCatching { session?.release() }
+        session = null
+    }
+
+    /**
+     * 探活：确认当前会话还能用；不能用就丢掉重开。
+     * @return true = 现在有一个可用会话
+     */
+    @Synchronized
+    fun ensureAlive(): Boolean {
+        session?.let { e ->
+            val ok = runCatching { queryInt(e, COMMAND_GET_DAP_ON) }.isSuccess
+            if (ok) return true
+            runCatching { e.release() }
             session = null
         }
         return try {
@@ -630,6 +702,19 @@ object DapRealtime {
         "写入失败：${rootCause(t)}"
     }
 
+    /** 临时探测：按参数编号写一组安全值，返回 rc 或错误原因 */
+    @Synchronized
+    fun probeSet(paramId: Int, values: IntArray): String {
+        return try {
+            val e = session ?: openEffect().also { session = it }
+            if (!e.hasControl()) return "无控制权"
+            if (!e.enabled) return "杜比音效未启用"
+            val st = e.setParam(CMD_PARAM, buildParamPayload(0, paramId, values))
+            if (st < 0) statusText(st, "参数 $paramId") else "rc=$st"
+        } catch (t: Throwable) {
+            "异常：${rootCause(t)}"
+        }
+    }
     /** 正式写入单个参数并提交落库（失败返回原因，成功返回 null） */
     @Synchronized
     fun setParamValue(paramId: Int, value: Int): String? {
@@ -735,7 +820,58 @@ object DapRealtime {
         1, 0, 0, 0
     )
 
+    @Synchronized
+    fun takeOverAndProbe(): String {
+        return try {
+            val e = session ?: openEffect().also { session = it }
+            val sb = StringBuilder()
+            val r1 = e.setParam(CMD_PARAM, TAKEOVER)
+            sb.append("接管包 rc=$r1\n")
+            val r2 = e.setEnabled(true)
+            sb.append("setEnabled(true) rc=$r2\n")
+            sb.append("enabled=${e.enabled}  hasControl=${e.hasControl()}\n")
+            val probe = writeFourCCBatch(
+                listOf(
+                    "vbm" to intArrayOf(1),
+                    "vbog" to intArrayOf(128),
+                    "vbhm" to intArrayOf(64)
+                )
+            ) ?: "ok"
+            sb.append("测试写入 vbm=1 / vbog=128 → $probe\n")
+            sb.append("GET_DAP_ON=${runCatching { queryInt(e, COMMAND_GET_DAP_ON) }.getOrDefault(-999)}")
+            sb.toString()
+        } catch (t: Throwable) {
+            "异常：${rootCause(t)}"
+        }
+    }
 
+    /**
+     * 最小实验：只把给定参数按「设备掩码 + command(0) 批量包」写一次。
+     *
+     * 目的只有一个 —— 验证逆向 APP 那条路在本机到底行不行：
+     *   profile = 0x40000000（扬声器掩码）
+     *   payload = [profile, count, (profile, fourcc, len, values)…]
+     *   setParameter(0, payload)
+     * 不提交、不碰其他参数，出问题 killall audioserver 就能恢复。
+     */
+    @Synchronized
+    fun writeFourCCMasked(items: List<Pair<String, IntArray>>): String? {
+        if (items.isEmpty()) return null
+        return try {
+            val e = session ?: openEffect().also { session = it }
+            if (!e.hasControl()) return "无控制权"
+            if (!e.enabled) return "杜比音效未启用"
+            val payload = buildParamSetPayload(0x40000000, items)
+            val st = e.setParam(CMD_SET_BATCH, payload)
+            android.util.Log.i(
+                "DapWr",
+                "masked p=0x40000000 rc=$st ${items.joinToString(" ") { it.first }}"
+            )
+            if (st < 0) statusText(st, "A 类(掩码)") else null
+        } catch (t: Throwable) {
+            rootCause(t)
+        }
+    }
 
     /** 读 persist.audio.dolby.profile（普通 App 可用 getprop，不需要权限） */
     private fun propProfile(): Int? = runCatching {
@@ -753,7 +889,77 @@ object DapRealtime {
         return v
     }
 
+    /** 写一个 FourCC 参数；成功返回 null */
+    @Synchronized
+    fun writeFourCC(tag: String, vararg values: Int): String? {
+        return try {
+            val e = session ?: openEffect().also { session = it }
+            if (!e.hasControl()) return "无控制权"
+            if (!e.enabled) return "杜比音效未启用"
+            val buf = ByteBuffer.allocate((values.size + 4) * 4).order(ByteOrder.LITTLE_ENDIAN)
+            buf.putInt(COMMAND_SET_PROFILE)
+            buf.putInt(values.size + 1)
+            buf.putInt(curProfile(e))
+            buf.putInt(fourcc(tag))
+            values.forEach { buf.putInt(it) }
+            val st = e.setParam(CMD_PARAM, buf.array())
+            android.util.Log.i("DapWr", "$tag p=${curProfile(e)} rc=$st ${values.joinToString(",")}")
+            if (st < 0) statusText(st, tag) else null
+        } catch (t: Throwable) {
+            rootCause(t)
+        }
+    }
 
+    /** 批量写多个 FourCC 参数（一条 command(0)）；成功返回 null */
+    @Synchronized
+    fun writeFourCCBatch(items: List<Pair<String, IntArray>>): String? {
+        if (items.isEmpty()) return null
+        return try {
+            val e = session ?: openEffect().also { session = it }
+            // 逆向 C0650ag：控制权是硬前置。
+            // 拿不到控制权时，setParameter 仍返回 0，但 HAL 会静默丢弃（哑写）。
+            if (!waitForControl(e, 700)) return "无控制权"
+            // 只拉起一次：重复 enable 会触发 HAL 初始化，把我们刚写的 A 类值重置成 0。
+            if (!liveReady) {
+                runCatching { e.setParam(CMD_PARAM, TAKEOVER) }
+                runCatching { e.enabled = true }
+                liveReady = true
+            }
+
+            // ── 回到 v1.7.1 那条「实测有效」的路：
+            //    单条 command(5) + profile = persist.audio.dolby.profile 的当前值。
+            //  旧笔记实测：profile=4 时写 4 有效、写 0 无效；
+            //  现在 getprop 是 0，所以必须写 0，写 0x40000000 只会落进一个没人读的桶。
+            val profile = propProfile() ?: 0
+            var bad = 0
+            var lastRc = 0
+            items.forEach { (tag, vs) ->
+                val st = e.setParam(CMD_PARAM, buildParamPayload(profile, fourcc(tag), vs))
+                lastRc = st
+                if (st < 0) bad = st
+                android.util.Log.i("DapWr", "single p=$profile $tag rc=$st")
+            }
+            android.util.Log.i(
+                "DapWr",
+                "batch p=$profile n=${items.size} last=$lastRc ${items.joinToString(" ") { it.first }}"
+            )
+            if (bad < 0) return statusText(bad, "A 类 / profile $profile")
+            // 关键：普通参数（101/111/233…）每次写完都会补一条 COMMAND_SAVE，
+            // 所以它能落进 DSP 的当前参数集；
+            // A 类以前只写不提交，DSP 侧一直停在"待提交"状态 —— 这就是写成功没声音的原因。
+            val save = e.setParam(CMD_PARAM, buildSavePayload())
+            android.util.Log.i("DapWr", "save rc=$save")
+            if (save < 0 && save != AudioEffect.ERROR_INVALID_OPERATION) {
+                return statusText(save, "保存")
+            }
+
+            // 注意：这里**不能**再动 enabled —— 实测在写完后再关→开会触发 HAL 初始化，
+// 把刚写的 A 类值重置成 0。拉起动作已移到写参数之前。
+            null
+        } catch (t: Throwable) {
+            rootCause(t)
+        }
+    }
 
     /** command(int, byte[], byte[]) —— 带输出缓冲，读回测试要用 */
     private val commandMethod: Method by lazy {
@@ -765,7 +971,92 @@ object DapRealtime {
         )
     }
 
+    /** 读回 FourCC 参数；读不到返回 null（不代表写入失败） */
+    @Synchronized
+    fun readFourCC(tag: String, count: Int = 1): IntArray? {
+        return try {
+            val e = session ?: openEffect().also { session = it }
+            val inBuf = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+                .putInt(0)
+                .putInt(fourcc(tag))
+                .array()
+            val out = ByteArray((count + 2) * 4)
+            val st = getParamFullMethod.invoke(e, CMD_READ_FOURCC, inBuf, out) as Int
+            if (st < 0) return null
+            val b = ByteBuffer.wrap(out).order(ByteOrder.LITTLE_ENDIAN)
+            val first = b.int
+            val n = if (first in 0..count) first else count
+            IntArray(n) { b.int }
+        } catch (t: Throwable) {
+            null
+        }
+    }
 
+    /**
+     * 读回探测：不改任何参数，只试 5 种读法，把返回码和原始回包打出来。
+     * 用于判断本机 Dolby 到底有没有回读通道。
+     */
+    @Synchronized
+    fun probeReadback(tag: String = "dplp"): String {
+        val sb = StringBuilder()
+        val fc = fourcc(tag)
+        sb.append("Dolby DAP FourCC 读回测试\n")
+        sb.append("tag=\"").append(tag).append("\"  fourcc=0x")
+            .append(Integer.toHexString(fc)).append("\n\n")
+
+        fun hex(b: ByteArray, n: Int = 48): String {
+            val m = minOf(n, b.size)
+            if (m <= 0) return "(空)"
+            val out = StringBuilder()
+            for (i in 0 until m) out.append(String.format(java.util.Locale.US, "%02X ", b[i]))
+            return out.toString().trim()
+        }
+
+        fun buf(vararg v: Int): ByteArray {
+            val bb = ByteBuffer.allocate(v.size * 4).order(ByteOrder.LITTLE_ENDIAN)
+            v.forEach { bb.putInt(it) }
+            return bb.array()
+        }
+
+        try {
+            val e = session ?: openEffect().also { session = it }
+            sb.append("effect id=").append(e.id)
+                .append("  enabled=").append(e.enabled)
+                .append("  hasControl=").append(e.hasControl()).append("\n\n")
+
+            fun runCmd(label: String, key: Int, payload: ByteArray) {
+                val out = ByteArray(64)
+                val rc = try {
+                    commandMethod.invoke(e, key, payload, out) as Int
+                } catch (t: Throwable) {
+                    -999
+                }
+                sb.append(label).append("  rc=").append(rc)
+                    .append("  out=").append(hex(out)).append('\n')
+            }
+
+            runCmd("A cmd(5,[0,fourcc])", 5, buf(0, fc))
+            runCmd("B cmd(5,[0x01000000,0,0,fourcc])", 5, buf(0x01000000, 0, 0, fc))
+            runCmd("C cmd(5,[0x03000000,fourcc])", 5, buf(0x03000000, fc))
+            runCmd("D cmd(20,[0,fourcc])", 20, buf(0, fc))
+
+            val out2 = ByteArray(64)
+            val rc2 = try {
+                getParamFullMethod.invoke(e, 20, buf(0, fc), out2) as Int
+            } catch (t: Throwable) {
+                -999
+            }
+            sb.append("E getParam(20,..)  rc=").append(rc2)
+                .append("  out=").append(hex(out2)).append('\n')
+
+            val dapOn = runCatching { queryInt(e, COMMAND_GET_DAP_ON) }.getOrNull()
+            sb.append("\n[对照] DAP_ON（PARA 通道）=").append(dapOn)
+            if (dapOn != null) sb.append("   ← 说明整数 ID 那套是可读的") else sb.append("   ← 对照也没读到")
+        } catch (t: Throwable) {
+            sb.append("异常：").append(rootCause(t))
+        }
+        return sb.toString()
+    }
 
     /** 拖动时用：写全部 profile，不释放实例；句柄失效时自动重开并重试一次 */
     @Synchronized
