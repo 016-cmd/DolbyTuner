@@ -679,7 +679,11 @@ private fun GeqScreen(deviceLine: String) {
                 Text(status, fontSize = 10.sp, color = cs.onSurfaceVariant, maxLines = 2)
 
                 Spacer(Modifier.height(18.dp))
-                FxSection(onStatus = { fxStatus = it })
+                // 设备切换 / 外部应用预设后 changeTick++，用 key 强制重建音效页，
+                // 让新预设里的 EQ 强度、AutoEQ 曲线等立刻反映到界面上
+                androidx.compose.runtime.key(DeviceState.changeTick) {
+                    FxSection(onStatus = { fxStatus = it })
+                }
 
                 Spacer(Modifier.height(12.dp))
                 Text(
