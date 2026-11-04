@@ -1408,6 +1408,114 @@ private fun EffectsScreen() {
         )
     }
 
+    // ===== 设备槽位 =====
+    var curSlot by remember { mutableIntStateOf(DeviceSlots.currentSlot(ctx)) }
+    var slotAuto by remember { mutableStateOf(prefs.getBoolean("slot_auto", true)) }
+    var slotSavedTick by remember { mutableIntStateOf(0) }
+
+    fun packSlot(): String = listOf(
+        "v1",
+        gain.toString(),
+        if (limOn) "1" else "0",
+        listOf(thr, atk, rel, rat, post).joinToString(","),
+        if (mbcOn) "1" else "0",
+        mbcStore.joinToString(":") { it.joinToString(",") },
+        if (revOn) "1" else "0",
+        revData.joinToString(","),
+        if (postOn) "1" else "0",
+        postData.joinToString(","),
+        eqTab.toString(),
+        geqQ4.joinToString(","),
+        geqQ.toString(),
+        geqMaster.toString(),
+        peqData.joinToString(";") { "${it.freqHz},${it.gainDb},${it.q}" }
+    ).joinToString("|")
+
+    fun applySlot(slot: Int) {
+        val raw = DeviceSlots.load(prefs, slot) ?: return
+        val p = raw.split("|")
+        if (p.size < 15) return
+        runCatching {
+            gain = p[1].toInt()
+            limOn = p[2] == "1"
+            val l = p[3].split(",").mapNotNull { it.toIntOrNull() }
+            if (l.size >= 5) {
+                thr = l[0]; atk = l[1]; rel = l[2]; rat = l[3]; post = l[4]
+            }
+            mbcOn = p[4] == "1"
+            val mb = p[5].split(":").mapNotNull { seg ->
+                seg.split(",").mapNotNull { it.toIntOrNull() }.toIntArray().takeIf { it.size >= 9 }
+            }
+            mbcStore = if (mb.isEmpty()) defaultMbcInts() else mb
+            revOn = p[6] == "1"
+            val rv = p[7].split(",").mapNotNull { it.toIntOrNull() }.toIntArray()
+            revData = if (rv.size == 10) rv else DynReverb.DEFAULTS.copyOf()
+            postOn = p[8] == "1"
+            val pd = p[9].split(",").mapNotNull { it.toIntOrNull() }.toIntArray()
+            postData = if (pd.size == 11) pd else loadPost(prefs)
+            eqTab = p[10].toInt()
+            val gq = p[11].split(",").mapNotNull { it.toIntOrNull() }.toIntArray()
+            geqQ4 = if (gq.size == DapRealtime.BANDS) gq else IntArray(DapRealtime.BANDS)
+            geqQ = p[12].toInt()
+            geqMaster = p[13].toInt()
+            val peq = p[14].split(";").mapNotNull { seg ->
+                val a = seg.split(",").mapNotNull { it.toFloatOrNull() }
+                if (a.size == 3) PeqBand(a[0], a[1], a[2]) else null
+            }
+            peqData = if (peq.isEmpty()) defaultPeq() else peq
+            eqCurve = if (eqTab == 0) {
+                EqMath.geq20To127(geqQ4, geqQ / 10f, geqMaster / 10f)
+            } else {
+                EqMath.peqTo127(peqData)
+            }
+        }
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    DynProc.stop()
+                    DynProc.start(
+                        gain.toFloat(),
+                        DynProc.LimiterCfg(
+                            enabled = limOn,
+                            thresholdDb = thr / 10f,
+                            attackMs = atk / 10f,
+                            releaseMs = rel.toFloat(),
+                            ratio = rat / 10f,
+                            postGainDb = post / 10f
+                        ),
+                        toDynMbc(mbcStore)
+                    )
+                    if (postOn) DynProc.setPostEq(postData.copyOf(), true)
+                    if (revOn) DynReverb.start(revData.copyOf()) else DynReverb.stop()
+                }
+            }
+            status = DynProc.status
+        }
+    }
+
+    DisposableEffect(Unit) {
+        val amD = ctx.getSystemService(android.content.Context.AUDIO_SERVICE)
+                as android.media.AudioManager
+        val cb = object : android.media.AudioDeviceCallback() {
+            fun refresh() {
+                val s = DeviceSlots.currentSlot(ctx)
+                if (s == curSlot) return
+                curSlot = s
+                if (slotAuto && DeviceSlots.has(prefs, s)) applySlot(s)
+            }
+
+            override fun onAudioDevicesAdded(devices: Array<out android.media.AudioDeviceInfo>) {
+                refresh()
+            }
+
+            override fun onAudioDevicesRemoved(devices: Array<out android.media.AudioDeviceInfo>) {
+                refresh()
+            }
+        }
+        amD.registerAudioDeviceCallback(cb, android.os.Handler(android.os.Looper.getMainLooper()))
+        onDispose { runCatching { amD.unregisterAudioDeviceCallback(cb) } }
+    }
+
     fun applyMbc() {
         val d = toDynMbc(mbcStore)
         scope.launch {
@@ -2310,6 +2418,97 @@ private fun EffectsScreen() {
         }
 
         Spacer(Modifier.height(8.dp))
+        // ===== 设备槽位 =====
+        val cSlot = Color(0xFF14B8A6)
+        Card(
+            Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, cSlot.copy(alpha = if (slotAuto) 0.7f else 0.3f)),
+            colors = CardDefaults.cardColors(
+                containerColor = cSlot.copy(alpha = if (slotAuto) 0.16f else 0.07f)
+            )
+        ) {
+            Column(
+                Modifier.fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 12.dp)
+                    .alpha(if (dpOn) 1f else 0.45f)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("设备槽位", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.weight(1f))
+                    androidx.compose.material3.Switch(
+                        checked = slotAuto,
+                        enabled = dpOn,
+                        onCheckedChange = {
+                            slotAuto = it
+                            prefs.edit().putBoolean("slot_auto", it).apply()
+                        }
+                    )
+                }
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    "当前输出 · " + DeviceSlots.NAMES[curSlot],
+                    fontSize = 9.sp, color = cs.onSurfaceVariant
+                )
+                Spacer(Modifier.height(7.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    DeviceSlots.NAMES.forEachIndexed { i, name ->
+                        val active = i == curSlot
+                        val saved = slotSavedTick.let { DeviceSlots.has(prefs, i) }
+                        Surface(
+                            Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable(enabled = dpOn) { curSlot = i },
+                            shape = RoundedCornerShape(10.dp),
+                            color = cSlot.copy(alpha = if (active) 0.28f else 0.10f),
+                            border = BorderStroke(1.dp, cSlot.copy(alpha = if (active) 0.75f else 0.25f))
+                        ) {
+                            Column(
+                                Modifier.padding(vertical = 6.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    name, fontSize = 10.sp,
+                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (active) cSlot else cs.onSurface
+                                )
+                                Text(
+                                    if (saved) "已存" else "空",
+                                    fontSize = 8.sp, color = cs.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            DeviceSlots.save(prefs, curSlot, packSlot())
+                            slotSavedTick++
+                        },
+                        modifier = Modifier.weight(1f).height(34.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        enabled = dpOn,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = cSlot)
+                    ) { Text("存到本槽", fontSize = 10.sp) }
+                    OutlinedButton(
+                        onClick = { applySlot(curSlot) },
+                        modifier = Modifier.weight(1f).height(34.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        enabled = dpOn && DeviceSlots.has(prefs, curSlot),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = cSlot)
+                    ) { Text("应用本槽", fontSize = 10.sp) }
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "插拔耳机或连蓝牙时自动套用对应槽位",
+                    fontSize = 9.sp, color = cs.onSurfaceVariant
+                )
+            }
+        }
+
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Text(
                 if (busy) "正在下发…" else status,
