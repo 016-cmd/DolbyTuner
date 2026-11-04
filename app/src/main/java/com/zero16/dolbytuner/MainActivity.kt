@@ -903,6 +903,7 @@ internal suspend fun applyPreset(ctx: Context, p: Preset): String? {
 internal object DspBaseline {
     private const val PREF = "dolby_tuner"
     private const val K_FX = "dsp_base_fx"
+    private const val K_DAP = "dsp_base_dap"
     private const val K_READY = "dsp_base_ready"
 
     fun captured(ctx: Context): Boolean =
@@ -923,7 +924,11 @@ internal object DspBaseline {
         } catch (_: Exception) { FxState() }
     }
 
-    fun save(ctx: Context, fx: FxState) {
+    /** A 类参数的本机基准（没采集过则返回内置默认） */
+    fun dapFx(ctx: Context): DapFx =
+        DapFx.fromPref(ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getString(K_DAP, null))
+
+    fun save(ctx: Context, fx: FxState, dap: DapFx? = null) {
         val v = listOf(
             if (fx.hpVirtual) "1" else "0",
             if (fx.spVirtual) "1" else "0",
@@ -931,10 +936,11 @@ internal object DspBaseline {
             fx.bassGain.toString(), fx.bassCutoff.toString(), fx.bassWidth.toString(),
             if (fx.dialogOn) "1" else "0", fx.dialogAmt.toString()
         ).joinToString(",")
-        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
+        val ed = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
             .putString(K_FX, v)
             .putBoolean(K_READY, true)
-            .apply()
+        if (dap != null) ed.putString(K_DAP, dap.toPref())
+        ed.apply()
     }
 }
 
@@ -955,7 +961,13 @@ internal suspend fun captureDspBaseline(ctx: Context): String? = withContext(Dis
     val cutoff = pick(234, 80, 300)
     val width = pick(235, 0, 64)
     val hit = listOf(hp, sp, dialog, damt, bass, gain, cutoff, width).count { it != null }
-    if (hit == 0) return@withContext "读取失败：本机实时层不支持回读，暂时只能用内置默认值"
+
+    // A 类（FourCC）也一起采集：读不到就保留本地值，不硬写默认
+    val dapRead = readDapFxFromDsp(DapFxStore.load(ctx))
+
+    if (hit == 0 && dapRead == null) {
+        return@withContext "读取失败：本机实时层不支持回读，暂时只能用内置默认值"
+    }
 
     DspBaseline.save(
         ctx,
@@ -968,7 +980,8 @@ internal suspend fun captureDspBaseline(ctx: Context): String? = withContext(Dis
             bassWidth = width ?: 0,
             dialogOn = dialog == 1,
             dialogAmt = damt ?: 4
-        )
+        ),
+        dapRead?.first
     )
     null
 }
@@ -977,12 +990,15 @@ internal suspend fun captureDspBaseline(ctx: Context): String? = withContext(Dis
 internal suspend fun resetToDefault(ctx: Context): String? {
     val flat = IntArray(DapRealtime.BANDS)
     val def = if (DspBaseline.captured(ctx)) DspBaseline.fx(ctx) else FxState()
+    val dapDef = if (DspBaseline.captured(ctx)) DspBaseline.dapFx(ctx) else DapFx()
     var e = withContext(Dispatchers.IO) { DapRealtime.writeLive(flat) }
     if (e == null) e = withContext(Dispatchers.IO) { DapRealtime.commit(flat) }
     if (e == null) e = pushFx(def)
+    if (e == null) e = pushDapFx(dapDef)
     if (e == null) {
         saveGeq(ctx, flat)
         saveFx(ctx, def)
+        DapFxStore.save(ctx, dapDef)
     }
     return e
 }
@@ -1038,6 +1054,15 @@ private fun EffectsScreen() {
             fx = synced.first
             saveFx(ctx, synced.first)
             status = "已同步 ${synced.second}/8 项 DSP 实时参数"
+        }
+
+        // A 类：逐项读回，读不到的项保留本地值（不硬写默认）
+        val dapSynced = withContext(Dispatchers.IO) { readDapFxFromDsp(dapFx) }
+        if (dapSynced != null) {
+            dapFx = dapSynced.first
+            DapFxStore.save(ctx, dapSynced.first)
+            status = (if (synced != null) "已同步 ${synced.second}/8 音效 · " else "已同步 ")
+                .plus("A 类 ${dapSynced.second} 项")
         }
     }
     DisposableEffect(Unit) { onDispose { DapRealtime.closeSession() } }
@@ -1346,7 +1371,7 @@ Column(
                     TextButton(onClick = {
                         showResetConfirm = false
                         val def = if (hasBase) DspBaseline.fx(ctx) else FxState()
-                        val dapDef = DapFx()
+                        val dapDef = if (hasBase) DspBaseline.dapFx(ctx) else DapFx()
                         dapFx = dapDef
                         DapFxStore.save(ctx, dapDef)
                         fx = def
