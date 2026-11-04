@@ -178,7 +178,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // 诊断：读 103/106/107/112 的当前值（只读，不改任何东西）
         Thread {
-            runCatching {
+            android.util.Log.i("DapDiag", "start")
+            val r = runCatching {
                 val ids = intArrayOf(103, 106, 107, 112)
                 val sb = StringBuilder("diag ")
                 ids.forEach { id ->
@@ -187,6 +188,10 @@ class MainActivity : ComponentActivity() {
                 }
                 android.util.Log.i("DapDiag", sb.toString())
             }
+            android.util.Log.i(
+                "DapDiag",
+                "end ok=" + r.isSuccess + " err=" + (r.exceptionOrNull()?.toString() ?: "-")
+            )
         }.start()
         val gate = evaluateGate()
         setContent {
