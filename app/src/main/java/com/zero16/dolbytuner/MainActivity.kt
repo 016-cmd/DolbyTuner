@@ -1392,15 +1392,37 @@ private fun EffectsScreen() {
     var debugOn by remember { mutableStateOf(prefs.getBoolean("dp_debug", false)) }
     var showDebugDlg by remember { mutableStateOf(false) }
     var delPeqIdx by remember { mutableIntStateOf(-1) }
-    var mbcStore by remember { mutableStateOf(loadMbc(prefs)) }
     var geqQ4 by remember { mutableStateOf(loadDpGeq(prefs)) }
-    var geqQ by remember { mutableIntStateOf(prefs.getInt("geq_q", 10)) }
-    var geqMaster by remember { mutableIntStateOf(prefs.getInt("geq_master", 0)) }
     var peqData by remember { mutableStateOf(loadPeq(prefs)) }
     var peqSel by remember { mutableIntStateOf(0) }
     var eqCurve by remember { mutableStateOf(FloatArray(127)) }
+    var sel by remember { mutableIntStateOf(prefs.getInt("mbc_sel", 0)) }
+    var mbcStore by remember { mutableStateOf(loadMbc(prefs)) }
     var status by remember { mutableStateOf(DynProc.status) }
     var busy by remember { mutableStateOf(false) }
+
+    fun toDynMbc(l: List<IntArray>) = l.map { a ->
+        DynProc.MbcBandCfg(
+            enabled = mbcOn && a[9] == 1,
+            thresholdDb = a[0] / 10f,
+            ratio = a[1] / 10f,
+            attackMs = a[2] / 10f,
+            releaseMs = a[3].toFloat(),
+            kneeWidth = a[4].toFloat(),
+            noiseGateDb = a[5] / 10f,
+            expanderRatio = a[6] / 10f,
+            preGainDb = a[7] / 10f,
+            postGainDb = a[8] / 10f
+        )
+    }
+
+    fun applyMbc() {
+        val d = toDynMbc(mbcStore)
+        scope.launch {
+            withContext(Dispatchers.IO) { DynProc.setMbc(d) }
+            status = DynProc.status
+        }
+    }
 
     // ===== 设备槽位 =====
     var curSlot by remember { mutableIntStateOf(DeviceSlots.currentSlot(ctx)) }
@@ -1440,10 +1462,10 @@ private fun EffectsScreen() {
             val mb = p[5].split(":").mapNotNull { seg ->
                 seg.split(",").mapNotNull { it.toIntOrNull() }.toIntArray().takeIf { it.size >= 9 }
             }
-            mbcStore = if (mb.isEmpty()) defaultMbcInts() else mb
+            mbcStore = if (mb.isEmpty()) loadMbc(prefs) else mb
             revOn = p[6] == "1"
             val rv = p[7].split(",").mapNotNull { it.toIntOrNull() }.toIntArray()
-            revData = if (rv.size == 10) rv else DynReverb.DEFAULTS.copyOf()
+            revData = if (rv.size == 10) rv else loadRev(prefs)
             postOn = p[8] == "1"
             val pd = p[9].split(",").mapNotNull { it.toIntOrNull() }.toIntArray()
             postData = if (pd.size == 11) pd else loadPost(prefs)
@@ -1456,7 +1478,7 @@ private fun EffectsScreen() {
                 val a = seg.split(",").mapNotNull { it.toFloatOrNull() }
                 if (a.size == 3) PeqBand(a[0], a[1], a[2]) else null
             }
-            peqData = if (peq.isEmpty()) defaultPeq() else peq
+            peqData = if (peq.isEmpty()) loadPeq(prefs) else peq
             eqCurve = if (eqTab == 0) {
                 EqMath.geq20To127(geqQ4, geqQ / 10f, geqMaster / 10f)
             } else {
@@ -1511,28 +1533,6 @@ private fun EffectsScreen() {
     }
 
 
-    fun toDynMbc(l: List<IntArray>) = l.map { a ->
-        DynProc.MbcBandCfg(
-            enabled = mbcOn && a[9] == 1,
-            thresholdDb = a[0] / 10f,
-            ratio = a[1] / 10f,
-            attackMs = a[2] / 10f,
-            releaseMs = a[3].toFloat(),
-            kneeWidth = a[4].toFloat(),
-            noiseGateDb = a[5] / 10f,
-            expanderRatio = a[6] / 10f,
-            preGainDb = a[7] / 10f,
-            postGainDb = a[8] / 10f
-        )
-    }
-
-    fun applyMbc() {
-        val d = toDynMbc(mbcStore)
-        scope.launch {
-            withContext(Dispatchers.IO) { DynProc.setMbc(d) }
-            status = DynProc.status
-        }
-    }
 
     fun updMbc(idx: Int, v: Int) {
         val l = mbcStore.toMutableList()
@@ -2319,7 +2319,7 @@ private fun EffectsScreen() {
 
         // ===== 空间环境混响 =====
         EffectCard(
-            title = "空间环境混响",
+            title = "空间环境混响" + DynReverb.shortStatus.let { if (it.isBlank()) "" else " · $it" },
             subtitle = "Reverb · 空间感与残响",
             icon = Icons.Default.Wallpaper,
             enabled = revOn,

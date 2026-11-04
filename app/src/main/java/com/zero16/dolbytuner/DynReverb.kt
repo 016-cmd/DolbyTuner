@@ -193,5 +193,15 @@ object DynReverb {
         status = "未开启"
     }
 
+    /** 卡片标题后缀用的短状态（空串表示未开启） */
+    val shortStatus: String
+        get() = when {
+            status.contains("插入式") -> "插入式"
+            status.contains("兼容模式") -> "兼容模式"
+            status.contains("等待控制权") -> "等待控制权"
+            status.contains("失败") || status.contains("不支持") -> "不可用"
+            else -> ""
+        }
+
     fun lastData(): IntArray = last.copyOf()
 }
