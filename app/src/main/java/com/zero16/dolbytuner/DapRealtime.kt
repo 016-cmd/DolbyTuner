@@ -549,6 +549,11 @@ object DapRealtime {
     //  调用方按「未校验」处理，不要当成写入失败。
     // ────────────────────────────────────────────────────────────
 
+    /** 当前生效的 profile 编号；读不到就用 0（不做假设） */
+    private fun curProfile(e: AudioEffect): Int =
+        runCatching { queryInt(e, COMMAND_GET_CURRENT) }
+            .getOrNull()?.takeIf { it in 0..31 } ?: 0
+
     /** 四字符 → int（小端：'d' | 'p'<<8 | 'l'<<16 | 'p'<<24） */
     private fun fourcc(tag: String): Int {
         var v = 0
@@ -567,7 +572,8 @@ object DapRealtime {
             val buf = ByteBuffer.allocate((values.size + 4) * 4).order(ByteOrder.LITTLE_ENDIAN)
             buf.putInt(COMMAND_SET_PROFILE)
             buf.putInt(values.size + 1)
-            buf.putInt(0)
+            // 关键：这里必须是「当前 profile」，写 0 会把 Dolby 切到 profile 0
+            buf.putInt(curProfile(e))
             buf.putInt(fourcc(tag))
             values.forEach { buf.putInt(it) }
             val st = e.setParam(CMD_PARAM, buf.array())
@@ -590,8 +596,9 @@ object DapRealtime {
             val buf = ByteBuffer.allocate(size * 4).order(ByteOrder.LITTLE_ENDIAN)
             buf.putInt(CMD_SET_BATCH)
             buf.putInt(items.size)
+            val prof = curProfile(e)
             items.forEach { (tag, vs) ->
-                buf.putInt(0)
+                buf.putInt(prof)
                 buf.putInt(fourcc(tag))
                 buf.putInt(vs.size)
                 vs.forEach { buf.putInt(it) }

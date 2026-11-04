@@ -1533,8 +1533,6 @@ private fun SettingsScreen(activity: Activity) {
     }
     var wallpaperUri by remember { mutableStateOf(ThemePrefs.getWallpaperUri(ctx)) }
     var baseReady by remember { mutableStateOf(DspBaseline.captured(ctx)) }
-    var probeBusy by remember { mutableStateOf(false) }
-    var probeReport by remember { mutableStateOf<String?>(null) }
     var baseBusy by remember { mutableStateOf(false) }
     val verName = remember {
         runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "0.9.3"
@@ -1692,56 +1690,6 @@ private fun SettingsScreen(activity: Activity) {
             Text(
                 "检测会读取当前 Dolby DSP 里的音效参数作为基准；GEQ 出厂即平直，不需要检测。",
                 fontSize = 9.sp, lineHeight = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        Spacer(Modifier.height(12.dp))
-        GlassCard(Modifier.fillMaxWidth()) {
-            Text("A 类参数读回测试", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "只测试、不改任何声音参数。结果会存到 Download/DolbyTuner/readback_probe.txt",
-                fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(6.dp))
-            SettingRow(
-                icon = Icons.Default.Search,
-                title = "运行读回测试",
-                subtitle = if (probeBusy) "测试中…" else "试 5 种读法，看 DSP 有没有回包",
-                selected = false
-            ) {
-                if (probeBusy) return@SettingRow
-                probeBusy = true
-                scope.launch {
-                    val report = withContext(Dispatchers.IO) { DapRealtime.probeReadback() }
-                    val saved = withContext(Dispatchers.IO) { saveProbeReport(ctx, report) }
-                    probeBusy = false
-                    probeReport = report + (if (saved != null) "\n\n已保存：" + saved else "\n\n保存失败")
-                }
-            }
-        }
-
-        if (probeReport != null) {
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = { probeReport = null },
-                title = { Text("读回测试结果", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
-                text = {
-                    Column(
-                        Modifier.heightIn(max = 420.dp)
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        Text(
-                            probeReport ?: "",
-                            fontSize = 8.sp, lineHeight = 11.sp,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    }
-                },
-                confirmButton = {
-                    androidx.compose.material3.TextButton(onClick = { probeReport = null }) {
-                        Text("关闭", color = Accent, fontSize = 12.sp)
-                    }
-                }
             )
         }
 
