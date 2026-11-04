@@ -274,6 +274,8 @@ object DapRealtime {
      */
     @Synchronized
     fun dolbyState(): Boolean? {
+        // A 类写入可能让 Dolby 重建效果链，旧句柄会失效；先探活
+        ensureAlive()
         var own = false
         var e: AudioEffect? = null
         return try {
@@ -476,6 +478,17 @@ object DapRealtime {
         msg.contains("音频服务已重启") ||
             msg.contains("控制权被") ||
             msg.contains("DEAD_OBJECT", true)
+
+    /**
+     * 主动丢弃当前句柄。
+     * A 类写入后 Dolby 可能已经重建效果链，旧句柄写不进 GEQ，
+     * 丢掉它，下一次操作会自动重开。
+     */
+    @Synchronized
+    fun dropSession() {
+        runCatching { session?.release() }
+        session = null
+    }
 
     /**
      * 探活：确认当前会话还能用；不能用就丢掉重开。
@@ -711,6 +724,7 @@ object DapRealtime {
     @Synchronized
     fun writeLive(curve: IntArray): String? {
         if (curve.size != BANDS) return "曲线长度不正确（需要 $BANDS 段）"
+        ensureAlive()
         val first = writeWithSession(curve)
         if (first == null) return null
         if (!isDeadError(first)) return first
@@ -723,6 +737,7 @@ object DapRealtime {
     @Synchronized
     fun commit(curve: IntArray): String? {
         if (curve.size != BANDS) return "曲线长度不正确（需要 $BANDS 段）"
+        ensureAlive()
         val first = try {
             val e = session ?: openEffect().also { session = it }
             writeOn(e, curve, null) ?: saveOn(e)
