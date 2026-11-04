@@ -496,7 +496,10 @@ private fun GeqScreen(deviceLine: String) {
         }
     }
 
-    Column(Modifier.fillMaxWidth()) {
+    Column(
+        Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState())
+            .padding(horizontal = 14.dp).padding(bottom = 96.dp)
+    ) {
         Spacer(Modifier.height(14.dp))
         Text("Dolby Tuner", fontSize = 25.sp, fontWeight = FontWeight.Bold)
         Text(deviceLine, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1063,10 +1066,9 @@ private fun FxSection() {
 
 
 
-Column(
-        Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp).padding(bottom = 96.dp)
-    ) {
+    Column(Modifier.fillMaxWidth()) {
+
+
         Spacer(Modifier.height(4.dp))
         EffectCard(
             title = "低音增强",
@@ -1388,10 +1390,7 @@ private fun SettingsScreen(activity: Activity) {
         }
     }
 
-    Column(
-        Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp).padding(bottom = 96.dp)
-    ) {
+    Column(Modifier.fillMaxWidth()) {
         Spacer(Modifier.height(14.dp))
         Text("设置", fontSize = 25.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
