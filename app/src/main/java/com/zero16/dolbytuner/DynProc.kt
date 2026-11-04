@@ -35,6 +35,7 @@ object DynProc {
     /** 上一次成功下发的配置（用于重建） */
     private var lastGain: Float = 0f
     private var lastLimiter: LimiterCfg = LimiterCfg()
+    private var lastMbc: List<MbcBandCfg> = defaultMbc()
 
     data class LimiterCfg(
         var enabled: Boolean = true,
@@ -46,12 +47,36 @@ object DynProc {
         var linkGroup: Int = 0
     )
 
+    /** MBC 单段（分频点固定，参数可调） */
+    data class MbcBandCfg(
+        var enabled: Boolean = false,
+        var thresholdDb: Float = -20f,
+        var ratio: Float = 3f,
+        var attackMs: Float = 1f,
+        var releaseMs: Float = 80f,
+        var kneeWidth: Float = 60f,
+        var noiseGateDb: Float = -90f,
+        var expanderRatio: Float = 1f,
+        var preGainDb: Float = 0f,
+        var postGainDb: Float = 0f
+    )
+
+    /** 四段默认（照 SonicKeyframe 的出厂值，全部关闭） */
+    fun defaultMbc(): List<MbcBandCfg> = listOf(
+        MbcBandCfg(), MbcBandCfg(), MbcBandCfg(), MbcBandCfg()
+    )
+
     /** 启动（可重复调用，内部会先释放旧实例） */
     @Synchronized
-    fun start(gainDb: Float, limiter: LimiterCfg): Boolean {
+    fun start(
+        gainDb: Float,
+        limiter: LimiterCfg,
+        mbc: List<MbcBandCfg>? = null
+    ): Boolean {
         stop()
         lastGain = gainDb
         lastLimiter = limiter
+        if (mbc != null) lastMbc = mbc
 
         val candidates = intArrayOf(127, 64, 32, 20)
         for (bands in candidates) {
@@ -79,13 +104,16 @@ object DynProc {
                 // 限幅器
                 applyLimiterTo(d, limiter)
 
+                // 多段压缩器
+                applyMbcTo(d, lastMbc)
+
                 // 控制权 / 启用状态监听：被系统或别的 App 关掉时标记失联
                 runCatching {
                     d.setEnableStatusListener { _, enabled ->
-                        if (!enabled && running) status = "被系统关闭 · 需重启"
+                        if (!enabled && running) status = "被系统关闭 · 请重新开启"
                     }
                     d.setControlStatusListener { _, granted ->
-                        if (!granted && running) status = "控制权丢失 · 需重启"
+                        if (!granted && running) status = "被其他应用占用 · 未写入"
                     }
                 }
 
@@ -94,7 +122,7 @@ object DynProc {
                 dp = d
                 running = true
                 activeBands = bands
-                status = "已启动 · ${bands}段 · session 0"
+                status = "已启动 · ${bands}段处理"
                 Log.i(TAG, "DP started, bands=$bands")
                 return true
             } catch (t: Throwable) {
@@ -102,7 +130,7 @@ object DynProc {
             }
         }
 
-        status = "启动失败 · HAL 拒绝所有段数"
+        status = "启动失败 · 设备不支持此功能"
         running = false
         activeBands = 0
         return false
@@ -132,6 +160,46 @@ object DynProc {
         }
     }
 
+    private val MBC_CUTOFFS = floatArrayOf(250f, 2000f, 8000f, 20000f)
+
+    private fun applyMbcTo(d: DynamicsProcessing, bands: List<MbcBandCfg>) {
+        for (i in 0 until 4) {
+            val c = bands.getOrNull(i) ?: MbcBandCfg()
+            val band = DynamicsProcessing.MbcBand(
+                c.enabled,
+                MBC_CUTOFFS[i],
+                c.attackMs.coerceIn(0.1f, 100f),
+                c.releaseMs.coerceIn(1f, 5000f),
+                c.ratio.coerceIn(1f, 30f),
+                c.thresholdDb.coerceIn(-80f, 0f),
+                c.kneeWidth.coerceIn(0f, 60f),
+                c.noiseGateDb.coerceIn(-90f, 0f),
+                c.expanderRatio.coerceIn(1f, 10f),
+                c.preGainDb.coerceIn(-40f, 40f),
+                c.postGainDb.coerceIn(-40f, 40f)
+            )
+            val ok = runCatching { d.setMbcBandAllChannelsTo(i, band) }.isSuccess
+            if (!ok) {
+                runCatching {
+                    d.setMbcBandByChannelIndex(0, i, band)
+                    d.setMbcBandByChannelIndex(1, i, band)
+                }
+            }
+        }
+    }
+
+    /** 运行时改 MBC */
+    @Synchronized
+    fun setMbc(bands: List<MbcBandCfg>) {
+        lastMbc = bands
+        val d = dp ?: return
+        if (!runCatching { d.hasControl() }.getOrDefault(false)) {
+            status = "被其他应用占用 · 未写入"
+            return
+        }
+        applyMbcTo(d, bands)
+    }
+
     private fun flatLimiter() = DynamicsProcessing.Limiter(
         false, false, 0, 1f, 60f, 1f, 0f, 0f
     )
@@ -156,7 +224,7 @@ object DynProc {
         lastLimiter = c
         val d = dp ?: return
         if (!runCatching { d.hasControl() }.getOrDefault(false)) {
-            status = "无控制权 · 写入被忽略"
+            status = "被其他应用占用 · 未写入"
             return
         }
         applyLimiterTo(d, c)
@@ -164,7 +232,7 @@ object DynProc {
 
     /** 重新按上次配置起一次（用于"被抢走"后手动恢复） */
     @Synchronized
-    fun restart(): Boolean = start(lastGain, lastLimiter)
+    fun restart(): Boolean = start(lastGain, lastLimiter, lastMbc)
 
     @Synchronized
     fun stop() {
@@ -172,7 +240,7 @@ object DynProc {
         dp = null
         running = false
         activeBands = 0
-        status = "已关闭 · 管线休眠"
+        status = "已关闭"
         if (d != null) {
             runCatching { d.setEnabled(false) }
             runCatching { d.release() }

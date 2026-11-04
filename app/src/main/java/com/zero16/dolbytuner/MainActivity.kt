@@ -1208,7 +1208,7 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
                         Text("将执行：", fontSize = 12.sp)
                         Spacer(Modifier.height(6.dp))
                         Text("• GEQ 20 段全部归零（出厂即平直）", fontSize = 11.sp, color = cs.onSurfaceVariant)
-                        Text("• A 类扩展恢复本机官方基线（写死值，不读 DSP）", fontSize = 11.sp, color = cs.onSurfaceVariant)
+                        Text("• 恢复本机官方基线（写死值，不读 DSP）", fontSize = 11.sp, color = cs.onSurfaceVariant)
                         if (hasBase) {
                             Text("• 音效恢复为检测到的本机默认状态", fontSize = 11.sp, color = cs.onSurfaceVariant)
                         } else {
@@ -1273,6 +1273,24 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
     }
 }
 
+private fun defaultMbcInts(): List<IntArray> =
+    List(4) { intArrayOf(-200, 30, 10, 80, 60, -900, 10, 0, 0) }
+
+private fun loadMbc(prefs: android.content.SharedPreferences): List<IntArray> {
+    val s = prefs.getString("mbc_data", "").orEmpty()
+    if (s.isBlank()) return defaultMbcInts()
+    val parts = s.split(";")
+    if (parts.size != 4) return defaultMbcInts()
+    return parts.map { seg ->
+        val a = seg.split(",").mapNotNull { it.trim().toIntOrNull() }
+        if (a.size == 9) a.toIntArray() else intArrayOf(-200, 30, 10, 80, 60, -900, 10, 0, 0)
+    }
+}
+
+private fun saveMbc(prefs: android.content.SharedPreferences, l: List<IntArray>) {
+    prefs.edit().putString("mbc_data", l.joinToString(";") { it.joinToString(",") }).apply()
+}
+
 @Composable
 private fun EffectsScreen() {
     val cs = MaterialTheme.colorScheme
@@ -1289,8 +1307,44 @@ private fun EffectsScreen() {
     var rat by remember { mutableIntStateOf(prefs.getInt("lim_rat", 100)) }
     var post by remember { mutableIntStateOf(prefs.getInt("lim_post", 0)) }
     var link by remember { mutableIntStateOf(prefs.getInt("lim_link", 0)) }
+    var mbcOn by remember { mutableStateOf(prefs.getBoolean("mbc_on", false)) }
+    var sel by remember { mutableIntStateOf(prefs.getInt("mbc_sel", 0)) }
+    var mbcStore by remember { mutableStateOf(loadMbc(prefs)) }
     var status by remember { mutableStateOf(DynProc.status) }
     var busy by remember { mutableStateOf(false) }
+
+    fun toDynMbc(l: List<IntArray>) = l.map { a ->
+        DynProc.MbcBandCfg(
+            enabled = mbcOn,
+            thresholdDb = a[0] / 10f,
+            ratio = a[1] / 10f,
+            attackMs = a[2] / 10f,
+            releaseMs = a[3].toFloat(),
+            kneeWidth = a[4].toFloat(),
+            noiseGateDb = a[5] / 10f,
+            expanderRatio = a[6] / 10f,
+            preGainDb = a[7] / 10f,
+            postGainDb = a[8] / 10f
+        )
+    }
+
+    fun applyMbc() {
+        val d = toDynMbc(mbcStore.value)
+        scope.launch {
+            withContext(Dispatchers.IO) { DynProc.setMbc(d) }
+            status = DynProc.status
+        }
+    }
+
+    fun updMbc(idx: Int, v: Int) {
+        val l = mbcStore.value.toMutableList()
+        val a = l[sel].copyOf()
+        a[idx] = v
+        l[sel] = a
+        mbcStore = l
+        saveMbc(prefs, l)
+        applyMbc()
+    }
 
     fun cfg() = DynProc.LimiterCfg(
         enabled = limOn,
@@ -1323,7 +1377,7 @@ private fun EffectsScreen() {
         scope.launch {
             busy = true
             withContext(Dispatchers.IO) {
-                if (on) DynProc.start(gain.toFloat(), cfg()) else DynProc.stop()
+                if (on) DynProc.start(gain.toFloat(), cfg(), toDynMbc(mbcStore.value)) else DynProc.stop()
             }
             status = DynProc.status
             busy = false
@@ -1341,7 +1395,7 @@ private fun EffectsScreen() {
 
     LaunchedEffect(Unit) {
         if (dpOn && !DynProc.running) {
-            withContext(Dispatchers.IO) { DynProc.start(gain.toFloat(), cfg()) }
+            withContext(Dispatchers.IO) { DynProc.start(gain.toFloat(), cfg(), toDynMbc(mbcStore.value)) }
             status = DynProc.status
         }
     }
@@ -1357,7 +1411,7 @@ private fun EffectsScreen() {
         Text("DynamicsProcessing音效", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
         Text(
-            "Android原生 DP · 127段管线 · 依赖 APP在后台运行",
+            "安卓原生音效 · 依赖 APP在后台运行",
             fontSize = 11.sp, color = cs.onSurfaceVariant
         )
         Spacer(Modifier.height(14.dp))
@@ -1383,12 +1437,12 @@ private fun EffectsScreen() {
                 Column(Modifier.weight(1f)) {
                     Text("DynamicsProcessing 引擎", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     Text(
-                        if (dpOn) status else "音效已关闭（音频管线休眠）",
+                        if (dpOn) status else "音效引擎未运行 · 点右上角开启",
                         fontSize = 9.sp, lineHeight = 11.sp,
                         color = if (dpOn) accent else cs.onSurfaceVariant
                     )
                     Text(
-                        "session 0 · 全局全频 · 由进程保持",
+                        "全局生效 · 退出 APP后自动停止",
                         fontSize = 8.5.sp, color = cs.onSurfaceVariant
                     )
                 }
@@ -1490,6 +1544,101 @@ private fun EffectsScreen() {
                 "联动组 · Link Group", if (link == 0) "0 · 立体声联动" else "$link", link, 0..3, limOn,
                 onLive = { link = it; applyLim(false) },
                 onDone = { link = it; applyLim(true) }
+            )
+        }
+
+        // ===== MBC 多段压缩 =====
+        EffectCard(
+            title = "多段压缩器",
+            subtitle = "4段动态 · 250 / 2k / 8k / 20k",
+            icon = Icons.Default.Equalizer,
+            enabled = mbcOn,
+            onEnabledChange = { mbcOn = it; prefs.edit().putBoolean("mbc_on", it).apply(); applyMbc() },
+            accent = Color(0xFFA855F7)
+        ) {
+            val cMbc = Color(0xFFA855F7)
+            val segNames = listOf("Low 250", "Mid 2k", "High 8k", "Air 20k")
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                segNames.forEachIndexed { i, n ->
+                    Surface(
+                        Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
+                            .clickable { sel = i; prefs.edit().putInt("mbc_sel", i).apply() },
+                        color = cMbc.copy(alpha = if (sel == i) 0.30f else 0.08f),
+                        border = BorderStroke(1.dp, cMbc.copy(alpha = if (sel == i) 0.72f else 0.26f))
+                    ) {
+                        Box(Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                            Text(
+                                n, fontSize = 9.sp,
+                                fontWeight = if (sel == i) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+
+            val mbcPresets = listOf(
+                "温和" to intArrayOf(-180, 20, 20, 150, 60, -900, 10, 0, 0),
+                "紧实" to intArrayOf(-240, 40, 5, 80, 40, -900, 10, 30, -30),
+                "平直" to intArrayOf(-200, 10, 10, 80, 60, -900, 10, 0, 0)
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                mbcPresets.forEach { pr ->
+                    Surface(
+                        Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
+                            .clickable(enabled = mbcOn) {
+                                val l = List(4) { pr.second.copyOf() }
+                                mbcStore = l
+                                saveMbc(prefs, l)
+                                applyMbc()
+                            },
+                        color = cMbc.copy(alpha = 0.14f),
+                        border = BorderStroke(1.dp, cMbc.copy(alpha = 0.4f))
+                    ) {
+                        Box(Modifier.padding(vertical = 7.dp), contentAlignment = Alignment.Center) {
+                            Text(pr.first, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+
+            val b = mbcStore.value[sel]
+            FxSlider(
+                "阈值 · Threshold", String.format("%.1f dB", b[0] / 10f), b[0], -800..0, mbcOn,
+                onLive = { updMbc(0, it) }, onDone = { updMbc(0, it) }
+            )
+            FxSlider(
+                "压缩比 · Ratio", String.format("%.1f:1", b[1] / 10f), b[1], 10..300, mbcOn,
+                onLive = { updMbc(1, it) }, onDone = { updMbc(1, it) }
+            )
+            FxSlider(
+                "启动时间 · Attack", String.format("%.1f ms", b[2] / 10f), b[2], 1..1000, mbcOn,
+                onLive = { updMbc(2, it) }, onDone = { updMbc(2, it) }
+            )
+            FxSlider(
+                "释放时间 · Release", "${b[3]} ms", b[3], 1..5000, mbcOn,
+                onLive = { updMbc(3, it) }, onDone = { updMbc(3, it) }
+            )
+            FxSlider(
+                "膝宽 · Knee", "${b[4]}", b[4], 0..60, mbcOn,
+                onLive = { updMbc(4, it) }, onDone = { updMbc(4, it) }
+            )
+            FxSlider(
+                "噪声门 · Gate", String.format("%.1f dB", b[5] / 10f), b[5], -900..0, mbcOn,
+                onLive = { updMbc(5, it) }, onDone = { updMbc(5, it) }
+            )
+            FxSlider(
+                "扩展比 · Expander", String.format("%.1f", b[6] / 10f), b[6], 10..100, mbcOn,
+                onLive = { updMbc(6, it) }, onDone = { updMbc(6, it) }
+            )
+            FxSlider(
+                "前级 · Pre Gain", String.format("%+.1f dB", b[7] / 10f), b[7], -400..400, mbcOn,
+                onLive = { updMbc(7, it) }, onDone = { updMbc(7, it) }
+            )
+            FxSlider(
+                "后级 · Post Gain", String.format("%+.1f dB", b[8] / 10f), b[8], -400..400, mbcOn,
+                onLive = { updMbc(8, it) }, onDone = { updMbc(8, it) }
             )
         }
 

@@ -76,7 +76,7 @@ internal fun ConfigScreen() {
     val scope = rememberCoroutineScope()
 
     var presets by remember { mutableStateOf(loadPresets(ctx)) }
-    var status by remember { mutableStateOf("预设包含 GEQ、音效与 A 类参数") }
+    var status by remember { mutableStateOf("预设包含 GEQ 与音效参数") }
 
     var showSaveDialog by remember { mutableStateOf(false) }
     var presetName by remember { mutableStateOf("") }
@@ -226,7 +226,7 @@ internal fun ConfigScreen() {
             text = {
                 Column {
                     Text(
-                        "会把当前 GEQ 20 段、音效页参数与 A 类扩展参数一起保存",
+                        "会把当前 GEQ 20 段与音效页参数一起保存",
                         fontSize = 10.sp, color = cs.onSurfaceVariant
                     )
                     Spacer(Modifier.height(10.dp))
@@ -423,7 +423,7 @@ private fun PresetBigCard(
                 )
             }
 
-            // 中 20%：音效页 8 项 + A 类摘要（点击看详细参数）
+            // 中 20%：音效页参数摘要（点击看详细参数）
             Column(
                 Modifier.fillMaxHeight().weight(0.20f).padding(horizontal = 2.dp)
                     .clickable { onOpen() },
