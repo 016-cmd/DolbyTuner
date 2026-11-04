@@ -50,14 +50,8 @@ object DynReverb {
         last = data.copyOf()
 
         // ① 插入式混响（真正会进链路的那种）
-        val ins = runCatching {
-            AudioEffect(
-                UUID.fromString(UUID_ENV_AUX),
-                UUID.fromString(UUID_ENV_INS),
-                100,
-                0
-            )
-        }.getOrNull()
+        // AudioEffect 的构造函数在 SDK stub 里不可见，必须走反射
+        val ins = newInsertReverb()
 
         if (ins != null) {
             if (writeAll(ins, last)) {
@@ -89,6 +83,30 @@ object DynReverb {
         return false
     }
 
+    /** 反射创建 insert 版混响 */
+    private fun newInsertReverb(): AudioEffect? = runCatching {
+        val cls = Class.forName("android.media.audiofx.AudioEffect")
+        val ctor = cls.getConstructor(
+            UUID::class.java, UUID::class.java,
+            Int::class.javaPrimitiveType, Int::class.javaPrimitiveType
+        )
+        ctor.isAccessible = true
+        ctor.newInstance(
+            UUID.fromString(UUID_ENV_AUX),
+            UUID.fromString(UUID_ENV_INS),
+            100,
+            0
+        ) as AudioEffect
+    }.getOrNull()
+
+    /** 反射写参数（SDK stub 里 setParameter 同样不可见） */
+    private fun sp(f: AudioEffect, id: Int, v: Int): Int = runCatching {
+        f.javaClass.getMethod(
+            "setParameter",
+            Int::class.javaPrimitiveType, Int::class.javaPrimitiveType
+        ).invoke(f, id, v) as Int
+    }.getOrDefault(-1)
+
     private fun clampParam(id: Int, v: Int): Int = when (id) {
         0, 1, 4, 6 -> v.coerceIn(-9000, 0)   // 各类电平 mB
         2 -> v.coerceIn(1, 20000)            // decay ms
@@ -102,7 +120,7 @@ object DynReverb {
     private fun writeAll(f: AudioEffect, d: IntArray): Boolean {
         var ok = 0
         for (i in 0..9) {
-            val rc = runCatching { f.setParameter(i, clampParam(i, d[i])) }.getOrDefault(-1)
+            val rc = sp(f, i, clampParam(i, d[i]))
             if (rc == 0) ok++
         }
         Log.i(TAG, "writeAll ok=$ok/10")
@@ -135,7 +153,7 @@ object DynReverb {
             }
             // 只写变化项，拖动一个滑块只发一条参数
             for (i in 0..9) {
-                if (prev[i] != data[i]) runCatching { f.setParameter(i, clampParam(i, data[i])) }
+                if (prev[i] != data[i]) sp(f, i, clampParam(i, data[i]))
             }
             status = "混响已开启 · 插入式"
             return

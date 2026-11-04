@@ -1407,6 +1407,26 @@ private fun EffectsScreen() {
         mutableIntStateOf(am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC))
     }
 
+    var geqQ4 by remember { mutableStateOf(loadDpGeq(prefs)) }
+    var peqData by remember { mutableStateOf(loadPeq(prefs)) }
+    var peqSel by remember { mutableIntStateOf(0) }
+    var eqCurve by remember { mutableStateOf(FloatArray(127)) }
+    var sel by remember { mutableIntStateOf(prefs.getInt("mbc_sel", 0)) }
+    var mbcStore by remember { mutableStateOf(loadMbc(prefs)) }
+    var status by remember { mutableStateOf(DynProc.status) }
+    var busy by remember { mutableStateOf(false) }
+
+    fun applyVolCurve() {
+        if (!volOn) return
+        val c = volCurves[curVol]
+            ?: volCurves.keys.filter { it <= curVol }.maxOrNull()?.let { volCurves[it] }
+            ?: return
+        scope.launch {
+            withContext(Dispatchers.IO) { DynProc.setPreEq(c) }
+            eqCurve = c
+            status = DynProc.status
+        }
+    }
     DisposableEffect(Unit) {
         val obs = object : android.database.ContentObserver(
             android.os.Handler(android.os.Looper.getMainLooper())
@@ -1432,26 +1452,7 @@ private fun EffectsScreen() {
         }
         onDispose { runCatching { cr.unregisterContentObserver(obs) } }
     }
-    var geqQ4 by remember { mutableStateOf(loadDpGeq(prefs)) }
-    var peqData by remember { mutableStateOf(loadPeq(prefs)) }
-    var peqSel by remember { mutableIntStateOf(0) }
-    var eqCurve by remember { mutableStateOf(FloatArray(127)) }
-    var sel by remember { mutableIntStateOf(prefs.getInt("mbc_sel", 0)) }
-    var mbcStore by remember { mutableStateOf(loadMbc(prefs)) }
-    var status by remember { mutableStateOf(DynProc.status) }
-    var busy by remember { mutableStateOf(false) }
 
-    fun applyVolCurve() {
-        if (!volOn) return
-        val c = volCurves[curVol]
-            ?: volCurves.keys.filter { it <= curVol }.maxOrNull()?.let { volCurves[it] }
-            ?: return
-        scope.launch {
-            withContext(Dispatchers.IO) { DynProc.setPreEq(c) }
-            eqCurve = c
-            status = DynProc.status
-        }
-    }
 
 
     fun toDynMbc(l: List<IntArray>) = l.map { a ->
