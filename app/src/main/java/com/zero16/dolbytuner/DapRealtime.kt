@@ -551,7 +551,10 @@ object DapRealtime {
     @Synchronized
     fun diagReport(): String {
         val sb = StringBuilder()
-        fun line(s: String) { sb.append(s).append('\n') }
+        fun line(s: String) {
+            sb.append(s).append('\n')
+            android.util.Log.i("DapDiag", s)
+        }
         try {
             line("Dolby profile 诊断")
             line("prop(persist.audio.dolby.profile)=${propProfile() ?: "读不到"}")
