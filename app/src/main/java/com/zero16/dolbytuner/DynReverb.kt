@@ -1,6 +1,6 @@
 package com.zero16.dolbytuner
 
-import android.media.AudioEffect
+import android.media.audiofx.AudioEffect
 import android.media.audiofx.EnvironmentalReverb
 import android.util.Log
 import java.util.UUID
@@ -61,7 +61,7 @@ object DynReverb {
 
         if (ins != null) {
             if (writeAll(ins, last)) {
-                ins.enabled = true
+                ins.setEnabled(true)
                 fx = ins
                 running = true
                 val ctrl = runCatching { ins.hasControl() }.getOrDefault(false)
@@ -76,7 +76,7 @@ object DynReverb {
         val r = runCatching { EnvironmentalReverb(100, 0) }.getOrNull()
         if (r != null) {
             applyTo(r, last)
-            r.enabled = true
+            r.setEnabled(true)
             rv = r
             running = true
             status = "混响已开启 · 兼容模式"
@@ -162,7 +162,7 @@ object DynReverb {
     @Synchronized
     fun stop() {
         fx?.let { f ->
-            runCatching { f.enabled = false }
+            runCatching { f.setEnabled(false) }
             runCatching { f.release() }
         }
         fx = null

@@ -105,6 +105,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -1406,18 +1407,6 @@ private fun EffectsScreen() {
         mutableIntStateOf(am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC))
     }
 
-    fun applyVolCurve() {
-        if (!volOn) return
-        val c = volCurves[curVol]
-            ?: volCurves.keys.filter { it <= curVol }.maxOrNull()?.let { volCurves[it] }
-            ?: return
-        scope.launch {
-            withContext(Dispatchers.IO) { DynProc.setPreEq(c) }
-            eqCurve = c
-            status = DynProc.status
-        }
-    }
-
     DisposableEffect(Unit) {
         val obs = object : android.database.ContentObserver(
             android.os.Handler(android.os.Looper.getMainLooper())
@@ -1451,6 +1440,19 @@ private fun EffectsScreen() {
     var mbcStore by remember { mutableStateOf(loadMbc(prefs)) }
     var status by remember { mutableStateOf(DynProc.status) }
     var busy by remember { mutableStateOf(false) }
+
+    fun applyVolCurve() {
+        if (!volOn) return
+        val c = volCurves[curVol]
+            ?: volCurves.keys.filter { it <= curVol }.maxOrNull()?.let { volCurves[it] }
+            ?: return
+        scope.launch {
+            withContext(Dispatchers.IO) { DynProc.setPreEq(c) }
+            eqCurve = c
+            status = DynProc.status
+        }
+    }
+
 
     fun toDynMbc(l: List<IntArray>) = l.map { a ->
         DynProc.MbcBandCfg(
@@ -2157,7 +2159,9 @@ private fun EffectsScreen() {
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 2.dp)
                         ) {
-                            items(volCurves.keys.sorted().toList()) { k ->
+                            val vkeys = volCurves.keys.sorted().toList()
+                            items(vkeys.size) { vi ->
+                                val k = vkeys[vi]
                                 val active = k == curVol
                                 Surface(
                                     Modifier
