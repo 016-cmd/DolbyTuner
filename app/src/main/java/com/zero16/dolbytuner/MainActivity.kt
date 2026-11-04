@@ -452,6 +452,7 @@ private fun GeqScreen(deviceLine: String) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var curve by remember { mutableStateOf(loadGeq(ctx)) }
+    var fxStatus by remember { mutableStateOf("已同步 · DSP 实时参数") }
     var status by remember { mutableStateOf("正在连接 Dolby DSP…") }
     var dolbyOn by remember { mutableStateOf<Boolean?>(null) }
     val device = DeviceState.device
@@ -674,11 +675,11 @@ private fun GeqScreen(deviceLine: String) {
                 Text(status, fontSize = 10.sp, color = cs.onSurfaceVariant, maxLines = 2)
 
                 Spacer(Modifier.height(18.dp))
-                FxSection()
+                FxSection(onStatus = { fxStatus = it })
 
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "已同步 · DSP 实时参数",
+                    fxStatus,
                     fontSize = 9.sp, color = cs.onSurfaceVariant.copy(alpha = 0.75f)
                 )
             }
@@ -1004,7 +1005,7 @@ internal suspend fun resetToDefault(ctx: Context): String? {
 
 /** 音效页：环绕 / 低音 / 重置 / 预设 */
 @Composable
-private fun FxSection() {
+private fun FxSection(onStatus: (String) -> Unit = {}) {
     val cs = MaterialTheme.colorScheme
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1019,6 +1020,7 @@ private fun FxSection() {
         }
     }
     var status by remember { mutableStateOf("实时层参数 · 改完立即生效") }
+    LaunchedEffect(status) { onStatus(status) }
     var saving by remember { mutableStateOf(false) }
     var showSavedDialog by remember { mutableStateOf(false) }
     var showSaveConfirm by remember { mutableStateOf(false) }
@@ -1091,7 +1093,7 @@ private fun FxSection() {
                 onLive = { fx = fx.copy(bassWidth = it); liveFx.trySend(235 to it) }
             ) { apply(fx.copy(bassWidth = it)) }
         }
-
+        Spacer(Modifier.height(10.dp))
         EffectCard(
             title = "人声增强",
             subtitle = "deon 105 · 只提升人声频段",
@@ -1128,8 +1130,7 @@ private fun FxSection() {
             accent = Color(0xFF3B82F6),
             toggleOnly = true
         )
-
-        // ── 人声组 ──────────────────────────────
+        Spacer(Modifier.height(14.dp))
         Button(
             onClick = { showSaveConfirm = true },
             modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -1154,7 +1155,7 @@ private fun FxSection() {
         ) { Text("重置为 DSP 默认值（GEQ + 音效）", fontSize = 11.sp) }
 
         Spacer(Modifier.height(10.dp))
-        Text(status, fontSize = 10.sp, color = cs.onSurfaceVariant)
+        
         Spacer(Modifier.height(10.dp))
 
         if (showSaveConfirm) {
@@ -1392,7 +1393,7 @@ private fun SettingsScreen(activity: Activity) {
     }
 
     Column(
-        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 96.dp)
+        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp).padding(bottom = 120.dp)
     ) {
         Spacer(Modifier.height(14.dp))
         Text("设置", fontSize = 25.sp, fontWeight = FontWeight.Bold)
