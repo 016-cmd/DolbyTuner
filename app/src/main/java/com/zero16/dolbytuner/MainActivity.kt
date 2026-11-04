@@ -1020,11 +1020,14 @@ internal suspend fun captureDspBaseline(ctx: Context): String? = withContext(Dis
 internal suspend fun resetToDefault(ctx: Context): String? {
     val flat = IntArray(DapRealtime.BANDS)
     val def = if (DspBaseline.captured(ctx)) DspBaseline.fx(ctx) else FxState()
-    val dapDef = if (DspBaseline.captured(ctx)) DspBaseline.dapFx(ctx) else DapFx()
+    // A 类：写死本机官方基线（DapOfficial），不再读 DSP、不读本地记录
+    val dapDef = DapOfficial.DEFAULT
     var e = withContext(Dispatchers.IO) { DapRealtime.writeLive(flat) }
-    if (e == null) e = withContext(Dispatchers.IO) { DapRealtime.commit(flat) }
     if (e == null) e = pushFx(def)
     if (e == null) e = pushDapFx(dapDef)
+    // 最后再保存一次：Dolby 的保存命令会把「当前全部参数」落进它自己的存储，
+    // 这样重启之后还是重置后的状态，不会白重置。
+    if (e == null) e = withContext(Dispatchers.IO) { DapRealtime.commit(flat) }
     if (e == null) {
         saveGeq(ctx, flat)
         saveFx(ctx, def)
@@ -1401,6 +1404,7 @@ Column(
                         Text("将执行：", fontSize = 12.sp)
                         Spacer(Modifier.height(6.dp))
                         Text("• GEQ 20 段全部归零（出厂即平直）", fontSize = 11.sp, color = cs.onSurfaceVariant)
+                        Text("• A 类扩展恢复本机官方基线（写死值，不读 DSP）", fontSize = 11.sp, color = cs.onSurfaceVariant)
                         if (hasBase) {
                             Text("• 音效恢复为检测到的本机默认状态", fontSize = 11.sp, color = cs.onSurfaceVariant)
                         } else {
@@ -1409,7 +1413,7 @@ Column(
                             Text("尚未检测本机音效默认参数，当前使用的是内置默认值。", fontSize = 11.sp, color = Color(0xFFB45309))
                         }
                         Spacer(Modifier.height(6.dp))
-                        Text("会立即写入 Dolby，此操作不可撤销。", fontSize = 11.sp, color = Color(0xFFB45309))
+                        Text("会立即写入 Dolby 并自动保存，重启后仍是重置状态。此操作不可撤销。", fontSize = 11.sp, color = Color(0xFFB45309))
                     }
                 },
                 confirmButton = {
