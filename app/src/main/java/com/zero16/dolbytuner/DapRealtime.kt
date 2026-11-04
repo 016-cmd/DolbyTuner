@@ -882,7 +882,8 @@ object DapRealtime {
         return try {
             val e = session ?: openEffect().also { session = it }
             if (!e.hasControl()) return "无控制权"
-            if (!e.enabled) return "杜比音效未启用"
+            // 不要因为「当前没启用」就放弃：A 类恰恰需要一次启用才会被应用
+            if (!e.enabled) runCatching { e.enabled = true }
             // 回到已验证可用的发送方式：command(5) 逐条
             //   [0x01000000, count, profile, fourcc, values...]
             // command(0) 批量那条（逆向用的）在压上主链路前必须单独验证，
@@ -909,6 +910,15 @@ object DapRealtime {
             android.util.Log.i("DapWr", "save rc=$save")
             if (save < 0 && save != AudioEffect.ERROR_INVALID_OPERATION) {
                 return statusText(save, "保存")
+            }
+
+            // A 类参数光「写 + SAVE」只会停在 HAL 缓存里：
+            // 探针实测写完 SAVE 后 DapHw::setParam / dosetSingleArParam 一次都没触发。
+            // 逆向 APP 是「写参数 → setEnabled(true)」两步，参数才真正落到 DSP。
+            // 这里补一次 关→开，让它重新走一遍 apply；APP 退出后 effect 仍由系统持有，参数不会丢。
+            runCatching {
+                e.enabled = false
+                e.enabled = true
             }
             null
         } catch (t: Throwable) {
