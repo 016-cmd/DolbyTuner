@@ -61,19 +61,26 @@ internal fun EffectCard(
     val cs = MaterialTheme.colorScheme
     val dark = androidx.compose.foundation.isSystemInDarkTheme()
 
-    // 开启 / 关闭两态用同一套"底 + 描边"规则，避免出现两张发白的卡片：
-    // 浅色模式：浅底 + 深描边；深色模式：深底 + 浅描边
-    val container = if (enabled) {
-        accent.copy(alpha = if (dark) 0.20f else 0.13f)
-    } else {
-        if (dark) Color.Black.copy(alpha = 0.45f) else Color.White.copy(alpha = 0.66f)
-    }
-    val borderColor = if (enabled) {
-        accent.copy(alpha = if (dark) 0.55f else 0.42f)
-    } else {
-        if (dark) Color.White.copy(alpha = 0.22f) else Color.Black.copy(alpha = 0.14f)
-    }
-    val subColor = if (dark) Color.White.copy(alpha = 0.72f) else Color.Black.copy(alpha = 0.58f)
+    // 每张卡片按「类别色」上色，不依赖开关状态：
+    // 关闭 = 很淡的类别底 + 淡彩边；开启 = 更实的类别底 + 更亮的彩边
+    // （浅色 / 深色模式用两档透明度，避免在壁纸上发白或发灰）
+    val container = accent.copy(
+        alpha = when {
+            enabled && dark -> 0.26f
+            enabled -> 0.19f
+            dark -> 0.12f
+            else -> 0.11f
+        }
+    )
+    val borderColor = accent.copy(
+        alpha = when {
+            enabled && dark -> 0.72f
+            enabled -> 0.58f
+            dark -> 0.34f
+            else -> 0.28f
+        }
+    )
+    val subColor = if (dark) Color.White.copy(alpha = 0.72f) else Color(0xFF2E2E2E).copy(alpha = 0.66f)
 
     Card(
         Modifier.fillMaxWidth().padding(vertical = 4.dp),

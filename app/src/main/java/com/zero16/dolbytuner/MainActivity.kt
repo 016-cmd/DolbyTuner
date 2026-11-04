@@ -877,6 +877,7 @@ private suspend fun pushDapFx(next: DapFx): String? = withContext(Dispatchers.IO
     items += "ieid" to intArrayOf(next.ieqPreset.coerceIn(0, 10))
 
     // A8 后级增益
+    items += "pstg" to intArrayOf(if (next.postGainOn) next.postGainDb.coerceIn(-12, 12) else 0)
     items += "vol" to intArrayOf(if (next.postGainOn) next.postGainDb.coerceIn(-12, 12) else 0)
 
     DapRealtime.writeFourCCBatch(items)
@@ -1080,7 +1081,7 @@ Column(
             icon = Icons.Default.GraphicEq,
             enabled = dapFx.vbOn,
             onEnabledChange = { setDap(dapFx.copy(vbOn = it), false) },
-            accent = Color(0xFFB45309)
+            accent = Color(0xFFF59E0B)
         ) {
             ParamSlider(
                 "强度", dapFx.vbStrength.toString(), dapFx.vbStrength.toFloat(), 0f..192f,
@@ -1106,7 +1107,7 @@ Column(
             icon = Icons.Default.GraphicEq,
             enabled = fx.bassOn,
             onEnabledChange = { apply(fx.copy(bassOn = it)) },
-            accent = Color(0xFFB45309)
+            accent = Color(0xFFF59E0B)
         ) {
             FxSlider(
                 "低音增益", fx.bassGain.toString(), fx.bassGain, 0..192, fx.bassOn,
@@ -1129,6 +1130,7 @@ Column(
             icon = Icons.Default.Tune,
             enabled = dapFx.surroundOn,
             onEnabledChange = { setDap(dapFx.copy(surroundOn = it), false) }
+            accent = Color(0xFF3B82F6)
         ) {
             ParamSlider(
                 "强度", dapFx.surroundBoost.toString(), dapFx.surroundBoost.toFloat(), 0f..192f,
@@ -1144,6 +1146,7 @@ Column(
             icon = Icons.Default.Headphones,
             enabled = fx.hpVirtual,
             onEnabledChange = { apply(fx.copy(hpVirtual = it)) },
+            accent = Color(0xFF3B82F6)
             toggleOnly = true
         )
 
@@ -1153,6 +1156,7 @@ Column(
             icon = Icons.Default.Speaker,
             enabled = fx.spVirtual,
             onEnabledChange = { apply(fx.copy(spVirtual = it)) },
+            accent = Color(0xFF3B82F6)
             toggleOnly = true
         )
 
@@ -1163,6 +1167,7 @@ Column(
             icon = Icons.Default.RecordVoiceOver,
             enabled = fx.dialogOn,
             onEnabledChange = { apply(fx.copy(dialogOn = it)) }
+            accent = Color(0xFF22C55E)
         ) {
             FxSlider(
                 "增强量", fx.dialogAmt.toString(), fx.dialogAmt, 0..16, fx.dialogOn,
@@ -1178,6 +1183,7 @@ Column(
             icon = Icons.Default.Equalizer,
             enabled = dapFx.ieqOn,
             onEnabledChange = { setDap(dapFx.copy(ieqOn = it), false) }
+            accent = Color(0xFF06B6D4)
         ) {
             ParamSlider(
                 "强度", dapFx.ieqAmount.toString(), dapFx.ieqAmount.toFloat(), 0f..16f,
@@ -1199,6 +1205,7 @@ Column(
             icon = Icons.Default.Warning,
             enabled = dapFx.limiterOn,
             onEnabledChange = { setDap(dapFx.copy(limiterOn = it), false) }
+            accent = Color(0xFFEF4444)
         ) {
             ParamSlider(
                 "门限 · dBFS", String.format(java.util.Locale.US, "%.1f", dapFx.dplpDb),
@@ -1229,6 +1236,7 @@ Column(
             icon = Icons.Default.VolumeUp,
             enabled = dapFx.postGainOn,
             onEnabledChange = { setDap(dapFx.copy(postGainOn = it), false) }
+            accent = Color(0xFF8B5CF6)
         ) {
             ParamSlider(
                 "增益 · dB", "${dapFx.postGainDb} dB", dapFx.postGainDb.toFloat(), -12f..12f,
