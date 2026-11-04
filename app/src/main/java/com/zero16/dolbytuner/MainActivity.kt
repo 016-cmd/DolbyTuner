@@ -1171,7 +1171,7 @@ Column(
             icon = Icons.Default.Headphones,
             enabled = fx.hpVirtual,
             onEnabledChange = { apply(fx.copy(hpVirtual = it)) },
-            accent = Color(0xFF3B82F6)
+            accent = Color(0xFF3B82F6),
             toggleOnly = true
         )
 
@@ -1181,7 +1181,7 @@ Column(
             icon = Icons.Default.Speaker,
             enabled = fx.spVirtual,
             onEnabledChange = { apply(fx.copy(spVirtual = it)) },
-            accent = Color(0xFF3B82F6)
+            accent = Color(0xFF3B82F6),
             toggleOnly = true
         )
 
