@@ -1273,6 +1273,48 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
     }
 }
 
+private fun loadDpGeq(prefs: android.content.SharedPreferences): IntArray {
+    val s = prefs.getString("dp_geq", "").orEmpty()
+    if (s.isBlank()) return IntArray(DapRealtime.BANDS)
+    val a = s.split(",").mapNotNull { it.trim().toIntOrNull() }
+    return if (a.size == DapRealtime.BANDS) a.toIntArray() else IntArray(DapRealtime.BANDS)
+}
+
+private fun saveDpGeq(prefs: android.content.SharedPreferences, a: IntArray) {
+    prefs.edit().putString("dp_geq", a.joinToString(",")).apply()
+}
+
+private fun defaultPeq(): List<PeqBand> {
+    val f = intArrayOf(31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000)
+    return f.map { PeqBand(it.toFloat(), 0f, 1f) }
+}
+
+private fun loadPeq(prefs: android.content.SharedPreferences): List<PeqBand> {
+    val s = prefs.getString("dp_peq", "").orEmpty()
+    if (s.isBlank()) return defaultPeq()
+    val a = s.split(",").mapNotNull { it.trim().toFloatOrNull() }
+    if (a.size != 30) return defaultPeq()
+    return (0 until 10).map { i ->
+        PeqBand(a[i * 3], a[i * 3 + 1], a[i * 3 + 2])
+    }
+}
+
+private fun savePeq(prefs: android.content.SharedPreferences, l: List<PeqBand>) {
+    val s = l.joinToString(",") { "${it.freqHz},${it.gainDb},${it.q}" }
+    prefs.edit().putString("dp_peq", s).apply()
+}
+
+private fun saveDolbyGeqBackup(prefs: android.content.SharedPreferences, a: IntArray) {
+    prefs.edit().putString("dolby_geq_backup", a.joinToString(",")).apply()
+}
+
+private fun loadDolbyGeqBackup(prefs: android.content.SharedPreferences): IntArray? {
+    val s = prefs.getString("dolby_geq_backup", "").orEmpty()
+    if (s.isBlank()) return null
+    val a = s.split(",").mapNotNull { it.trim().toIntOrNull() }
+    return if (a.size == DapRealtime.BANDS) a.toIntArray() else null
+}
+
 private fun loadPost(prefs: android.content.SharedPreferences): IntArray {
     val s = prefs.getString("post_data", "").orEmpty()
     if (s.isBlank()) return IntArray(11)
@@ -1338,6 +1380,13 @@ private fun EffectsScreen() {
     var revData by remember { mutableStateOf(loadRev(prefs)) }
     var postOn by remember { mutableStateOf(prefs.getBoolean("post_on", false)) }
     var postData by remember { mutableStateOf(loadPost(prefs)) }
+    var eqTab by remember { mutableIntStateOf(prefs.getInt("eq_tab", 0)) }
+    var debugOn by remember { mutableStateOf(prefs.getBoolean("dp_debug", false)) }
+    var showDebugDlg by remember { mutableStateOf(false) }
+    var geqQ4 by remember { mutableStateOf(loadDpGeq(prefs)) }
+    var peqData by remember { mutableStateOf(loadPeq(prefs)) }
+    var peqSel by remember { mutableIntStateOf(0) }
+    var eqCurve by remember { mutableStateOf(FloatArray(127)) }
     var sel by remember { mutableIntStateOf(prefs.getInt("mbc_sel", 0)) }
     var mbcStore by remember { mutableStateOf(loadMbc(prefs)) }
     var status by remember { mutableStateOf(DynProc.status) }
@@ -1521,6 +1570,94 @@ private fun EffectsScreen() {
         throttle.post(postTick)
     }
 
+    val pendFreq = remember { IntArray(10) { i ->
+        ((Math.log(peqData[i].freqHz / 20.0) / Math.log(1000.0)) * 1000.0).toInt().coerceIn(0, 1000)
+    } }
+    val pendGain = remember { IntArray(10) { i -> (peqData[i].gainDb * 10).toInt() } }
+    val pendQ = remember { IntArray(10) { i -> (peqData[i].q * 100).toInt() } }
+
+    fun posToFreq(v: Int): Float {
+        return (20.0 * Math.pow(1000.0, v / 1000.0)).toFloat()
+    }
+
+    fun freqToPos(f: Float): Int {
+        val v = (Math.log(f / 20.0) / Math.log(1000.0) * 1000.0)
+        return v.toInt().coerceIn(0, 1000)
+    }
+
+    fun peqFromPend(): List<PeqBand> = (0 until 10).map { i ->
+        PeqBand(posToFreq(pendFreq[i]), pendGain[i] / 10f, pendQ[i] / 100f)
+    }
+
+    fun pushEq() {
+        val curve = if (eqTab == 0) EqMath.geq20To127(geqQ4) else EqMath.peqTo127(peqFromPend())
+        scope.launch {
+            withContext(Dispatchers.IO) { DynProc.setPreEq(curve) }
+            status = DynProc.status
+        }
+    }
+
+    val eqTick = remember { Runnable { pushEq() } }
+
+    fun scheduleEq() {
+        throttle.removeCallbacks(eqTick)
+        throttle.postDelayed(eqTick, 60L)
+    }
+
+    fun pushGeq(i: Int, q4: Int) {
+        if (!debugOn) return
+        val n = geqQ4.copyOf()
+        n[i] = q4
+        geqQ4 = n
+        eqCurve = EqMath.geq20To127(n)
+        saveDpGeq(prefs, n)
+        scheduleEq()
+    }
+
+    fun livePeq(which: Int, v: Int) {
+        if (!debugOn) return
+        when (which) {
+            0 -> pendFreq[peqSel] = v
+            1 -> pendGain[peqSel] = v
+            else -> pendQ[peqSel] = v
+        }
+        scheduleEq()
+    }
+
+    fun commitPeq(which: Int, v: Int) {
+        if (!debugOn) return
+        livePeq(which, v)
+        val l = peqData.toMutableList()
+        l[peqSel] = PeqBand(posToFreq(pendFreq[peqSel]), pendGain[peqSel] / 10f, pendQ[peqSel] / 100f)
+        peqData = l
+        savePeq(prefs, l)
+        eqCurve = EqMath.peqTo127(l)
+        scheduleEq()
+    }
+
+    fun setDebug(on: Boolean) {
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { DapRealtime.openSession() }
+                if (on) {
+                    val live = runCatching { DapRealtime.readLive() }.getOrNull()
+                        ?: runCatching { loadGeq(ctx) }.getOrNull()
+                    if (live != null) saveDolbyGeqBackup(prefs, live)
+                    runCatching { DapRealtime.writeLive(IntArray(DapRealtime.BANDS)) }
+                } else {
+                    val b = loadDolbyGeqBackup(prefs)
+                    if (b != null) runCatching { DapRealtime.writeLive(b) }
+                }
+            }
+            debugOn = on
+            prefs.edit().putBoolean("dp_debug", on).apply()
+            if (on) {
+                eqCurve = if (eqTab == 0) EqMath.geq20To127(geqQ4) else EqMath.peqTo127(peqData)
+                pushEq()
+            }
+        }
+    }
+
     fun cfg() = DynProc.LimiterCfg(
         enabled = limOn,
         thresholdDb = thr / 10f,
@@ -1639,6 +1776,123 @@ private fun EffectsScreen() {
         }
 
         Spacer(Modifier.height(8.dp))
+
+        // ===== DP EQ（GEQ / PEQ） =====
+        val cEq = Color(0xFF6366F1)
+        Card(
+            Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, cEq.copy(alpha = if (debugOn) 0.7f else 0.3f)),
+            colors = CardDefaults.cardColors(
+                containerColor = cEq.copy(alpha = if (debugOn) 0.16f else 0.07f)
+            )
+        ) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("EQ 调节", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(8.dp))
+                    EqTab("GEQ", eqTab == 0, cEq) {
+                        eqTab = 0
+                        prefs.edit().putInt("eq_tab", 0).apply()
+                        eqCurve = EqMath.geq20To127(geqQ4)
+                        scheduleEq()
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    EqTab("PEQ", eqTab == 1, cEq) {
+                        eqTab = 1
+                        prefs.edit().putInt("eq_tab", 1).apply()
+                        eqCurve = EqMath.peqTo127(peqData)
+                        scheduleEq()
+                    }
+                    Spacer(Modifier.weight(1f))
+                    OutlinedButton(
+                        onClick = { showDebugDlg = true },
+                        modifier = Modifier.height(32.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = if (debugOn) Color(0xFF10B981) else cs.onSurfaceVariant
+                        )
+                    ) {
+                        Text(if (debugOn) "调试中" else "调试", fontSize = 10.sp)
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    if (debugOn) "杜比 GEQ 已切平直 · 当前 EQ 由 DP 接管"
+                    else "开启调试后可调节（会把杜比 GEQ 临时切平直）",
+                    fontSize = 9.sp,
+                    color = if (debugOn) Color(0xFF10B981) else cs.onSurfaceVariant
+                )
+                Spacer(Modifier.height(6.dp))
+                BandCurveCanvas(
+                    points = (0..126).map { i -> EqMath.FREQ127[i].toInt() to (eqCurve[i] * 16).toInt() },
+                    lineColor = cEq,
+                    showDelta = false
+                )
+                Spacer(Modifier.height(6.dp))
+
+                if (eqTab == 0) {
+                    LazyRow(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 2.dp, vertical = 2.dp)
+                    ) {
+                        items(DapRealtime.BANDS) { i ->
+                            DapBandSlider(
+                                freqLabel = fmtFreq(DapRealtime.FREQS[i]),
+                                valueQ4 = geqQ4[i],
+                                onChange = { q4 -> pushGeq(i, q4) },
+                                maxAbsQ4 = 320,
+                                trackHeight = 200.dp,
+                                accent = cEq
+                            )
+                        }
+                    }
+                } else {
+                    Column(Modifier.fillMaxWidth()) {
+                        for (row in 0..1) {
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                for (k in 0..4) {
+                                    val i = row * 5 + k
+                                    Surface(
+                                        Modifier.weight(1f).clickable { peqSel = i },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = cEq.copy(alpha = if (peqSel == i) 0.28f else 0.07f),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            cEq.copy(alpha = if (peqSel == i) 0.7f else 0.22f)
+                                        )
+                                    ) {
+                                        Box(Modifier.padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
+                                            Text(fmtFreq(peqData[i].freqHz.toInt()), fontSize = 8.sp)
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(4.dp))
+                        }
+                    }
+                    FxSlider(
+                        "中心频率", fmtFreq(posToFreq(pendFreq[peqSel]).toInt()),
+                        pendFreq[peqSel], 0..1000, debugOn,
+                        onLive = { livePeq(0, it) }, onDone = { commitPeq(0, it) }
+                    )
+                    FxSlider(
+                        "增益", String.format("%+.1f dB", pendGain[peqSel] / 10f),
+                        pendGain[peqSel], -150..150, debugOn,
+                        onLive = { livePeq(1, it) }, onDone = { commitPeq(1, it) }
+                    )
+                    FxSlider(
+                        "Q 值", String.format("%.2f", pendQ[peqSel] / 100f),
+                        pendQ[peqSel], 10..1000, debugOn,
+                        onLive = { livePeq(2, it) }, onDone = { commitPeq(2, it) }
+                    )
+                }
+            }
+        }
 
         // ===== 输入增益 =====
         EffectCard(
@@ -1963,6 +2217,44 @@ private fun EffectsScreen() {
                 fontSize = 10.sp, color = cs.onSurfaceVariant
             )
         }
+    }
+
+    if (showDebugDlg) {
+        AlertDialog(
+            onDismissRequest = { showDebugDlg = false },
+            title = { Text(if (debugOn) "关闭 EQ 调试？" else "打开 EQ 调试？", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    if (debugOn) "关闭后会把杜比 GEQ 恢复成你之前存的那条曲线，DP 侧曲线保留但不再需要手动切回。"
+                    else "开启后会把杜比 GEQ 的 20 段全部写成平直（0 dB），EQ 改由 DynamicsProcessing 接管。关闭调试时会恢复你原来的杜比曲线。",
+                    fontSize = 12.sp
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showDebugDlg = false; setDebug(!debugOn) }) {
+                    Text(if (debugOn) "关闭并恢复" else "开启")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDebugDlg = false }) { Text("取消") }
+            }
+        )
+    }
+}
+
+@Composable
+private fun EqTab(label: String, active: Boolean, accent: Color, onClick: () -> Unit) {
+    Surface(
+        Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick),
+        shape = RoundedCornerShape(8.dp),
+        color = accent.copy(alpha = if (active) 0.28f else 0.06f),
+        border = BorderStroke(1.dp, accent.copy(alpha = if (active) 0.7f else 0.2f))
+    ) {
+        Text(
+            label, fontSize = 10.sp,
+            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+        )
     }
 }
 

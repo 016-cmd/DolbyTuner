@@ -212,6 +212,39 @@ object DynProc {
         }
     }
 
+    /** 写入 PreEq 曲线（127 点 dB），自动重采样到实际可用段数 */
+    @Synchronized
+    fun setPreEq(curve127: FloatArray) {
+        val d = dp ?: return
+        if (!runCatching { d.hasControl() }.getOrDefault(false)) {
+            status = "被其他应用占用 · 未写入"
+            return
+        }
+        val n = if (activeBands > 0) activeBands else 127
+        val eqL = DynamicsProcessing.Eq(true, true, n)
+        val eqR = DynamicsProcessing.Eq(true, true, n)
+        for (i in 0 until n) {
+            val fi = if (n == 127) i else (i.toFloat() * 126f / (n - 1)).toInt().coerceIn(0, 126)
+            val g = sampleCurve(curve127, i, n).coerceIn(-20f, 20f)
+            val band = DynamicsProcessing.EqBand(true, EqMath.FREQ127[fi], g)
+            eqL.setBand(i, band)
+            eqR.setBand(i, band)
+        }
+        val ok = runCatching { d.setPreEqByChannelIndex(0, eqL) }.isSuccess
+        runCatching { d.setPreEqByChannelIndex(1, eqR) }
+        if (!ok) status = "EQ 写入失败"
+    }
+
+    private fun sampleCurve(c: FloatArray, i: Int, n: Int): Float {
+        if (c.isEmpty()) return 0f
+        if (n <= 1) return c[0]
+        val pos = i.toFloat() * (c.size - 1) / (n - 1)
+        val j = pos.toInt().coerceIn(0, c.size - 1)
+        if (j >= c.size - 1) return c[c.size - 1]
+        val t = pos - j
+        return c[j] + (c[j + 1] - c[j]) * t
+    }
+
     /** data = [10 段增益 x0.1dB, 左右平衡 x0.1dB] */
     private fun applyPostEqTo(d: DynamicsProcessing, data: IntArray) {
         val eqL = DynamicsProcessing.Eq(true, true, 10)
