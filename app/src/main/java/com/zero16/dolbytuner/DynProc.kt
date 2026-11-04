@@ -206,7 +206,9 @@ object DynProc {
         }
         // 整体替换：单段 setMbcBandAllChannelsTo 在部分机型上改 enabled 不生效
         val okAll = runCatching {
-            val mbc = DynamicsProcessing.Mbc(4)
+            val mbc = DynamicsProcessing::class.java
+                .getMethod("getMbc")
+                .invoke(d) as DynamicsProcessing.Mbc
             for (i in 0 until 4) {
                 val c = bands.getOrNull(i) ?: continue
                 mbc.setBand(

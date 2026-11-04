@@ -1775,7 +1775,8 @@ private fun EffectsScreen() {
     LaunchedEffect(Unit) {
         if (dpOn && !DynProc.running) {
             withContext(Dispatchers.IO) {
-                DynProc.start(gain.toFloat(), cfg(), toDynMbc(mbcStore))                if (postOn) DynProc.setPostEq(postData.copyOf(), true)
+                DynProc.start(gain.toFloat(), cfg(), toDynMbc(mbcStore))
+                if (postOn) DynProc.setPostEq(postData.copyOf(), true)
             }
             status = DynProc.status
         }
