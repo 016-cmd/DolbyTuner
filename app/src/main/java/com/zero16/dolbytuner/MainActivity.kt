@@ -176,6 +176,18 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 诊断：读 103/106/107/112 的当前值（只读，不改任何东西）
+        Thread {
+            runCatching {
+                val ids = intArrayOf(103, 106, 107, 112)
+                val sb = StringBuilder("diag ")
+                ids.forEach { id ->
+                    sb.append(id).append('=')
+                        .append(DapRealtime.readParam(id)?.toString() ?: "null").append(' ')
+                }
+                android.util.Log.i("DapDiag", sb.toString())
+            }
+        }.start()
         val gate = evaluateGate()
         setContent {
             DolbyTunerTheme {
