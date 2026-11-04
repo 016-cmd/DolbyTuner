@@ -1,6 +1,7 @@
 package com.zero16.dolbytuner
 
 import android.media.audiofx.AudioEffect
+import android.os.SystemClock
 import java.lang.reflect.Constructor
 import java.lang.reflect.Method
 import java.nio.ByteBuffer
@@ -145,7 +146,9 @@ object DapRealtime {
         var last: Throwable? = null
         for (type in candidates.distinct()) {
             try {
-                return ctor.newInstance(type, IMPL_UUID, 0, 0) as AudioEffect
+                val e = ctor.newInstance(type, IMPL_UUID, 0, 0) as AudioEffect
+                attachWatchers(e)
+                return e
             } catch (t: Throwable) {
                 last = t
             }
@@ -446,6 +449,14 @@ object DapRealtime {
 
     private var session: AudioEffect? = null
 
+    // ── 自动重建：Dolby 重建效果链时立刻重连并重注 ──────────────
+    /** 最后一次成功写入的 GEQ 曲线，重建后用它重注 */
+    @Volatile
+    private var lastCurve: IntArray? = null
+
+    @Volatile
+    private var lastRebindAt = 0L
+
     /** 打开常驻会话（进入页面时调一次） */
     @Synchronized
     fun openSession(): String? {
@@ -478,6 +489,45 @@ object DapRealtime {
         msg.contains("音频服务已重启") ||
             msg.contains("控制权被") ||
             msg.contains("DEAD_OBJECT", true)
+
+    /**
+     * 给新句柄挂上「控制权 / 启用状态」监听。
+     *
+     * 这两个是 AudioEffect 自带的原生回调，不乱轮询、不费电：
+     * - 控制权被抢（Dolby 重建、别的 App 接管）→ 回调
+     * - 效果被系统关掉 → 回调
+     * 一收到就丢弃句柄、重开、把最后的曲线写回去。
+     */
+    private fun attachWatchers(e: AudioEffect) {
+        runCatching {
+            e.setControlStatusListener { _, granted ->
+                if (!granted) scheduleRebind("控制权丢失")
+            }
+        }
+        runCatching {
+            e.setEnableStatusListener { _, enabled ->
+                if (!enabled) scheduleRebind("效果被系统关闭")
+            }
+        }
+    }
+
+    /** 去抖后重建句柄，并把最后一次曲线重新写回去 */
+    private fun scheduleRebind(reason: String) {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastRebindAt < 800L) return
+        lastRebindAt = now
+        Thread {
+            runCatching {
+                synchronized(this) {
+                    val curve = lastCurve?.copyOf()
+                    runCatching { session?.release() }
+                    session = null
+                    if (curve != null) writeLive(curve)
+                }
+            }
+            android.util.Log.w("DapRealtime", "Dolby 句柄失效（$reason）→ 已自动重建并重注")
+        }.start()
+    }
 
     /**
      * 主动丢弃当前句柄。
@@ -726,11 +776,14 @@ object DapRealtime {
         if (curve.size != BANDS) return "曲线长度不正确（需要 $BANDS 段）"
         ensureAlive()
         val first = writeWithSession(curve)
-        if (first == null) return null
+        if (first == null) {
+            lastCurve = curve.copyOf()
+            return null
+        }
         if (!isDeadError(first)) return first
         // 句柄失效（音频服务重启过）→ 换新句柄再写一次
         if (!ensureAlive()) return first
-        return writeWithSession(curve)
+        return writeWithSession(curve).also { if (it == null) lastCurve = curve.copyOf() }
     }
 
     /** 保存时用：写全部 + 提交落库，不释放实例；同样带自愈 */
@@ -744,12 +797,15 @@ object DapRealtime {
         } catch (t: Throwable) {
             "保存失败：${rootCause(t)}"
         }
-        if (first == null) return null
+        if (first == null) {
+            lastCurve = curve.copyOf()
+            return null
+        }
         if (!isDeadError(first)) return first
         if (!ensureAlive()) return first
         return try {
             val e = session!!
-            writeOn(e, curve, null) ?: saveOn(e)
+            (writeOn(e, curve, null) ?: saveOn(e)).also { if (it == null) lastCurve = curve.copyOf() }
         } catch (t: Throwable) {
             "保存失败：${rootCause(t)}"
         }
