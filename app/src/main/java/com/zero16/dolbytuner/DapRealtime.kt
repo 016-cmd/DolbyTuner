@@ -47,8 +47,6 @@ object DapRealtime {
     private const val PARAM_GEQ_BAND_GAINS = 110
 
     // ── FourCC 通道（A 类音效）──
-    private const val CMD_SET_BATCH = 0     // command(0)：批量设置参数
-    private const val CMD_READ_FOURCC = 20  // getParameter(20, in, out)：读回
 
     private val TYPE_UUID = UUID.fromString("ec7178ec-e5e1-4432-a3f4-4657e6795210")
     /** 全零 UUID —— 逆向用 (0, 9d4921da) 这种组合去挂系统已有的 DAP 节点 */
@@ -243,23 +241,6 @@ object DapRealtime {
      *
      * 这是真正能改 DSP 参数的那条通道；之前用的 command(5) 逐条是读/写单参数的旧接口。
      */
-    private fun buildParamSetPayload(
-        profile: Int,
-        items: List<Pair<String, IntArray>>
-    ): ByteArray {
-        var words = 2
-        items.forEach { words += it.second.size + 3 }
-        val buf = ByteBuffer.allocate(words * 4).order(ByteOrder.LITTLE_ENDIAN)
-        buf.putInt(profile)
-        buf.putInt(items.size)
-        items.forEach { (tag, vs) ->
-            buf.putInt(profile)
-            buf.putInt(fourcc(tag))
-            buf.putInt(vs.size)
-            vs.forEach { buf.putInt(it) }
-        }
-        return buf.array()
-    }
 
     private fun buildQueryBuffer(): ByteArray = ByteArray(12)
 
@@ -513,7 +494,6 @@ object DapRealtime {
     }
 
     // ── 自动重建：Dolby 重建效果链时立刻重连并重注 ──────────────
-    /** 最后一次成功写入的 GEQ 曲线，重建后用它重注 */
     @Volatile
     private var lastCurve: IntArray? = null
 
@@ -521,15 +501,6 @@ object DapRealtime {
     private var lastRebindAt = 0L
 
     /** 打开常驻会话（进入页面时调一次） */
-    @Synchronized
-    fun openSession(): String? {
-        if (session != null) return null
-        return try {
-            session = openEffect()
-            null
-        } catch (t: Throwable) {
-            session = null
-            rootCause(t)
         }
     }
 
@@ -635,33 +606,6 @@ object DapRealtime {
             fun onNow(): String =
                 runCatching { queryInt(e, COMMAND_GET_DAP_ON) }.getOrNull()?.toString() ?: "err"
 
-            fun writeBeon(prof: Int, v: Int): String {
-                val buf = ByteBuffer.allocate((1 + 4) * 4).order(ByteOrder.LITTLE_ENDIAN)
-                buf.putInt(COMMAND_SET_PROFILE)
-                buf.putInt(2)
-                buf.putInt(prof)
-                buf.putInt(fourcc("beon"))
-                buf.putInt(v)
-                val st = runCatching { e.setParam(CMD_PARAM, buf.array()) }.getOrElse { -999 }
-                return "profile=$prof beon=$v → rc=$st  之后 GET_DAP_ON=${onNow()}"
-            }
-
-            val tryProfs = listOf(0, 1, 2, 3, 4, 5)
-            tryProfs.forEach { p -> line(writeBeon(p, 1)) }
-            line("")
-            tryProfs.forEach { p -> line(writeBeon(p, 0)) }
-            line("")
-            line("复位后 GET_DAP_ON=${onNow()}")
-        } catch (t: Throwable) {
-            line("异常：${rootCause(t)}")
-        }
-        return sb.toString()
-    }
-
-    /**
-     * 主动丢弃当前句柄。
-     * A 类写入后 Dolby 可能已经重建效果链，旧句柄写不进 GEQ，
-     * 丢掉它，下一次操作会自动重开。
      */
     @Synchronized
     fun dropSession() {
@@ -746,48 +690,6 @@ object DapRealtime {
     // ────────────────────────────────────────────────────────────
 
     /** 当前生效的 profile 编号；读不到就用 0（不做假设） */
-    private fun curProfile(e: AudioEffect): Int {
-        // AudioService 内部那份 profile 可能已经被写成 0，
-        // 用 queryInt(GET_CURRENT) 取回来会一直拿到 0（自锁）。
-        // persist.audio.dolby.profile 是 Dolby 自己持久化的真值，优先用它。
-        propProfile()?.let { return it }
-        return runCatching { queryInt(e, COMMAND_GET_CURRENT) }
-            .getOrNull()?.takeIf { it in 0..31 } ?: 0
-    }
-    /**
-     * A 类写入要覆盖的 profile 列表。
-     * 光写"属性里那个"不够：实际播放的档可能是别的编号，
-     * 所以跟 GEQ 一样，把所有可能生效的档全写一遍。
-     */
-    /**
-     * 写入统一使用「同一个 profile」。
-     *
-     * 普通参数（101/102/105/108/111/233/234/235）与 A 类（FourCC）
-     * 必须落在同一档，否则会互相顶掉：
-     *   以前普通参数写死 profile 0 → 之后的 A 类写到 4 就完全没反应。
-     *
-     * 取法：优先 getprop persist.audio.dolby.profile（Dolby 自己持久化的真值），
-     *       读不到才退回 AudioService 的 GET_CURRENT。
-     */
-    /**
-     * 统一写入的 profile。
-     *
-     * 实测结论（主人真机对比）：
-     *   · v1.7.1 写 profile 4 → A 类有效
-     *   · v1.8.0 写 profile 0 → A 类完全没反应
-     * 所以真正生效的是 persist.audio.dolby.profile（本机 4），不是 0。
-     *   dumpsys 里的 "profile: 0" 只是 AudioService 那份缓存，不代表实际档。
-     *
-     * 取 propProfile()，读不到再退回 4（本机官方值）。
-     */
-    private fun currentProfile(e: AudioEffect): Int = propProfile() ?: 4
-
-    private fun allProfiles(e: AudioEffect): List<Int> = listOf(currentProfile(e))
-
-    /**
-     * A 类写入使用的 profile —— **这是设备掩码，不是音效档号**。
-     *
-     * 探针实测（frida，audiohalservice.qti / libhwdapaidl.so）：
      *   Dolby 自己下参数时是  DapHw::setParam(dev=0x40000000, 'gebs', …)  rc=0
      *   DlbEffectDapHw 的缓存是按 audio_devices_t 分桶的：
      *     SortedVector<key_value_pair_t<audio_devices_t, shared_ptr<DapParamCache>>>
@@ -796,10 +698,6 @@ object DapRealtime {
      *
      * 外放 = 0x40000000；耳机/USB/蓝牙 = 0x20000000。
      */
-    private fun profilesForWrite(e: AudioEffect): List<Int> = listOf(DEVICE_SPEAKER)
-
-    /** 扬声器（Dolby 的 audio_devices_t 掩码，逆向 C0892eg.O 同值） */
-    private const val DEVICE_SPEAKER = 0x40000000
 
     /**
      * 逆向 APP 的"总开关"两步（C0650ag 启用分支）：
@@ -814,66 +712,6 @@ object DapRealtime {
      * 这是「接管主杜比管线」的握手包，key = 5。
      * 之前用的 5E 59 A8 D2 … 不是这个，是别的协议头。
      */
-    private val TAKEOVER = byteArrayOf(
-        0, 0, 0, 0,
-        1, 0, 0, 0,
-        1, 0, 0, 0
-    )
-
-    @Synchronized
-    fun takeOverAndProbe(): String {
-        return try {
-            val e = session ?: openEffect().also { session = it }
-            val sb = StringBuilder()
-            val r1 = e.setParam(CMD_PARAM, TAKEOVER)
-            sb.append("接管包 rc=$r1\n")
-            val r2 = e.setEnabled(true)
-            sb.append("setEnabled(true) rc=$r2\n")
-            sb.append("enabled=${e.enabled}  hasControl=${e.hasControl()}\n")
-            val probe = writeFourCCBatch(
-                listOf(
-                    "vbm" to intArrayOf(1),
-                    "vbog" to intArrayOf(128),
-                    "vbhm" to intArrayOf(64)
-                )
-            ) ?: "ok"
-            sb.append("测试写入 vbm=1 / vbog=128 → $probe\n")
-            sb.append("GET_DAP_ON=${runCatching { queryInt(e, COMMAND_GET_DAP_ON) }.getOrDefault(-999)}")
-            sb.toString()
-        } catch (t: Throwable) {
-            "异常：${rootCause(t)}"
-        }
-    }
-
-    /**
-     * 最小实验：只把给定参数按「设备掩码 + command(0) 批量包」写一次。
-     *
-     * 目的只有一个 —— 验证逆向 APP 那条路在本机到底行不行：
-     *   profile = 0x40000000（扬声器掩码）
-     *   payload = [profile, count, (profile, fourcc, len, values)…]
-     *   setParameter(0, payload)
-     * 不提交、不碰其他参数，出问题 killall audioserver 就能恢复。
-     */
-    @Synchronized
-    fun writeFourCCMasked(items: List<Pair<String, IntArray>>): String? {
-        if (items.isEmpty()) return null
-        return try {
-            val e = session ?: openEffect().also { session = it }
-            if (!e.hasControl()) return "无控制权"
-            if (!e.enabled) return "杜比音效未启用"
-            val payload = buildParamSetPayload(0x40000000, items)
-            val st = e.setParam(CMD_SET_BATCH, payload)
-            android.util.Log.i(
-                "DapWr",
-                "masked p=0x40000000 rc=$st ${items.joinToString(" ") { it.first }}"
-            )
-            if (st < 0) statusText(st, "A 类(掩码)") else null
-        } catch (t: Throwable) {
-            rootCause(t)
-        }
-    }
-
-    /** 读 persist.audio.dolby.profile（普通 App 可用 getprop，不需要权限） */
     private fun propProfile(): Int? = runCatching {
         val p = Runtime.getRuntime().exec(arrayOf("getprop", "persist.audio.dolby.profile"))
         val txt = p.inputStream.bufferedReader().use { it.readText() }.trim()
@@ -882,85 +720,6 @@ object DapRealtime {
     }.getOrNull()?.takeIf { it in 0..31 }
 
     /** 四字符 → int（小端：'d' | 'p'<<8 | 'l'<<16 | 'p'<<24） */
-    private fun fourcc(tag: String): Int {
-        var v = 0
-        val n = tag.length.coerceIn(1, 4)
-        for (i in 0 until n) v = v or ((tag[i].code and 0xFF) shl (i * 8))
-        return v
-    }
-
-    /** 写一个 FourCC 参数；成功返回 null */
-    @Synchronized
-    fun writeFourCC(tag: String, vararg values: Int): String? {
-        return try {
-            val e = session ?: openEffect().also { session = it }
-            if (!e.hasControl()) return "无控制权"
-            if (!e.enabled) return "杜比音效未启用"
-            val buf = ByteBuffer.allocate((values.size + 4) * 4).order(ByteOrder.LITTLE_ENDIAN)
-            buf.putInt(COMMAND_SET_PROFILE)
-            buf.putInt(values.size + 1)
-            buf.putInt(curProfile(e))
-            buf.putInt(fourcc(tag))
-            values.forEach { buf.putInt(it) }
-            val st = e.setParam(CMD_PARAM, buf.array())
-            android.util.Log.i("DapWr", "$tag p=${curProfile(e)} rc=$st ${values.joinToString(",")}")
-            if (st < 0) statusText(st, tag) else null
-        } catch (t: Throwable) {
-            rootCause(t)
-        }
-    }
-
-    /** 批量写多个 FourCC 参数（一条 command(0)）；成功返回 null */
-    @Synchronized
-    fun writeFourCCBatch(items: List<Pair<String, IntArray>>): String? {
-        if (items.isEmpty()) return null
-        return try {
-            val e = session ?: openEffect().also { session = it }
-            // 逆向 C0650ag：控制权是硬前置。
-            // 拿不到控制权时，setParameter 仍返回 0，但 HAL 会静默丢弃（哑写）。
-            if (!waitForControl(e, 700)) return "无控制权"
-            // 只拉起一次：重复 enable 会触发 HAL 初始化，把我们刚写的 A 类值重置成 0。
-            if (!liveReady) {
-                runCatching { e.setParam(CMD_PARAM, TAKEOVER) }
-                runCatching { e.enabled = true }
-                liveReady = true
-            }
-
-            // ── 回到 v1.7.1 那条「实测有效」的路：
-            //    单条 command(5) + profile = persist.audio.dolby.profile 的当前值。
-            //  旧笔记实测：profile=4 时写 4 有效、写 0 无效；
-            //  现在 getprop 是 0，所以必须写 0，写 0x40000000 只会落进一个没人读的桶。
-            val profile = propProfile() ?: 0
-            var bad = 0
-            var lastRc = 0
-            items.forEach { (tag, vs) ->
-                val st = e.setParam(CMD_PARAM, buildParamPayload(profile, fourcc(tag), vs))
-                lastRc = st
-                if (st < 0) bad = st
-                android.util.Log.i("DapWr", "single p=$profile $tag rc=$st")
-            }
-            android.util.Log.i(
-                "DapWr",
-                "batch p=$profile n=${items.size} last=$lastRc ${items.joinToString(" ") { it.first }}"
-            )
-            if (bad < 0) return statusText(bad, "A 类 / profile $profile")
-            // 关键：普通参数（101/111/233…）每次写完都会补一条 COMMAND_SAVE，
-            // 所以它能落进 DSP 的当前参数集；
-            // A 类以前只写不提交，DSP 侧一直停在"待提交"状态 —— 这就是写成功没声音的原因。
-            val save = e.setParam(CMD_PARAM, buildSavePayload())
-            android.util.Log.i("DapWr", "save rc=$save")
-            if (save < 0 && save != AudioEffect.ERROR_INVALID_OPERATION) {
-                return statusText(save, "保存")
-            }
-
-            // 注意：这里**不能**再动 enabled —— 实测在写完后再关→开会触发 HAL 初始化，
-// 把刚写的 A 类值重置成 0。拉起动作已移到写参数之前。
-            null
-        } catch (t: Throwable) {
-            rootCause(t)
-        }
-    }
-
     /** command(int, byte[], byte[]) —— 带输出缓冲，读回测试要用 */
     private val commandMethod: Method by lazy {
         findEffectMethod(

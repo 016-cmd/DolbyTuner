@@ -115,8 +115,7 @@ internal fun ConfigScreen() {
                             o.optInt("bass", 0) == 1, o.optInt("gain", 0),
                             o.optInt("cutoff", 150), o.optInt("width", 0),
                             o.optInt("dialog", 0) == 1, o.optInt("damt", 4)
-                        ),
-                        DapFx.fromPref(o.optString("dap", null))
+                        )
                     )
                 }
                 val merged = (presets + incoming).distinctBy { it.name }
@@ -244,7 +243,7 @@ internal fun ConfigScreen() {
             confirmButton = {
                 TextButton(onClick = {
                     val name = presetName.trim().ifBlank { "预设 ${presets.size + 1}" }
-                    writePresets(ctx, presets.filterNot { it.name == name } + Preset(name, loadGeq(ctx), loadFx(ctx), DapFxStore.load(ctx)))
+                    writePresets(ctx, presets.filterNot { it.name == name } + Preset(name, loadGeq(ctx), loadFx(ctx)))
                     reload()
                     presetName = ""
                     showSaveDialog = false
