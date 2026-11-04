@@ -753,18 +753,13 @@ object DapRealtime {
     private fun allProfiles(e: AudioEffect): List<Int> = listOf(currentProfile(e))
 
     /**
-     * A 类写入使用的 profile —— 这里是**设备掩码**，不是音效档号。
+     * A 类写入使用的 profile —— 回到「当前档」。
      *
-     * 逆向 C0892eg.O(Context) 会按当前 AudioDeviceInfo.type 返回：
-     *   扬声器 / 默认      → 0x40000000
-     *   耳机 / USB / 蓝牙  → 0x20000000
-     * 它写入时把这两个都写一遍（扬声器一遍 + 当前设备一遍）。
-     *
-     * 之前把这里当 0/1/2/3/4 档号用，DSP 收到不认识的掩码就会
-     * "rc = 0 但什么都不改"，这正是写入成功却没有声音变化的原因。
+     * 教训：v2.0.0 试过把它当设备掩码（0x40000000 / 0x20000000），
+     * 结果 Dolby 整条效果链被判异常，连 GEQ 都不响应了。
+     * 掩码这条路必须在独立的沙盒实例里验，不能直接压在正在用的链上。
      */
-    private fun profilesForWrite(e: AudioEffect): List<Int> =
-        listOf(0x40000000, 0x20000000)
+    private fun profilesForWrite(e: AudioEffect): List<Int> = listOf(currentProfile(e))
 
     /** 读 persist.audio.dolby.profile（普通 App 可用 getprop，不需要权限） */
     private fun propProfile(): Int? = runCatching {
