@@ -764,6 +764,44 @@ object DapRealtime {
      */
     private fun profilesForWrite(e: AudioEffect): List<Int> = listOf(currentProfile(e))
 
+    /**
+     * 逆向 APP 的"总开关"两步（C0650ag 启用分支）：
+     *   ① setParameter(5, lIl)   —— 12 字节接管/拉起步包
+     *   ② setEnabled(true)
+     *
+     * 这里做成手动测试入口：点一次发一次，不进入正常写入流程。
+     */
+    private val TAKEOVER = byteArrayOf(
+        0x5E, 0x59, 0xA8.toByte(), 0xD2.toByte(),
+        0xBC.toByte(), 0xB0.toByte(), 0x4F, 0xD6.toByte(),
+        0x05, 0xEA.toByte(), 0xE5.toByte(), 0xA0.toByte()
+    )
+
+    @Synchronized
+    fun takeOverAndProbe(): String {
+        return try {
+            val e = session ?: openEffect().also { session = it }
+            val sb = StringBuilder()
+            val r1 = e.setParam(CMD_PARAM, TAKEOVER)
+            sb.append("接管包 rc=$r1\n")
+            val r2 = e.setEnabled(true)
+            sb.append("setEnabled(true) rc=$r2\n")
+            sb.append("enabled=${e.enabled}  hasControl=${e.hasControl()}\n")
+            val probe = writeFourCCBatch(
+                listOf(
+                    "vbm" to intArrayOf(1),
+                    "vbog" to intArrayOf(128),
+                    "vbhm" to intArrayOf(64)
+                )
+            ) ?: "ok"
+            sb.append("测试写入 vbm=1 / vbog=128 → $probe\n")
+            sb.append("GET_DAP_ON=${runCatching { queryInt(e, COMMAND_GET_DAP_ON) }.getOrDefault(-999)}")
+            sb.toString()
+        } catch (t: Throwable) {
+            "异常：${rootCause(t)}"
+        }
+    }
+
     /** 读 persist.audio.dolby.profile（普通 App 可用 getprop，不需要权限） */
     private fun propProfile(): Int? = runCatching {
         val p = Runtime.getRuntime().exec(arrayOf("getprop", "persist.audio.dolby.profile"))

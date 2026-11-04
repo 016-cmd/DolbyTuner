@@ -1842,6 +1842,20 @@ private fun SettingsScreen(activity: Activity) {
                 modifier = Modifier.fillMaxWidth().height(40.dp),
                 shape = RoundedCornerShape(10.dp)
             ) { Text("写入 profile 诊断文件", fontSize = 11.sp) }
+
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        val txt = withContext(Dispatchers.IO) { DapRealtime.takeOverAndProbe() }
+                        android.widget.Toast.makeText(
+                            ctx, txt, android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(40.dp),
+                shape = RoundedCornerShape(10.dp)
+            ) { Text("发送 Dolby 接管包 + A 类测试值", fontSize = 11.sp) }
         }
 
         Spacer(Modifier.height(12.dp))
