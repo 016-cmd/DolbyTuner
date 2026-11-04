@@ -80,6 +80,7 @@ internal fun ConfigScreen() {
 
     var showSaveDialog by remember { mutableStateOf(false) }
     var presetName by remember { mutableStateOf("") }
+    var saveScope by remember { mutableIntStateOf(SCOPE_DOLBY) }
 
     var showExportConfirm by remember { mutableStateOf(false) }
     var exportName by remember { mutableStateOf("") }
@@ -108,6 +109,7 @@ internal fun ConfigScreen() {
                     val o = arr.getJSONObject(i)
                     val g = o.getJSONArray("geq")
                     val geq = IntArray(g.length()) { g.getInt(it) }
+                    val dstr = o.optString("dp", "")
                     if (geq.size == DapRealtime.BANDS) incoming += Preset(
                         o.getString("name"), geq,
                         FxState(
@@ -115,7 +117,9 @@ internal fun ConfigScreen() {
                             o.optInt("bass", 0) == 1, o.optInt("gain", 0),
                             o.optInt("cutoff", 150), o.optInt("width", 0),
                             o.optInt("dialog", 0) == 1, o.optInt("damt", 4)
-                        )
+                        ),
+                        dpUnpack(dstr),
+                        o.optInt("scope", SCOPE_DOLBY)
                     )
                 }
                 val merged = (presets + incoming).distinctBy { it.name }
@@ -226,9 +230,37 @@ internal fun ConfigScreen() {
             text = {
                 Column {
                     Text(
-                        "会把当前 GEQ 20 段与音效页参数一起保存",
+                        "选择要保存的范围",
                         fontSize = 10.sp, color = cs.onSurfaceVariant
                     )
+                    Spacer(Modifier.height(6.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf(
+                            SCOPE_DOLBY to "杜比",
+                            SCOPE_DP to "DP",
+                            SCOPE_BOTH to "两者"
+                        ).forEach { (v, label) ->
+                            val on = saveScope == v
+                            Surface(
+                                Modifier.weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { saveScope = v },
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (on) Accent.copy(alpha = 0.22f)
+                                else cs.surfaceVariant.copy(alpha = 0.40f),
+                                border = BorderStroke(
+                                    1.dp, Accent.copy(alpha = if (on) 0.7f else 0.2f)
+                                )
+                            ) {
+                                Text(
+                                    label, fontSize = 10.sp,
+                                    modifier = Modifier.padding(vertical = 7.dp).fillMaxWidth(),
+                                    textAlign = TextAlign.Center,
+                                    color = if (on) Accent else cs.onSurface
+                                )
+                            }
+                        }
+                    }
                     Spacer(Modifier.height(10.dp))
                     OutlinedTextField(
                         value = presetName,
@@ -243,7 +275,12 @@ internal fun ConfigScreen() {
             confirmButton = {
                 TextButton(onClick = {
                     val name = presetName.trim().ifBlank { "预设 ${presets.size + 1}" }
-                    writePresets(ctx, presets.filterNot { it.name == name } + Preset(name, loadGeq(ctx), loadFx(ctx)))
+                    val dp = if (saveScope != SCOPE_DOLBY) loadDpSnapshot(ctx) else null
+                    writePresets(
+                        ctx,
+                        presets.filterNot { it.name == name } +
+                            Preset(name, loadGeq(ctx), loadFx(ctx), dp, saveScope)
+                    )
                     reload()
                     presetName = ""
                     showSaveDialog = false
@@ -300,9 +337,13 @@ internal fun ConfigScreen() {
             title = { Text("应用预设", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
             text = {
                 Column {
-                    Text("将把「${p.name}」写入杜比实时层：", fontSize = 11.sp)
-                    Text("· GEQ 20 段", fontSize = 10.sp, color = cs.onSurfaceVariant)
-                    Text("· 音效页 8 项参数", fontSize = 10.sp, color = cs.onSurfaceVariant)
+                    Text("将应用「${p.name}」：", fontSize = 11.sp)
+                    if (p.scope == SCOPE_DOLBY || p.scope == SCOPE_BOTH) {
+                        Text("· 杜比：GEQ 20 段 + 音效页参数", fontSize = 10.sp, color = cs.onSurfaceVariant)
+                    }
+                    if (p.scope == SCOPE_DP || p.scope == SCOPE_BOTH) {
+                        Text("· 音效页（DP）：EQ / 限幅 / MBC / 混响 / 等响", fontSize = 10.sp, color = cs.onSurfaceVariant)
+                    }
                     Spacer(Modifier.height(8.dp))
                     Text("当前正在输出的声音会立刻变化。", fontSize = 9.sp, color = cs.onSurfaceVariant)
                 }
@@ -416,11 +457,22 @@ private fun PresetBigCard(
                 Modifier.fillMaxHeight().weight(0.60f).clickable { onOpen() },
                 contentAlignment = Alignment.Center
             ) {
-                BandCurveCanvas(
-                    points = DapRealtime.FREQS.mapIndexed { i, f -> f to p.geq[i] },
-                    lineColor = Color(0xFF16A34A),
-                    showDelta = false
-                )
+                val d = p.dp
+                if (p.scope == SCOPE_DP && d != null) {
+                    DpEqCanvas(
+                        curve = d.curve,
+                        fMin = 20f,
+                        fMax = 20000f,
+                        accent = Color(0xFF6366F1),
+                        height = 140.dp
+                    )
+                } else {
+                    BandCurveCanvas(
+                        points = DapRealtime.FREQS.mapIndexed { i, f -> f to p.geq[i] },
+                        lineColor = Color(0xFF16A34A),
+                        showDelta = false
+                    )
+                }
             }
 
             // 中 20%：音效页参数摘要（点击看详细参数）
@@ -429,12 +481,22 @@ private fun PresetBigCard(
                     .clickable { onOpen() },
                 verticalArrangement = Arrangement.Center
             ) {
-                FxLine("环绕", "耳${mark(p.fx.hpVirtual)} 外${mark(p.fx.spVirtual)}", ink)
-                FxLine("人声", "${mark(p.fx.dialogOn)} ${p.fx.dialogAmt}", ink)
-                FxLine("低音", mark(p.fx.bassOn), ink)
-                FxLine("增益", p.fx.bassGain.toString(), ink)
-                FxLine("截止", p.fx.bassCutoff.toString(), ink)
-                FxLine("带宽", p.fx.bassWidth.toString(), ink)
+                val d = p.dp
+                if (p.scope == SCOPE_DP && d != null) {
+                    FxLine("EQ", if (d.eqTab == 0) "GEQ" else "PEQ", ink)
+                    FxLine("增益", String.format("%+.1f", d.gain / 10f), ink)
+                    FxLine("限幅", mark(d.limOn), ink)
+                    FxLine("MBC", mark(d.mbcOn), ink)
+                    FxLine("混响", mark(d.revOn), ink)
+                    FxLine("等响", mark(d.elOn), ink)
+                } else {
+                    FxLine("环绕", "耳${mark(p.fx.hpVirtual)} 外${mark(p.fx.spVirtual)}", ink)
+                    FxLine("人声", "${mark(p.fx.dialogOn)} ${p.fx.dialogAmt}", ink)
+                    FxLine("低音", mark(p.fx.bassOn), ink)
+                    FxLine("增益", p.fx.bassGain.toString(), ink)
+                    FxLine("截止", p.fx.bassCutoff.toString(), ink)
+                    FxLine("带宽", p.fx.bassWidth.toString(), ink)
+                }
             }
 
             // 右 20%：名字 + 应用 / 删除（从上到下均分整列高度）
@@ -487,6 +549,26 @@ private fun PresetDetailDialog(p: Preset, onClose: () -> Unit) {
                 DetailRow("低音增益", p.fx.bassGain.toString(), cs)
                 DetailRow("低音截止", p.fx.bassCutoff.toString(), cs)
                 DetailRow("低音带宽", p.fx.bassWidth.toString(), cs)
+
+                val d = p.dp
+                if (p.scope != SCOPE_DOLBY && d != null) {
+                    DetailTitle("音效页（DP）", cs)
+                    DetailRow("EQ 模式", if (d.eqTab == 0) "GEQ · 20 段" else "PEQ", cs)
+                    DetailRow("输入增益", String.format("%+.1f dB", d.gain / 10f), cs)
+                    DetailRow(
+                        "动态限幅",
+                        mark(d.limOn) + " 阈值 " + String.format("%.1f dB", d.lim.getOrElse(0) { -20 } / 10f),
+                        cs
+                    )
+                    DetailRow("多段压缩", mark(d.mbcOn), cs)
+                    DetailRow("空间混响", mark(d.revOn), cs)
+                    DetailRow("后置均衡", mark(d.postOn), cs)
+                    DetailRow(
+                        "等响补偿",
+                        mark(d.elOn) + " 基准 " + (if (d.elBase > 0) "${d.elBase}%" else "--"),
+                        cs
+                    )
+                }
 
             }
         },

@@ -769,10 +769,94 @@ internal data class FxState(
     val dialogAmt: Int = 4
 )
 
+/** 音效页（DynamicsProcessing）参数快照 */
+internal class DpSnapshot(
+    val curve: FloatArray,
+    val eqTab: Int,
+    val geqQ4: IntArray,
+    val geqQ: Int,
+    val geqMaster: Int,
+    val peq: String,
+    val gain: Int,
+    val limOn: Boolean,
+    val lim: IntArray,          // thr, atk, rel, rat, post, link
+    val mbcOn: Boolean,
+    val mbc: List<IntArray>,
+    val revOn: Boolean,
+    val rev: IntArray,
+    val postOn: Boolean,
+    val post: IntArray,
+    val elOn: Boolean,
+    val elBase: Int,
+    val elStrength: Int,
+    val elMaxDb: Int
+)
+
+internal const val SCOPE_DOLBY = 0
+internal const val SCOPE_DP = 1
+internal const val SCOPE_BOTH = 2
+
+internal fun dpPack(d: DpSnapshot): String = listOf(
+    d.gain.toString(),
+    if (d.limOn) "1" else "0",
+    d.lim.joinToString(","),
+    if (d.mbcOn) "1" else "0",
+    d.mbc.joinToString(":") { it.joinToString(",") },
+    if (d.revOn) "1" else "0",
+    d.rev.joinToString(","),
+    if (d.postOn) "1" else "0",
+    d.post.joinToString(","),
+    if (d.elOn) "1" else "0",
+    d.elBase.toString(),
+    d.elStrength.toString(),
+    d.elMaxDb.toString(),
+    d.eqTab.toString(),
+    d.geqQ4.joinToString(","),
+    d.geqQ.toString(),
+    d.geqMaster.toString(),
+    d.peq,
+    d.curve.joinToString(",")
+).joinToString("|")
+
+internal fun dpUnpack(s: String): DpSnapshot? {
+    if (s.isBlank()) return null
+    val p = s.split("|")
+    if (p.size < 19) return null
+    return runCatching {
+        DpSnapshot(
+            curve = p[18].split(",").mapNotNull { it.toFloatOrNull() }.toFloatArray()
+                .let { if (it.size == 127) it else FloatArray(127) },
+            eqTab = p[13].toInt(),
+            geqQ4 = p[14].split(",").mapNotNull { it.toIntOrNull() }.toIntArray()
+                .let { if (it.size == DapRealtime.BANDS) it else IntArray(DapRealtime.BANDS) },
+            geqQ = p[15].toInt(),
+            geqMaster = p[16].toInt(),
+            peq = p[17],
+            gain = p[0].toInt(),
+            limOn = p[1] == "1",
+            lim = p[2].split(",").mapNotNull { it.toIntOrNull() }.toIntArray(),
+            mbcOn = p[3] == "1",
+            mbc = p[4].split(":").mapNotNull { seg ->
+                seg.split(",").mapNotNull { it.toIntOrNull() }.toIntArray().takeIf { it.size >= 9 }
+            }.ifEmpty { defaultMbcInts() },
+            revOn = p[5] == "1",
+            rev = p[6].split(",").mapNotNull { it.toIntOrNull() }.toIntArray(),
+            postOn = p[7] == "1",
+            post = p[8].split(",").mapNotNull { it.toIntOrNull() }.toIntArray(),
+            elOn = p[9] == "1",
+            elBase = p[10].toInt(),
+            elStrength = p[11].toInt(),
+            elMaxDb = p[12].toInt()
+        )
+    }.getOrNull()
+}
+
 internal data class Preset(
     val name: String,
     val geq: IntArray,
-    val fx: FxState
+    val fx: FxState,
+    val dp: DpSnapshot? = null,
+    val scope: Int = SCOPE_DOLBY
 )
 
 internal fun loadFx(ctx: Context): FxState {
@@ -813,6 +897,7 @@ internal fun loadPresets(ctx: Context): List<Preset> {
                 val o = arr.getJSONObject(i)
                 val g = o.getJSONArray("geq")
                 val geq = IntArray(g.length()) { g.getInt(it) }
+                val dstr = o.optString("dp", "")
                 if (geq.size != DapRealtime.BANDS) null else Preset(
                     o.getString("name"), geq,
                     FxState(
@@ -820,7 +905,9 @@ internal fun loadPresets(ctx: Context): List<Preset> {
                         o.optInt("bass", 0) == 1, o.optInt("gain", 0),
                         o.optInt("cutoff", 150), o.optInt("width", 0),
                         o.optInt("dialog", 0) == 1, o.optInt("damt", 4)
-                    )
+                    ),
+                    dpUnpack(dstr),
+                    o.optInt("scope", SCOPE_DOLBY)
                 )
             }.getOrNull()
         }
@@ -841,6 +928,8 @@ internal fun writePresets(ctx: Context, list: List<Preset>) {
             put("width", p.fx.bassWidth)
             put("dialog", if (p.fx.dialogOn) 1 else 0)
             put("damt", p.fx.dialogAmt)
+            put("scope", p.scope)
+            put("dp", p.dp?.let { dpPack(it) } ?: "")
         })
     }
     presetFile(ctx).writeText(arr.toString(2))
@@ -858,6 +947,8 @@ private fun presetJsonString(p: Preset): String = org.json.JSONObject().apply {
     put("width", p.fx.bassWidth)
     put("dialog", if (p.fx.dialogOn) 1 else 0)
     put("damt", p.fx.dialogAmt)
+    put("scope", p.scope)
+    put("dp", p.dp?.let { dpPack(it) } ?: "")
 }.toString(2)
 
 /** 正式写入全部音效参数（失败返回原因） */
@@ -879,7 +970,7 @@ private fun q6db(v: Int): String =
 
 
 /** 应用一条预设：GEQ 写入并提交 + 全部音效参数，成功时同步本地记录 */
-internal suspend fun applyPreset(ctx: Context, p: Preset): String? {
+private suspend fun applyDolbyPreset(ctx: Context, p: Preset): String? {
     val e1 = withContext(Dispatchers.IO) { DapRealtime.writeLive(p.geq) }
     val e2 = if (e1 == null) withContext(Dispatchers.IO) { DapRealtime.commit(p.geq) } else e1
     val e3 = if (e2 == null) pushFx(p.fx) else e2
@@ -888,6 +979,127 @@ internal suspend fun applyPreset(ctx: Context, p: Preset): String? {
         saveFx(ctx, p.fx)
     }
     return e3
+}
+
+private fun parsePeqStr(s: String): List<PeqBand> = s.split(";").mapNotNull { seg ->
+    val a = seg.split(",").mapNotNull { it.toFloatOrNull() }
+    if (a.size == 3) PeqBand(a[0], a[1], a[2]) else null
+}.ifEmpty { defaultPeq() }
+
+/** 从 dynproc 偏好读取当前音效页参数，打包成预设用的快照 */
+internal fun loadDpSnapshot(ctx: Context): DpSnapshot {
+    val p = ctx.getSharedPreferences("dynproc", Context.MODE_PRIVATE)
+    val geq = loadDpGeq(p)
+    val q = p.getInt("geq_q", 10)
+    val m = p.getInt("geq_master", 0)
+    val eqTab = p.getInt("eq_tab", 0)
+    val peq = loadPeq(p)
+    val elOn = p.getBoolean("el_on", false)
+    val elBase = p.getInt("el_base", -1)
+    val elStrength = p.getInt("el_strength", 10)
+    val elMaxDb = p.getInt("el_maxdb", 80)
+    val raw = if (eqTab == 0) EqMath.geq20To127(geq, q / 10f, m / 10f)
+    else EqMath.peqTo127(peq)
+    var pct = 100
+    runCatching {
+        val am = ctx.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+        val mx = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+            .coerceAtLeast(1)
+        pct = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) * 100 / mx
+    }
+    val curve = if (elOn && elBase > 0) {
+        EqMath.applyEqualLoudness(raw, EqMath.FREQ127, pct, elBase, elStrength / 10f, elMaxDb / 10f)
+    } else raw
+    return DpSnapshot(
+        curve = curve, eqTab = eqTab, geqQ4 = geq, geqQ = q, geqMaster = m,
+        peq = peq.joinToString(";") { "${it.freqHz},${it.gainDb},${it.q}" },
+        gain = p.getInt("gain", 0),
+        limOn = p.getBoolean("lim_on", true),
+        lim = intArrayOf(
+            p.getInt("lim_thr", -20), p.getInt("lim_atk", 10), p.getInt("lim_rel", 60),
+            p.getInt("lim_rat", 100), p.getInt("lim_post", 0), p.getInt("lim_link", 0)
+        ),
+        mbcOn = p.getBoolean("mbc_on", false), mbc = loadMbc(p),
+        revOn = p.getBoolean("rev_on", false), rev = loadRev(p),
+        postOn = p.getBoolean("post_on", false), post = loadPost(p),
+        elOn = elOn, elBase = elBase, elStrength = elStrength, elMaxDb = elMaxDb
+    )
+}
+
+internal suspend fun applyPreset(ctx: Context, p: Preset): String? {
+    var e: String? = null
+    if (p.scope == SCOPE_DOLBY || p.scope == SCOPE_BOTH) e = applyDolbyPreset(ctx, p)
+    if (e == null && (p.scope == SCOPE_DP || p.scope == SCOPE_BOTH)) e = applyDpPreset(ctx, p.dp)
+    return e
+}
+
+private suspend fun applyDpPreset(ctx: Context, d: DpSnapshot?): String? {
+    if (d == null) return "预设里没有音效页参数"
+    return withContext(Dispatchers.IO) {
+        val ok = DynProc.start(
+            d.gain.toFloat(),
+            DynProc.LimiterCfg(
+                enabled = d.limOn,
+                thresholdDb = d.lim.getOrElse(0) { -20 } / 10f,
+                attackMs = d.lim.getOrElse(1) { 10 } / 10f,
+                releaseMs = d.lim.getOrElse(2) { 60 }.toFloat(),
+                ratio = d.lim.getOrElse(3) { 100 } / 10f,
+                postGainDb = d.lim.getOrElse(4) { 0 } / 10f,
+                linkGroup = d.lim.getOrElse(5) { 0 }
+            ),
+            dpMbc(d.mbc, d.mbcOn)
+        )
+        if (!ok) return@withContext "音效引擎启动失败"
+        DynProc.setPreEq(d.curve)
+        if (d.postOn) DynProc.setPostEq(d.post, true)
+        if (d.revOn) DynReverb.start(d.rev) else DynReverb.stop()
+        saveDpPrefs(ctx, d)
+        null
+    }
+}
+
+private fun saveDpPrefs(ctx: Context, d: DpSnapshot) {
+    val p = ctx.getSharedPreferences("dynproc", Context.MODE_PRIVATE)
+    p.edit()
+        .putInt("gain", d.gain)
+        .putBoolean("lim_on", d.limOn)
+        .putInt("lim_thr", d.lim.getOrElse(0) { -20 })
+        .putInt("lim_atk", d.lim.getOrElse(1) { 10 })
+        .putInt("lim_rel", d.lim.getOrElse(2) { 60 })
+        .putInt("lim_rat", d.lim.getOrElse(3) { 100 })
+        .putInt("lim_post", d.lim.getOrElse(4) { 0 })
+        .putInt("lim_link", d.lim.getOrElse(5) { 0 })
+        .putBoolean("mbc_on", d.mbcOn)
+        .putBoolean("rev_on", d.revOn)
+        .putBoolean("post_on", d.postOn)
+        .putInt("eq_tab", d.eqTab)
+        .putInt("geq_q", d.geqQ)
+        .putInt("geq_master", d.geqMaster)
+        .putBoolean("el_on", d.elOn)
+        .putInt("el_base", d.elBase)
+        .putInt("el_strength", d.elStrength)
+        .putInt("el_maxdb", d.elMaxDb)
+        .apply()
+    saveDpGeq(p, d.geqQ4)
+    savePeq(p, parsePeqStr(d.peq))
+    saveMbc(p, d.mbc)
+    saveRev(p, d.rev)
+    savePost(p, d.post)
+}
+
+private fun dpMbc(l: List<IntArray>, on: Boolean): List<DynProc.MbcBandCfg> = l.map { a ->
+    DynProc.MbcBandCfg(
+        enabled = on && a.getOrElse(9) { 0 } == 1,
+        thresholdDb = a.getOrElse(0) { -200 } / 10f,
+        ratio = a.getOrElse(1) { 30 } / 10f,
+        attackMs = a.getOrElse(2) { 10 } / 10f,
+        releaseMs = a.getOrElse(3) { 80 }.toFloat(),
+        kneeWidth = a.getOrElse(4) { 60 }.toFloat(),
+        noiseGateDb = a.getOrElse(5) { -900 } / 10f,
+        expanderRatio = a.getOrElse(6) { 10 } / 10f,
+        preGainDb = a.getOrElse(7) { 0 } / 10f,
+        postGainDb = a.getOrElse(8) { 0 } / 10f
+    )
 }
 
 /**
@@ -1646,6 +1858,52 @@ private fun EffectsScreen() {
         eqCurve = curve
         scope.launch {
             withContext(Dispatchers.IO) { DynProc.setPreEq(curve) }
+            status = DynProc.status
+        }
+    }
+
+    /** 音效页一键重置（总开关不动） */
+    fun resetDpAll() {
+        gain = 0
+        limOn = true; thr = -20; atk = 10; rel = 60; rat = 100; post = 0; link = 0
+        mbcOn = false; mbcStore = defaultMbcInts()
+        revOn = false; revData = DynReverb.DEFAULTS.copyOf()
+        postOn = false; postData = IntArray(11)
+        eqTab = 0; geqQ4 = IntArray(DapRealtime.BANDS); geqQ = 10; geqMaster = 0
+        peqData = defaultPeq()
+        eqRaw = FloatArray(127); eqCurve = FloatArray(127)
+        elOn = false; elBase = -1; elStrength = 10; elMaxDb = 80
+        prefs.edit()
+            .putInt("gain", 0).putBoolean("lim_on", true)
+            .putInt("lim_thr", -20).putInt("lim_atk", 10).putInt("lim_rel", 60)
+            .putInt("lim_rat", 100).putInt("lim_post", 0).putInt("lim_link", 0)
+            .putBoolean("mbc_on", false).putBoolean("rev_on", false)
+            .putBoolean("post_on", false).putInt("eq_tab", 0)
+            .putInt("geq_q", 10).putInt("geq_master", 0)
+            .putBoolean("el_on", false).putInt("el_base", -1)
+            .putInt("el_strength", 10).putInt("el_maxdb", 80)
+            .apply()
+        saveDpGeq(prefs, geqQ4)
+        savePeq(prefs, peqData)
+        saveMbc(prefs, mbcStore)
+        saveRev(prefs, revData)
+        savePost(prefs, postData)
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    DynProc.setInputGain(0f)
+                    DynProc.setPreEq(FloatArray(127))
+                    DynProc.setLimiter(
+                        DynProc.LimiterCfg(
+                            enabled = true, thresholdDb = -2f, attackMs = 1f,
+                            releaseMs = 60f, ratio = 10f, postGainDb = 0f
+                        )
+                    )
+                    DynProc.setMbc(dpMbc(defaultMbcInts(), false))
+                    DynProc.setPostEq(IntArray(10), false)
+                    DynReverb.stop()
+                }
+            }
             status = DynProc.status
         }
     }
@@ -2470,6 +2728,24 @@ private fun EffectsScreen() {
         }
 
         Spacer(Modifier.height(8.dp))
+        // ===== 重置 =====
+        Spacer(Modifier.height(10.dp))
+        Button(
+            onClick = { resetDpAll() },
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(12.dp),
+            enabled = dpOn,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFFEF4444).copy(alpha = 0.88f)
+            )
+        ) {
+            Text(
+                "重置音效页为默认值",
+                fontSize = 13.sp, color = Color.White, fontWeight = FontWeight.Bold
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Text(
                 if (busy) "正在下发…" else status,
