@@ -158,6 +158,7 @@ object DapRealtime {
             try {
                 // 逆向 C1113iG.l(...) 建实例时 priority 传的是 0x64 = 100
                 val e = ctor.newInstance(type, IMPL_UUID, 100, 0) as AudioEffect
+                liveReady = false
                 attachWatchers(e)
                 return e
             } catch (t: Throwable) {
@@ -491,6 +492,26 @@ object DapRealtime {
 
     private var session: AudioEffect? = null
 
+    /** 本实例是否已经完成「握手 + setEnabled(true)」；重建实例时要复位 */
+    @Volatile
+    private var liveReady = false
+
+    /**
+     * 等待控制权。
+     * 逆向 C0650ag 就是靠 onControlStatusChange(granted) 才继续下发参数，
+     * 拿不到控制权时写入会被 HAL 静默吞掉（返回 0 但无效）。
+     */
+    private fun waitForControl(e: AudioEffect, timeoutMs: Long): Boolean {
+        val step = 50L
+        var waited = 0L
+        while (waited <= timeoutMs) {
+            if (runCatching { e.hasControl() }.getOrDefault(false)) return true
+            Thread.sleep(step)
+            waited += step
+        }
+        return runCatching { e.hasControl() }.getOrDefault(false)
+    }
+
     // ── 自动重建：Dolby 重建效果链时立刻重连并重注 ──────────────
     /** 最后一次成功写入的 GEQ 曲线，重建后用它重注 */
     @Volatile
@@ -787,10 +808,16 @@ object DapRealtime {
      *
      * 这里做成手动测试入口：点一次发一次，不进入正常写入流程。
      */
+    /**
+     * 逆向 C0650ag.lIl：
+     *   public static final byte[] lIl = {0,0,0,0, 1,0,0,0, 1,0,0,0};
+     * 这是「接管主杜比管线」的握手包，key = 5。
+     * 之前用的 5E 59 A8 D2 … 不是这个，是别的协议头。
+     */
     private val TAKEOVER = byteArrayOf(
-        0x5E, 0x59, 0xA8.toByte(), 0xD2.toByte(),
-        0xBC.toByte(), 0xB0.toByte(), 0x4F, 0xD6.toByte(),
-        0x05, 0xEA.toByte(), 0xE5.toByte(), 0xA0.toByte()
+        0, 0, 0, 0,
+        1, 0, 0, 0,
+        1, 0, 0, 0
     )
 
     @Synchronized
@@ -889,26 +916,17 @@ object DapRealtime {
         if (items.isEmpty()) return null
         return try {
             val e = session ?: openEffect().also { session = it }
-            if (!e.hasControl()) return "无控制权"
-            // 不要因为「当前没启用」就放弃：A 类恰恰需要一次启用才会被应用
-            if (!e.enabled) runCatching { e.enabled = true }
-
-            // ── 逆向 C0650ag 的「拉起」两步（放在写参数之前！）
-            //    ① setParameter(5, lIl)  12 字节握手
-            //    ② setEnabled(true)
-            // 探针教训：把这两步放在写完之后，HAL 会走一遍初始化，
-            // 把我们刚写的值重置成 0（日志里 vbog 从 96 变回 0）。
-            // 所以顺序必须是「先拉起，再写值」。
-            runCatching { e.setParam(CMD_PARAM, TAKEOVER) }
-            runCatching {
-                if (e.enabled) e.enabled = false
-                e.enabled = true
+            // 逆向 C0650ag：控制权是硬前置。
+            // 拿不到控制权时，setParameter 仍返回 0，但 HAL 会静默丢弃（哑写）。
+            if (!waitForControl(e, 700)) return "无控制权"
+            // 只拉起一次：重复 enable 会触发 HAL 初始化，把我们刚写的 A 类值重置成 0。
+            if (!liveReady) {
+                runCatching { e.setParam(CMD_PARAM, TAKEOVER) }
+                runCatching { e.enabled = true }
+                liveReady = true
             }
-            // 回到已验证可用的发送方式：command(5) 逐条
-            //   [0x01000000, count, profile, fourcc, values...]
-            // command(0) 批量那条（逆向用的）在压上主链路前必须单独验证，
-            // 不能直接拿正在用的 Dolby 链做实验。
-            // ── 改用逆向 C0832dg.O 的批量包 + command(0)
+
+            // ── 逆向 C0832dg.O 的批量包 + command(0)
             //    [profile, count, (profile, fourcc, len, values)…]
             // 探针实测：command(5) 对 A 类是“哑写”——rc=0，但值从不进 DapParamCache，
             // updateEffectParams 下发时 vbog 仍是 0。command(0) 才会走 setParamValues 分支。
