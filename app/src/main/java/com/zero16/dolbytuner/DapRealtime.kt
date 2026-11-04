@@ -51,6 +51,8 @@ object DapRealtime {
     private const val CMD_READ_FOURCC = 20  // getParameter(20, in, out)：读回
 
     private val TYPE_UUID = UUID.fromString("ec7178ec-e5e1-4432-a3f4-4657e6795210")
+    /** 全零 UUID —— 逆向用 (0, 9d4921da) 这种组合去挂系统已有的 DAP 节点 */
+    private val ZERO_UUID = UUID(0L, 0L)
     private val IMPL_UUID = UUID.fromString("9d4921da-8225-4f29-aefa-39537a04bcaa")
     private val PROXY_TYPE_UUID = UUID.fromString("fa81dbde-588b-11ed-9b6a-0242ac120002")
     private val OFFLOAD_TYPE_UUID = UUID.fromString("46d279d9-9be7-453d-9d7c-ef937f675587")
@@ -138,17 +140,23 @@ object DapRealtime {
      */
     private fun openEffect(): AudioEffect {
         ensureBypass()
-        val candidates = ArrayList<UUID>(3)
-        findDescriptor()?.type?.let { candidates.add(it) }
-        candidates.add(IMPL_UUID)
+        // 逆向 C0892eg.oO() 的候选顺序（type 候选，uuid 固定 9d4921da）：
+        //   ① (00000000-…, 9d4921da)      ← 它列在最后，但这是“按 uuid 挂到系统节点”的写法
+        //   ② (ec7178ec-…, 9d4921da)
+        //   ③ (9d4921da-…, 9d4921da)
+        //   ④ descriptor.type（兜底）
+        // 我们以前只用 descriptor.type，结果建出的是私有实例，
+        // 参数写进它的缓存，音频链上那个节点永远收不到。
+        val candidates = ArrayList<UUID>(4)
+        candidates.add(ZERO_UUID)
         candidates.add(TYPE_UUID)
+        candidates.add(IMPL_UUID)
+        findDescriptor()?.type?.let { candidates.add(it) }
 
         var last: Throwable? = null
         for (type in candidates.distinct()) {
             try {
-                // 逆向 C1113iG.l(...) 建实例时 priority 传的是 0x64 = 100，
-// 相当于把实例插到效果链最前面并优先拿到控制权。
-                // 我们之前用 0，能写、但写不进“正在用的那条链”。
+                // 逆向 C1113iG.l(...) 建实例时 priority 传的是 0x64 = 100
                 val e = ctor.newInstance(type, IMPL_UUID, 100, 0) as AudioEffect
                 attachWatchers(e)
                 return e
