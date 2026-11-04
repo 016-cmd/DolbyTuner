@@ -2959,6 +2959,15 @@ private fun EffectsScreen() {
                 }
             }
             Spacer(Modifier.height(4.dp))
+            val revDiag = if (revMode == 0) DynReverb.diag else DynPresetReverb.diag
+            if (revDiag.isNotBlank()) {
+                Text(
+                    "引擎：" + revDiag,
+                    fontSize = 9.sp, lineHeight = 13.sp,
+                    color = if (revOn) cs.onSurfaceVariant else cs.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+                Spacer(Modifier.height(4.dp))
+            }
             if (revMode == 0) {
             val revPresets = listOf(
                 "原声" to intArrayOf(-200, -100, 2200, 850, -800, 15, 300, 20, 1000, 1000),

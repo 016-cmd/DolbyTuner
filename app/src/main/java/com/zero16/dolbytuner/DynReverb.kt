@@ -40,6 +40,11 @@ object DynReverb {
     var status: String = "未开启"
         private set
 
+    /** 诊断信息：控制权 / 参数写入成功数，给界面显示用 */
+    @Volatile
+    var diag: String = ""
+        private set
+
     private var fx: AudioEffect? = null
     private var rv: EnvironmentalReverb? = null
     private var last: IntArray = DEFAULTS.copyOf()
@@ -54,16 +59,19 @@ object DynReverb {
         val ins = newInsertReverb()
 
         if (ins != null) {
-            if (writeAll(ins, last)) {
+            val ok = writeAll(ins, last)
+            if (ok > 0) {
                 ins.setEnabled(true)
                 fx = ins
                 running = true
                 val ctrl = runCatching { ins.hasControl() }.getOrDefault(false)
+                diag = "插入式 · 控制权${if (ctrl) "✓" else "✗"} · 参数 $ok/10"
                 status = if (ctrl) "混响已开启 · 插入式" else "混响已开启 · 等待控制权"
-                Log.i(TAG, "insert reverb ok, hasControl=$ctrl")
+                Log.i(TAG, "insert reverb ok=$ok, hasControl=$ctrl")
                 return true
             }
             runCatching { ins.release() }
+            diag = "插入式建了但不吃参数（$ok/10）"
         }
 
         // ② 退回原生（aux 版，部分机型也能用）
@@ -73,6 +81,7 @@ object DynReverb {
             r.setEnabled(true)
             rv = r
             running = true
+            diag = "兼容模式（aux 版）· 参数已写"
             status = "混响已开启 · 兼容模式"
             Log.i(TAG, "fallback EnvironmentalReverb ok")
             return true
@@ -116,15 +125,17 @@ object DynReverb {
         else -> v.coerceIn(0, 1000)          // diffusion / density
     }
 
-    /** 写全部参数，返回是否至少成功写入一条 */
-    private fun writeAll(f: AudioEffect, d: IntArray): Boolean {
+    /** 写全部参数，返回成功写入的条数（0..10） */
+    private fun writeAll(f: AudioEffect, d: IntArray): Int {
         var ok = 0
+        var lastRc = 0
         for (i in 0..9) {
             val rc = sp(f, i, clampParam(i, d[i]))
+            lastRc = rc
             if (rc == 0) ok++
         }
-        Log.i(TAG, "writeAll ok=$ok/10")
-        return ok > 0
+        Log.i(TAG, "writeAll ok=$ok/10 lastRc=$lastRc")
+        return ok
     }
 
     private fun applyTo(r: EnvironmentalReverb, d: IntArray) {

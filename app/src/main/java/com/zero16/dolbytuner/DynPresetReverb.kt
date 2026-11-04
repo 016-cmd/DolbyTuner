@@ -22,6 +22,8 @@ object DynPresetReverb {
 
     private const val TAG = "DynPresetReverb"
 
+    /** AOSP 里 PresetReverb 的 effect type（不是实现 UUID） */
+    private const val UUID_TYPE_PRESET = "47382d60-ddd8-11db-bf3a-0002a5d5c51b"
     private const val UUID_PRE_AUX = "f29a1400-a3bb-11df-8ddc-0002a5d5c51b"
     private const val UUID_PRE_INS = "172cdf00-a3bc-11df-a72f-0002a5d5c51b"
 
@@ -39,6 +41,11 @@ object DynPresetReverb {
     var status: String = "未开启"
         private set
 
+    /** 诊断信息：给界面显示用 */
+    @Volatile
+    var diag: String = ""
+        private set
+
     private var fx: AudioEffect? = null
     private var last: Int = 3
 
@@ -48,11 +55,13 @@ object DynPresetReverb {
         last = preset.coerceIn(0, PRESET_NAMES.size - 1)
         val f = newInsert()
         if (f == null) {
-            status = "预设混响不可用 · 本机没有该效果"
+            diag = "创建失败：本机没有该效果或已被占用"
+            status = "预设混响不可用 · 本机没有该效果或已被占用"
             return false
         }
         if (!applyPreset(f, last)) {
             runCatching { f.release() }
+            diag = "建了但不吃参数（rc=$lastRc）"
             status = "预设混响写入失败"
             return false
         }
@@ -60,7 +69,12 @@ object DynPresetReverb {
         fx = f
         running = true
         val ctrl = runCatching { f.hasControl() }.getOrDefault(false)
-        status = if (ctrl) "预设混响 · ${PRESET_NAMES[last]}" else "预设混响 · 等待控制权"
+        diag = "控制权${if (ctrl) "✓" else "✗"} · rc=$lastRc"
+        status = when {
+            !ctrl -> "预设混响 · 等待控制权"
+            lastRc == 0 -> "预设混响 · ${PRESET_NAMES[last]}"
+            else -> "预设混响 · ${PRESET_NAMES[last]}（写入被拒 rc=$lastRc）"
+        }
         Log.i(TAG, "preset=$last hasControl=$ctrl")
         return true
     }
@@ -92,29 +106,58 @@ object DynPresetReverb {
             else -> ""
         }
 
-    /** 反射创建 insert 版预设混响 */
-    private fun newInsert(): AudioEffect? = runCatching {
-        val cls = Class.forName("android.media.audiofx.AudioEffect")
-        val ctor = cls.getConstructor(
-            UUID::class.java, UUID::class.java,
-            Int::class.javaPrimitiveType, Int::class.javaPrimitiveType
+    /**
+     * 反射创建预设混响：type 用 AOSP 的 PresetReverb 类型 UUID，
+     * 实现 UUID 先试 insert 版，不行再试 aux 版。
+     */
+    private fun newInsert(): AudioEffect? {
+        val candidates = listOf(
+            UUID_TYPE_PRESET to UUID_PRE_INS,
+            UUID_TYPE_PRESET to UUID_PRE_AUX
         )
-        ctor.isAccessible = true
-        ctor.newInstance(
-            UUID.fromString(UUID_PRE_AUX),
-            UUID.fromString(UUID_PRE_INS),
-            100,
-            0
-        ) as AudioEffect
-    }.getOrNull()
+        for ((typeS, implS) in candidates) {
+            val fx = runCatching {
+                val ctor = Class.forName("android.media.audiofx.AudioEffect").getConstructor(
+                    UUID::class.java, UUID::class.java,
+                    Int::class.javaPrimitiveType, Int::class.javaPrimitiveType
+                )
+                ctor.isAccessible = true
+                ctor.newInstance(
+                    UUID.fromString(typeS), UUID.fromString(implS), 100, 0
+                ) as AudioEffect
+            }.getOrNull()
+            if (fx != null) {
+                Log.i(TAG, "created with impl=$implS")
+                return fx
+            }
+        }
+        return null
+    }
 
-    /** setParameter(0, intArrayOf(preset), 0)：0 = PARAM_PRESET */
-    private fun applyPreset(f: AudioEffect, index: Int): Boolean = runCatching {
-        val m = Class.forName("android.media.audiofx.AudioEffect").getMethod(
-            "setParameter",
-            Int::class.javaPrimitiveType, IntArray::class.java, Int::class.javaPrimitiveType
+    /** 上一次写入的返回码（0 = 成功），用于界面提示 */
+    @Volatile
+    var lastRc: Int = Int.MIN_VALUE
+        private set
+
+    /**
+     * 写档位：0 = PARAM_PRESET，值 1..6。
+     * AudioEffect 的 setParameter 有多个重载，逐个试。
+     */
+    private fun applyPreset(f: AudioEffect, index: Int): Boolean {
+        val v = PRESET_VALUES[index]
+        val cls = runCatching { Class.forName("android.media.audiofx.AudioEffect") }.getOrNull() ?: run {
+            lastRc = Int.MIN_VALUE
+            return false
+        }
+        val tries: List<() -> Int> = listOf(
+            { cls.getMethod("setParameter", Int::class.javaPrimitiveType, IntArray::class.java, Int::class.javaPrimitiveType).invoke(f, 0, intArrayOf(v), 0) as Int },
+            { cls.getMethod("setParameter", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType).invoke(f, 0, v) as Int }
         )
-        val rc = m.invoke(f, 0, intArrayOf(PRESET_VALUES[index]), 0) as Int
-        rc == 0
-    }.getOrDefault(false)
+        for (call in tries) {
+            val rc = runCatching(call).getOrNull() ?: continue
+            lastRc = rc
+            if (rc == 0) return true
+        }
+        return false
+    }
 }
