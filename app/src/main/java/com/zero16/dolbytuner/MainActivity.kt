@@ -1393,6 +1393,95 @@ private fun EffectsScreen() {
         applyRev()
     }
 
+    // ── 拖动节流：拖动期间不改 Compose state，避免整页重组 ──
+    val throttle = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
+    val pendLim = remember { intArrayOf(thr, atk, rel, rat, post, link) }
+    val pendMbc = remember { mbcStore[sel].copyOf() }
+    val pendRev = remember { revData.copyOf() }
+
+    fun limFrom(p: IntArray) = DynProc.LimiterCfg(
+        limOn, p[0] / 10f, p[1] / 10f, p[2].toFloat(), p[3] / 10f, p[4] / 10f, p[5]
+    )
+
+    val limTick = remember {
+        Runnable {
+            val c = limFrom(pendLim)
+            scope.launch {
+                withContext(Dispatchers.IO) { DynProc.setLimiter(c) }
+                status = DynProc.status
+            }
+        }
+    }
+
+    fun liveLim(i: Int, v: Int) {
+        pendLim[i] = v
+        throttle.removeCallbacks(limTick)
+        throttle.postDelayed(limTick, 60L)
+    }
+
+    fun commitLim(i: Int, v: Int) {
+        pendLim[i] = v
+        thr = pendLim[0]; atk = pendLim[1]; rel = pendLim[2]
+        rat = pendLim[3]; post = pendLim[4]; link = pendLim[5]
+        prefs.edit().putInt("lim_thr", thr).putInt("lim_atk", atk)
+            .putInt("lim_rel", rel).putInt("lim_rat", rat)
+            .putInt("lim_post", post).putInt("lim_link", link).apply()
+        throttle.removeCallbacks(limTick)
+        throttle.post(limTick)
+    }
+
+    val mbcTick = remember {
+        Runnable {
+            val l = mbcStore.toMutableList()
+            l[sel] = pendMbc.copyOf()
+            val d = toDynMbc(l)
+            scope.launch {
+                withContext(Dispatchers.IO) { DynProc.setMbc(d) }
+                status = DynProc.status
+            }
+        }
+    }
+
+    fun liveMbc(i: Int, v: Int) {
+        pendMbc[i] = v
+        throttle.removeCallbacks(mbcTick)
+        throttle.postDelayed(mbcTick, 60L)
+    }
+
+    fun commitMbc(i: Int, v: Int) {
+        pendMbc[i] = v
+        val l = mbcStore.toMutableList()
+        l[sel] = pendMbc.copyOf()
+        mbcStore = l
+        saveMbc(prefs, l)
+        throttle.removeCallbacks(mbcTick)
+        throttle.post(mbcTick)
+    }
+
+    val revTick = remember {
+        Runnable {
+            val d = pendRev.copyOf()
+            scope.launch {
+                withContext(Dispatchers.IO) { DynReverb.set(d) }
+                status = DynReverb.status
+            }
+        }
+    }
+
+    fun liveRev(i: Int, v: Int) {
+        pendRev[i] = v
+        throttle.removeCallbacks(revTick)
+        throttle.postDelayed(revTick, 60L)
+    }
+
+    fun commitRev(i: Int, v: Int) {
+        pendRev[i] = v
+        revData = pendRev.copyOf()
+        saveRev(prefs, revData)
+        throttle.removeCallbacks(revTick)
+        throttle.post(revTick)
+    }
+
     fun cfg() = DynProc.LimiterCfg(
         enabled = limOn,
         thresholdDb = thr / 10f,
@@ -1569,33 +1658,33 @@ private fun EffectsScreen() {
 
             FxSlider(
                 "门限阈值 · Threshold", String.format("%+.1f dB", thr / 10f), thr, -600..0, limOn,
-                onLive = { thr = it; applyLim(false) },
-                onDone = { thr = it; applyLim(true) }
+                onLive = { liveLim(0, it) },
+                onDone = { commitLim(0, it) }
             )
             FxSlider(
                 "启动时间 · Attack", String.format("%.1f ms", atk / 10f), atk, 1..1000, limOn,
-                onLive = { atk = it; applyLim(false) },
-                onDone = { atk = it; applyLim(true) }
+                onLive = { liveLim(1, it) },
+                onDone = { commitLim(1, it) }
             )
             FxSlider(
                 "释放时间 · Release", "$rel ms", rel, 1..5000, limOn,
-                onLive = { rel = it; applyLim(false) },
-                onDone = { rel = it; applyLim(true) }
+                onLive = { liveLim(2, it) },
+                onDone = { commitLim(2, it) }
             )
             FxSlider(
                 "压缩比 · Ratio", String.format("%.1f:1", rat / 10f), rat, 10..300, limOn,
-                onLive = { rat = it; applyLim(false) },
-                onDone = { rat = it; applyLim(true) }
+                onLive = { liveLim(3, it) },
+                onDone = { commitLim(3, it) }
             )
             FxSlider(
                 "后级增益 · Post Gain", String.format("%+.1f dB", post / 10f), post, -400..400, limOn,
-                onLive = { post = it; applyLim(false) },
-                onDone = { post = it; applyLim(true) }
+                onLive = { liveLim(4, it) },
+                onDone = { commitLim(4, it) }
             )
             FxSlider(
                 "联动组 · Link Group", if (link == 0) "0 · 立体声联动" else "$link", link, 0..3, limOn,
-                onLive = { link = it; applyLim(false) },
-                onDone = { link = it; applyLim(true) }
+                onLive = { liveLim(5, it) },
+                onDone = { commitLim(5, it) }
             )
         }
 
@@ -1614,7 +1703,7 @@ private fun EffectsScreen() {
                 segNames.forEachIndexed { i, n ->
                     Surface(
                         Modifier.weight(1f)
-                            .clickable { sel = i; prefs.edit().putInt("mbc_sel", i).apply() },
+                            .clickable { sel = i; mbcStore[i].copyInto(pendMbc); prefs.edit().putInt("mbc_sel", i).apply() },
                         shape = RoundedCornerShape(10.dp),
                         color = cMbc.copy(alpha = if (sel == i) 0.30f else 0.08f),
                         border = BorderStroke(1.dp, cMbc.copy(alpha = if (sel == i) 0.72f else 0.26f))
@@ -1657,6 +1746,7 @@ private fun EffectsScreen() {
                             .clickable(enabled = mbcOn) {
                                 val l = List(4) { pr.second.copyOf() }
                                 mbcStore = l
+                                pr.second.copyInto(pendMbc)
                                 saveMbc(prefs, l)
                                 applyMbc()
                             },
@@ -1675,39 +1765,39 @@ private fun EffectsScreen() {
             val b = mbcStore[sel]
             FxSlider(
                 "阈值 · Threshold", String.format("%.1f dB", b[0] / 10f), b[0], -600..0, mbcOn,
-                onLive = { updMbc(0, it) }, onDone = { updMbc(0, it) }
+                onLive = { liveMbc(0, it) }, onDone = { commitMbc(0, it) }
             )
             FxSlider(
                 "压缩比 · Ratio", String.format("%.1f:1", b[1] / 10f), b[1], 10..300, mbcOn,
-                onLive = { updMbc(1, it) }, onDone = { updMbc(1, it) }
+                onLive = { liveMbc(1, it) }, onDone = { commitMbc(1, it) }
             )
             FxSlider(
                 "启动时间 · Attack", String.format("%.1f ms", b[2] / 10f), b[2], 1..1000, mbcOn,
-                onLive = { updMbc(2, it) }, onDone = { updMbc(2, it) }
+                onLive = { liveMbc(2, it) }, onDone = { commitMbc(2, it) }
             )
             FxSlider(
                 "释放时间 · Release", "${b[3]} ms", b[3], 1..5000, mbcOn,
-                onLive = { updMbc(3, it) }, onDone = { updMbc(3, it) }
+                onLive = { liveMbc(3, it) }, onDone = { commitMbc(3, it) }
             )
             FxSlider(
                 "膝宽 · Knee", "${b[4]}", b[4], 0..60, mbcOn,
-                onLive = { updMbc(4, it) }, onDone = { updMbc(4, it) }
+                onLive = { liveMbc(4, it) }, onDone = { commitMbc(4, it) }
             )
             FxSlider(
                 "噪声门 · Gate", String.format("%.1f dB", b[5] / 10f), b[5], -900..0, mbcOn,
-                onLive = { updMbc(5, it) }, onDone = { updMbc(5, it) }
+                onLive = { liveMbc(5, it) }, onDone = { commitMbc(5, it) }
             )
             FxSlider(
                 "扩展比 · Expander", String.format("%.1f", b[6] / 10f), b[6], 10..100, mbcOn,
-                onLive = { updMbc(6, it) }, onDone = { updMbc(6, it) }
+                onLive = { liveMbc(6, it) }, onDone = { commitMbc(6, it) }
             )
             FxSlider(
                 "前级 · Pre Gain", String.format("%+.1f dB", b[7] / 10f), b[7], -400..400, mbcOn,
-                onLive = { updMbc(7, it) }, onDone = { updMbc(7, it) }
+                onLive = { liveMbc(7, it) }, onDone = { commitMbc(7, it) }
             )
             FxSlider(
                 "后级 · Post Gain", String.format("%+.1f dB", b[8] / 10f), b[8], -400..400, mbcOn,
-                onLive = { updMbc(8, it) }, onDone = { updMbc(8, it) }
+                onLive = { liveMbc(8, it) }, onDone = { commitMbc(8, it) }
             )
         }
 
@@ -1735,6 +1825,7 @@ private fun EffectsScreen() {
                         Surface(
                             Modifier.weight(1f).clickable(enabled = revOn) {
                                 revData = pr.second.copyOf()
+                                revData.copyInto(pendRev)
                                 saveRev(prefs, revData)
                                 applyRev()
                             },
@@ -1753,43 +1844,43 @@ private fun EffectsScreen() {
 
             FxSlider(
                 "房间大小 · Room", String.format("%.1f dB", revData[0] / 100f), revData[0], -9000..0, revOn,
-                onLive = { updRev(0, it) }, onDone = { updRev(0, it) }
+                onLive = { liveRev(0, it) }, onDone = { commitRev(0, it) }
             )
             FxSlider(
                 "高频吸收 · Room HF", String.format("%.1f dB", revData[1] / 100f), revData[1], -9000..0, revOn,
-                onLive = { updRev(1, it) }, onDone = { updRev(1, it) }
+                onLive = { liveRev(1, it) }, onDone = { commitRev(1, it) }
             )
             FxSlider(
                 "衰减时间 · Decay", "${revData[2]} ms", revData[2], 100..20000, revOn,
-                onLive = { updRev(2, it) }, onDone = { updRev(2, it) }
+                onLive = { liveRev(2, it) }, onDone = { commitRev(2, it) }
             )
             FxSlider(
                 "高频衰减比 · HF Ratio", String.format("%.2f", revData[3] / 1000f), revData[3], 100..2000, revOn,
-                onLive = { updRev(3, it) }, onDone = { updRev(3, it) }
+                onLive = { liveRev(3, it) }, onDone = { commitRev(3, it) }
             )
             FxSlider(
                 "早期反射 · Reflections", String.format("%.1f dB", revData[4] / 100f), revData[4], -9000..0, revOn,
-                onLive = { updRev(4, it) }, onDone = { updRev(4, it) }
+                onLive = { liveRev(4, it) }, onDone = { commitRev(4, it) }
             )
             FxSlider(
                 "反射延迟 · Reflect Delay", "${revData[5]} ms", revData[5], 0..300, revOn,
-                onLive = { updRev(5, it) }, onDone = { updRev(5, it) }
+                onLive = { liveRev(5, it) }, onDone = { commitRev(5, it) }
             )
             FxSlider(
                 "混响量 · Reverb Level", String.format("%.1f dB", revData[6] / 100f), revData[6], -9000..0, revOn,
-                onLive = { updRev(6, it) }, onDone = { updRev(6, it) }
+                onLive = { liveRev(6, it) }, onDone = { commitRev(6, it) }
             )
             FxSlider(
                 "混响延迟 · Reverb Delay", "${revData[7]} ms", revData[7], 0..100, revOn,
-                onLive = { updRev(7, it) }, onDone = { updRev(7, it) }
+                onLive = { liveRev(7, it) }, onDone = { commitRev(7, it) }
             )
             FxSlider(
                 "扩散度 · Diffusion", String.format("%.2f", revData[8] / 1000f), revData[8], 0..1000, revOn,
-                onLive = { updRev(8, it) }, onDone = { updRev(8, it) }
+                onLive = { liveRev(8, it) }, onDone = { commitRev(8, it) }
             )
             FxSlider(
                 "密度 · Density", String.format("%.2f", revData[9] / 1000f), revData[9], 0..1000, revOn,
-                onLive = { updRev(9, it) }, onDone = { updRev(9, it) }
+                onLive = { liveRev(9, it) }, onDone = { commitRev(9, it) }
             )
         }
 
