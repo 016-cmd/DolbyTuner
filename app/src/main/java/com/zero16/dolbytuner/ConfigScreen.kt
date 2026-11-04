@@ -523,6 +523,21 @@ private fun PresetBigCard(
     }
 }
 
+/** 在 127 点曲线上取最接近 hz 的那个点的增益 */
+private fun atFreq(curve: FloatArray, hz: Int): Float {
+    if (curve.size != 127) return 0f
+    var bi = 0
+    var bd = Float.MAX_VALUE
+    for (i in 0 until 127) {
+        val dd = kotlin.math.abs(EqMath.FREQ127[i] - hz)
+        if (dd < bd) { bd = dd; bi = i }
+    }
+    return curve[bi]
+}
+
+/** 0.1 dB 单位 → 带符号字符串 */
+private fun fmtDb(v: Int): String = String.format("%+.1f", v / 10f)
+
 @Composable
 private fun PresetDetailDialog(p: Preset, onClose: () -> Unit) {
     val cs = MaterialTheme.colorScheme
@@ -535,14 +550,16 @@ private fun PresetDetailDialog(p: Preset, onClose: () -> Unit) {
             Column(
                 Modifier.fillMaxWidth().height(380.dp).verticalScroll(rememberScrollState())
             ) {
-                DetailTitle("GEQ · 20 段", cs)
-                Text(
-                    DapRealtime.FREQS.mapIndexed { i, f -> "${f.toInt()}Hz ${p.geq[i]}" }
-                        .chunked(3).joinToString("\n") { it.joinToString("   ") },
-                    fontSize = 10.sp, lineHeight = 15.sp, color = cs.onSurfaceVariant
-                )
+                if (p.scope != SCOPE_DP) {
+                    DetailTitle("杜比 GEQ · 20 段", cs)
+                    Text(
+                        DapRealtime.FREQS.mapIndexed { i, f -> "${f.toInt()}Hz ${p.geq[i]}" }
+                            .chunked(3).joinToString("\n") { it.joinToString("   ") },
+                        fontSize = 10.sp, lineHeight = 15.sp, color = cs.onSurfaceVariant
+                    )
+                }
 
-                DetailTitle("音效页参数", cs)
+                DetailTitle("杜比音效参数", cs)
                 DetailRow("耳机虚拟环绕", mark(p.fx.hpVirtual), cs)
                 DetailRow("扬声器虚拟环绕", mark(p.fx.spVirtual), cs)
                 DetailRow("人声增强", mark(p.fx.dialogOn), cs)
@@ -554,22 +571,68 @@ private fun PresetDetailDialog(p: Preset, onClose: () -> Unit) {
 
                 val d = p.dp
                 if (p.scope != SCOPE_DOLBY && d != null) {
-                    DetailTitle("音效页（DP）", cs)
-                    DetailRow("EQ 模式", if (d.eqTab == 0) "GEQ · 20 段" else "PEQ", cs)
+                    DetailTitle("音效页（DP）· EQ", cs)
+                    DetailRow("EQ 模式", if (d.eqTab == 0) "GEQ · 20 段" else "PEQ · ${d.peq.split(";").count { it.isNotBlank() }} 段", cs)
+                    if (d.eqTab == 0) {
+                        DetailRow("段间过渡 Q", String.format("%.1f", d.geqQ / 10f), cs)
+                        DetailRow("总增益 Master", String.format("%+.1f dB", d.geqMaster / 10f), cs)
+                        DetailRow("曲线采样（dB）", "", cs)
+                    } else {
+                        Text(
+                            d.peq.split(";").filter { it.isNotBlank() }.map { seg ->
+                                val a = seg.split(",").mapNotNull { it.toFloatOrNull() }
+                                if (a.size < 3) seg else "${a[0].toInt()}Hz ${String.format("%+.1f", a[1])}dB Q${String.format("%.1f", a[2])}"
+                            }.chunked(2).joinToString("\n") { it.joinToString("   ") },
+                            fontSize = 10.sp, lineHeight = 15.sp, color = cs.onSurfaceVariant
+                        )
+                    }
+                    if (d.eqTab == 0) {
+                        Text(
+                            DapRealtime.FREQS.map { hz -> "${hz}Hz ${String.format("%+.1f", atFreq(d.curve, hz))}" }
+                                .chunked(2).joinToString("\n") { it.joinToString("   ") },
+                            fontSize = 10.sp, lineHeight = 15.sp, color = cs.onSurfaceVariant
+                        )
+                    }
+
+                    DetailTitle("音效页（DP）· 动态", cs)
                     DetailRow("输入增益", String.format("%+.1f dB", d.gain / 10f), cs)
-                    DetailRow(
-                        "动态限幅",
-                        mark(d.limOn) + " 阈值 " + String.format("%.1f dB", d.lim.getOrElse(0) { -20 } / 10f),
-                        cs
-                    )
+                    DetailRow("动态限幅", mark(d.limOn), cs)
+                    DetailRow("阈值 / 启动", String.format("%+.1f dB / %.1f ms", d.lim.getOrElse(0) { -20 } / 10f, d.lim.getOrElse(1) { 10 } / 10f), cs)
+                    DetailRow("释放 / 压缩比", String.format("%d ms / %.1f:1", d.lim.getOrElse(2) { 60 }, d.lim.getOrElse(3) { 100 } / 10f), cs)
+                    DetailRow("后级增益 / 联动", String.format("%+.1f dB / %s", d.lim.getOrElse(4) { 0 } / 10f, if (d.lim.getOrElse(5) { 0 } == 0) "立体声联动" else "组 ${d.lim.getOrElse(5) { 0 }}"), cs)
                     DetailRow("多段压缩", mark(d.mbcOn), cs)
+                    d.mbc.forEachIndexed { i, b ->
+                        val nm = listOf("Low 250", "Mid 2k", "High 8k", "Air 20k").getOrElse(i) { "段 ${i + 1}" }
+                        Text(
+                            "$nm ${mark(b.getOrElse(9) { 0 } == 1)}" +
+                                " 阈${fmtDb(b.getOrElse(0) { -180 })} 比${String.format("%.1f", b.getOrElse(1) { 20 } / 10f)}" +
+                                " 启${String.format("%.1f", b.getOrElse(2) { 20 } / 10f)}ms 放${b.getOrElse(3) { 150 }}ms" +
+                                " 膝${b.getOrElse(4) { 60 }} 门${fmtDb(b.getOrElse(5) { -900 })}" +
+                                " 扩${String.format("%.1f", b.getOrElse(6) { 10 } / 10f)}" +
+                                " 前${fmtDb(b.getOrElse(7) { 0 })} 后${fmtDb(b.getOrElse(8) { 0 })}",
+                            fontSize = 9.sp, lineHeight = 13.sp, color = cs.onSurfaceVariant
+                        )
+                    }
+
+                    DetailTitle("音效页（DP）· 空间与修形", cs)
                     DetailRow("空间混响", mark(d.revOn), cs)
+                    DetailRow("房间 / 高频吸收", String.format("%.1f / %.1f dB", d.rev.getOrElse(0) { -200 } / 100f, d.rev.getOrElse(1) { -100 } / 100f), cs)
+                    DetailRow("衰减 / 高频衰减比", String.format("%d ms / %.2f", d.rev.getOrElse(2) { 2200 }, d.rev.getOrElse(3) { 850 } / 1000f), cs)
+                    DetailRow("早期反射 / 延迟", String.format("%.1f dB / %d ms", d.rev.getOrElse(4) { -800 } / 100f, d.rev.getOrElse(5) { 15 }), cs)
+                    DetailRow("混响量 / 延迟", String.format("%.1f dB / %d ms", d.rev.getOrElse(6) { 300 } / 100f, d.rev.getOrElse(7) { 20 }), cs)
+                    DetailRow("扩散 / 密度", String.format("%.2f / %.2f", d.rev.getOrElse(8) { 1000 } / 1000f, d.rev.getOrElse(9) { 1000 } / 1000f), cs)
+
                     DetailRow("后置均衡", mark(d.postOn), cs)
-                    DetailRow(
-                        "等响补偿",
-                        mark(d.elOn) + " 基准 " + (if (d.elBase > 0) "${d.elBase}%" else "--"),
-                        cs
+                    Text(
+                        listOf("31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k")
+                            .mapIndexed { i, f -> "$f ${String.format("%+.1f", d.post.getOrElse(i) { 0 } / 10f)}" }
+                            .chunked(5).joinToString("\n") { it.joinToString("  ") },
+                        fontSize = 10.sp, lineHeight = 15.sp, color = cs.onSurfaceVariant
                     )
+                    DetailRow("左右平衡", String.format("%+.1f dB", d.post.getOrElse(10) { 0 } / 10f), cs)
+                    DetailRow("等响补偿", mark(d.elOn), cs)
+                    DetailRow("基准音量", if (d.elBase > 0) "${d.elBase}%" else "未设定", cs)
+                    DetailRow("补偿强度 / 上限", String.format("%.1f / %.1f dB", d.elStrength / 10f, d.elMaxDb / 10f), cs)
                 }
 
             }
