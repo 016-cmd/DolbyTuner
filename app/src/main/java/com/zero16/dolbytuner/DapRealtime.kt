@@ -642,10 +642,11 @@ object DapRealtime {
      * 所以跟 GEQ 一样，把所有可能生效的档全写一遍。
      */
     private fun profilesForWrite(e: AudioEffect): List<Int> {
-        // 只写「当前 profile」一个。
-        // 之前试过把 0..N 全写一遍，结果 Dolby 的 profile 状态被写乱，
-        // 表现为「动一下 A 类就显示未生效」。
-        return listOf(propProfile() ?: curProfile(e))
+        // 只写两个：属性里的 profile（官方配置）与 AudioService 当前的 profile。
+        // 不再 0..N 全写——批量包里混多个 profile 会让 Dolby 判「未生效」。
+        val prop = propProfile()
+        val cur = curProfile(e)
+        return if (prop != null && prop != cur) listOf(cur, prop) else listOf(cur)
     }
 
     /** 读 persist.audio.dolby.profile（普通 App 可用 getprop，不需要权限） */
@@ -693,25 +694,24 @@ object DapRealtime {
             val e = session ?: openEffect().also { session = it }
             if (!e.hasControl()) return "无控制权"
             if (!e.enabled) return "杜比音效未启用"
-            // 关键：Dolby 有多个 profile，实际播放用哪一个不一定等于属性里的值。
-            // GEQ 之所以有效，就是因为它把 0..N 全部写了一遍；
-            // A 类也照这个来，否则会写进"备用档"，听感没有变化。
-            val profs = profilesForWrite(e)
-            var size = 8
-            profs.forEach { _ -> items.forEach { size += 3 + it.second.size } }
-            val buf = ByteBuffer.allocate(size * 4).order(ByteOrder.LITTLE_ENDIAN)
-            buf.putInt(CMD_SET_BATCH)
-            buf.putInt(items.size * profs.size)
-            profs.forEach { prof ->
-                items.forEach { (tag, vs) ->
+            // 逆向 APP 的做法：每条参数单独一条 command(5)
+            //   [0x01000000, count+1, profile, fourcc, values...]
+            // 不把多个 profile 塞进同一个批量包（那样 Dolby 会判未生效）。
+            for (prof in profilesForWrite(e)) {
+                for ((tag, vs) in items) {
+                    val buf = ByteBuffer
+                        .allocate((vs.size + 4) * 4)
+                        .order(ByteOrder.LITTLE_ENDIAN)
+                    buf.putInt(COMMAND_SET_PROFILE)
+                    buf.putInt(vs.size + 1)
                     buf.putInt(prof)
                     buf.putInt(fourcc(tag))
-                    buf.putInt(vs.size)
                     vs.forEach { buf.putInt(it) }
+                    val st = e.setParam(CMD_PARAM, buf.array())
+                    if (st < 0) return statusText(st, tag)
                 }
             }
-            val st = e.setParam(CMD_PARAM, buf.array())
-            if (st < 0) statusText(st, "批量参数") else null
+            null
         } catch (t: Throwable) {
             rootCause(t)
         }
