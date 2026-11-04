@@ -296,6 +296,16 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                 DeviceState.notifyApplied()
             }
         }
+        // 前台自己处理完也通知后台服务刷新常驻通知，
+        // 否则服务看到 device_last_applied 已更新就会跳过，通知停在旧设备名上
+        if (prefs.getBoolean("device_service", false)) {
+            runCatching {
+                ctx.startForegroundService(
+                    Intent(ctx, DeviceAutomationService::class.java)
+                        .setAction(DeviceAutomationService.ACTION_REFRESH)
+                )
+            }
+        }
     }
     // 首次启动：不同机型的杜比默认参数不同，先引导检测一次，把结果当成「重置」的基准
     val scope = rememberCoroutineScope()

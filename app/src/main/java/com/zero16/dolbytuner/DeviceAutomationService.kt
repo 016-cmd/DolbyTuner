@@ -96,6 +96,9 @@ class DeviceAutomationService : Service() {
             runCatching {
                 val device = detectOutputDevice(this@DeviceAutomationService)
                 val binding = DeviceTuningStore.find(this@DeviceAutomationService, device.key)
+                // 通知永远先跟着「当前设备」走：就算这次不需要重新套用参数，
+                // 通知也不能停留在上一个设备的名字上。
+                updateNotification(device.name, binding?.presetName ?: "未绑定（平直）")
                 if (prefs.getString("device_last_applied", null) == device.key) return@runCatching
                 val preset = binding?.let { b ->
                     loadPresets(this@DeviceAutomationService).firstOrNull { it.name == b.presetName }
