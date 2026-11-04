@@ -884,6 +884,18 @@ object DapRealtime {
             if (!e.hasControl()) return "无控制权"
             // 不要因为「当前没启用」就放弃：A 类恰恰需要一次启用才会被应用
             if (!e.enabled) runCatching { e.enabled = true }
+
+            // ── 逆向 C0650ag 的「拉起」两步（放在写参数之前！）
+            //    ① setParameter(5, lIl)  12 字节握手
+            //    ② setEnabled(true)
+            // 探针教训：把这两步放在写完之后，HAL 会走一遍初始化，
+            // 把我们刚写的值重置成 0（日志里 vbog 从 96 变回 0）。
+            // 所以顺序必须是「先拉起，再写值」。
+            runCatching { e.setParam(CMD_PARAM, TAKEOVER) }
+            runCatching {
+                if (e.enabled) e.enabled = false
+                e.enabled = true
+            }
             // 回到已验证可用的发送方式：command(5) 逐条
             //   [0x01000000, count, profile, fourcc, values...]
             // command(0) 批量那条（逆向用的）在压上主链路前必须单独验证，
@@ -912,14 +924,8 @@ object DapRealtime {
                 return statusText(save, "保存")
             }
 
-            // A 类参数光「写 + SAVE」只会停在 HAL 缓存里：
-            // 探针实测写完 SAVE 后 DapHw::setParam / dosetSingleArParam 一次都没触发。
-            // 逆向 APP 是「写参数 → setEnabled(true)」两步，参数才真正落到 DSP。
-            // 这里补一次 关→开，让它重新走一遍 apply；APP 退出后 effect 仍由系统持有，参数不会丢。
-            runCatching {
-                e.enabled = false
-                e.enabled = true
-            }
+            // 注意：这里**不能**再动 enabled —— 实测在写完后再关→开会触发 HAL 初始化，
+// 把刚写的 A 类值重置成 0。拉起动作已移到写参数之前。
             null
         } catch (t: Throwable) {
             rootCause(t)
