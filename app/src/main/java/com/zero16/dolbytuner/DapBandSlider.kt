@@ -11,6 +11,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -62,6 +63,7 @@ fun DapBandSlider(
     valueColor: Color = Color.Unspecified,
     freqColor: Color = Color.Unspecified,
     selected: Boolean = false,
+    enabled: Boolean = true,
     onSelect: () -> Unit = {},
 ) {
     val density = LocalDensity.current
@@ -99,6 +101,7 @@ fun DapBandSlider(
 
     Column(
         modifier = modifier
+            .then(if (enabled) Modifier else Modifier.alpha(0.38f))
             .width(58.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(if (selected) accent.copy(alpha = 0.10f) else Color.Transparent)
@@ -233,8 +236,8 @@ fun DapBandSlider(
                         )
                     }
                     .size(thumbTouch)
-                    .pointerInput(maxAbsQ4) {
-                        detectDragGestures(
+                    .pointerInput(maxAbsQ4, enabled) {
+                        if (enabled) detectDragGestures(
                             onDragStart = {
                                 dragging = true
                                 dragQ4 = currentValue.toDouble()
@@ -266,8 +269,8 @@ fun DapBandSlider(
                         }
                     }
                     // 双击直接归零（比拖到中间更精确）
-                    .pointerInput(maxAbsQ4) {
-                        detectTapGestures(
+                    .pointerInput(maxAbsQ4, enabled) {
+                        if (enabled) detectTapGestures(
                             onDoubleTap = {
                                 currentOnSelect()
                                 if (currentValue != 0) {

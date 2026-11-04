@@ -456,6 +456,9 @@ private fun GeqScreen(deviceLine: String) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var curve by remember { mutableStateOf(loadGeq(ctx)) }
+    // 音效页接管 EQ（dynproc.dp_debug）时，杜比 GEQ 只读；下方音效参数不受影响
+    val dpPrefs = remember { ctx.getSharedPreferences("dynproc", Context.MODE_PRIVATE) }
+    var dpTakeover by remember { mutableStateOf(dpPrefs.getBoolean("dp_debug", false)) }
     var fxStatus by remember { mutableStateOf("已同步 · DSP 实时参数") }
     var status by remember { mutableStateOf("正在连接 Dolby DSP…") }
     var dolbyOn by remember { mutableStateOf<Boolean?>(null) }
@@ -465,6 +468,7 @@ private fun GeqScreen(deviceLine: String) {
     var showBindDialog by remember { mutableStateOf(false) }
     var showManageDialog by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
+        dpTakeover = dpPrefs.getBoolean("dp_debug", false)
         val err = withContext(Dispatchers.IO) { DapRealtime.openSession() }
         if (err != null) {
             status = "打开失败：$err"
@@ -566,6 +570,23 @@ private fun GeqScreen(deviceLine: String) {
                     }
                     DolbyBadge(on = dolbyOn)
                 }
+                if (dpTakeover) {
+                    Spacer(Modifier.height(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFF6366F1).copy(alpha = 0.14f),
+                        border = BorderStroke(1.dp, Color(0xFF6366F1).copy(alpha = 0.45f))
+                    ) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp)) {
+                            Icon(Icons.Default.GraphicEq, null, tint = Color(0xFF6366F1), modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "已被音效页接管：杜比 GEQ 已切平直，这一栏只读。下方的音效参数仍可正常调节。",
+                                fontSize = 9.sp, lineHeight = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
                 Spacer(Modifier.height(6.dp))
                 BandCurveCanvas(
                     points = DapRealtime.FREQS.mapIndexed { i, f -> f to curve[i] },
@@ -588,6 +609,7 @@ private fun GeqScreen(deviceLine: String) {
                             maxAbsQ4 = DapRealtime.MAX_BOOST_Q4,
                             trackHeight = 240.dp,
                             accent = Accent,
+                            enabled = !dpTakeover,
                             trackColor = cs.outline.copy(alpha = 0.30f),
                             tickColor = cs.onSurfaceVariant,
                             valueColor = cs.onSurfaceVariant,
@@ -636,6 +658,7 @@ private fun GeqScreen(deviceLine: String) {
                         },
                         modifier = Modifier.weight(1f).height(44.dp),
                         shape = RoundedCornerShape(10.dp),
+                        enabled = !dpTakeover,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Accent)
                     ) {
                         Icon(Icons.Default.Refresh, null, Modifier.size(15.dp))
@@ -655,6 +678,7 @@ private fun GeqScreen(deviceLine: String) {
                         },
                         modifier = Modifier.weight(1f).height(44.dp),
                         shape = RoundedCornerShape(10.dp),
+                        enabled = !dpTakeover,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFB45309))
                     ) {
                         Icon(Icons.Default.HorizontalRule, null, Modifier.size(15.dp))
@@ -799,7 +823,9 @@ internal class DpSnapshot(
     // 强度 / AutoEQ（v2.12.5 起，旧预设没有这几项就走默认值）
     val eqIntensity: Int = 100,
     val geqInt: IntArray = IntArray(DapRealtime.BANDS) { 100 },
-    val aeq: String = ""
+    val aeq: String = "",
+    val revMode: Int = 0,        // 0 参数混响 / 1 预设混响
+    val revPreset: Int = 3
 )
 
 internal const val SCOPE_DOLBY = 0
@@ -828,7 +854,9 @@ internal fun dpPack(d: DpSnapshot): String = listOf(
     d.curve.joinToString(","),
     d.eqIntensity.toString(),
     d.geqInt.joinToString(","),
-    d.aeq
+    d.aeq,
+    d.revMode.toString(),
+    d.revPreset.toString()
 ).joinToString("|")
 
 internal fun dpUnpack(s: String): DpSnapshot? {
@@ -863,7 +891,9 @@ internal fun dpUnpack(s: String): DpSnapshot? {
             eqIntensity = p.getOrNull(19)?.toIntOrNull() ?: 100,
             geqInt = (p.getOrNull(20) ?: "").split(",").mapNotNull { it.toIntOrNull() }.toIntArray()
                 .let { if (it.size == DapRealtime.BANDS) it else IntArray(DapRealtime.BANDS) { 100 } },
-            aeq = p.getOrNull(21) ?: ""
+            aeq = p.getOrNull(21) ?: "",
+            revMode = p.getOrNull(22)?.toIntOrNull() ?: 0,
+            revPreset = p.getOrNull(23)?.toIntOrNull() ?: 3
         )
     }.getOrNull()
 }
@@ -1051,7 +1081,8 @@ internal fun loadDpSnapshot(ctx: Context): DpSnapshot {
         revOn = p.getBoolean("rev_on", false), rev = loadRev(p),
         postOn = p.getBoolean("post_on", false), post = loadPost(p),
         elOn = elOn, elBase = elBase, elStrength = elStrength, elMaxDb = elMaxDb,
-        eqIntensity = inten, geqInt = gi, aeq = aeqCsv
+        eqIntensity = inten, geqInt = gi, aeq = aeqCsv,
+        revMode = p.getInt("rev_mode", 0), revPreset = p.getInt("rev_preset", 3)
     )
 }
 
@@ -1081,7 +1112,18 @@ private suspend fun applyDpPreset(ctx: Context, d: DpSnapshot?): String? {
         if (!ok) return@withContext "音效引擎启动失败"
         DynProc.setPreEq(d.curve)
         if (d.postOn) DynProc.setPostEq(d.post, true)
-        if (d.revOn) DynReverb.start(d.rev) else DynReverb.stop()
+        if (d.revOn) {
+            if (d.revMode == 1) {
+                DynReverb.stop()
+                DynPresetReverb.start(d.revPreset)
+            } else {
+                DynPresetReverb.stop()
+                DynReverb.start(d.rev)
+            }
+        } else {
+            DynReverb.stop()
+            DynPresetReverb.stop()
+        }
         saveDpPrefs(ctx, d)
         null
     }
@@ -1111,6 +1153,8 @@ private fun saveDpPrefs(ctx: Context, d: DpSnapshot) {
         .putInt("eq_intensity", d.eqIntensity)
         .putString("geq_int", d.geqInt.joinToString(","))
         .putString("aeq", d.aeq)
+        .putInt("rev_mode", d.revMode)
+        .putInt("rev_preset", d.revPreset)
         .apply()
     saveDpGeq(p, d.geqQ4)
     savePeq(p, parsePeqStr(d.peq))
@@ -1629,6 +1673,8 @@ private fun EffectsScreen() {
     var mbcOn by remember { mutableStateOf(prefs.getBoolean("mbc_on", false)) }
     var revOn by remember { mutableStateOf(prefs.getBoolean("rev_on", false)) }
     var revData by remember { mutableStateOf(loadRev(prefs)) }
+    var revMode by remember { mutableIntStateOf(prefs.getInt("rev_mode", 0)) }   // 0 参数 / 1 预设
+    var revPreset by remember { mutableIntStateOf(prefs.getInt("rev_preset", 3)) }
     var postOn by remember { mutableStateOf(prefs.getBoolean("post_on", false)) }
     var postData by remember { mutableStateOf(loadPost(prefs)) }
     var eqTab by remember { mutableIntStateOf(prefs.getInt("eq_tab", 0)) }
@@ -1716,7 +1762,40 @@ private fun EffectsScreen() {
         applyMbc()
     }
 
+    /** 按当前混响引擎模式启动/停止（0 = 参数混响，1 = 预设混响） */
+    fun applyRevEngine() {
+        if (!revOn) {
+            DynReverb.stop()
+            DynPresetReverb.stop()
+            return
+        }
+        if (revMode == 0) {
+            DynPresetReverb.stop()
+            DynReverb.start(revData.copyOf())
+        } else {
+            DynReverb.stop()
+            DynPresetReverb.start(revPreset)
+        }
+    }
+
+    /** 切换混响引擎：先停旧的再起新的 */
+    fun revEngineSwitch() {
+        scope.launch {
+            busy = true
+            withContext(Dispatchers.IO) { applyRevEngine() }
+            status = if (revMode == 0) DynReverb.status else DynPresetReverb.status
+            busy = false
+        }
+    }
+
     fun applyRev() {
+        if (revMode == 1) {
+            scope.launch {
+                withContext(Dispatchers.IO) { DynPresetReverb.setPreset(revPreset) }
+                status = DynPresetReverb.status
+            }
+            return
+        }
         val d = revData.copyOf()
         scope.launch {
             withContext(Dispatchers.IO) { DynReverb.set(d) }
@@ -1730,10 +1809,8 @@ private fun EffectsScreen() {
         prefs.edit().putBoolean("rev_on", on).apply()
         scope.launch {
             busy = true
-            withContext(Dispatchers.IO) {
-                if (on) DynReverb.start(revData.copyOf()) else DynReverb.stop()
-            }
-            status = DynReverb.status
+            withContext(Dispatchers.IO) { applyRevEngine() }
+            status = if (revMode == 0) DynReverb.status else DynPresetReverb.status
             busy = false
         }
     }
@@ -1926,6 +2003,7 @@ private fun EffectsScreen() {
         limOn = true; thr = -20; atk = 10; rel = 60; rat = 100; post = 0; link = 0
         mbcOn = false; mbcStore = defaultMbcInts()
         revOn = false; revData = DynReverb.DEFAULTS.copyOf()
+        revMode = 0; revPreset = 3
         postOn = false; postData = IntArray(11)
         eqTab = 0; geqQ4 = IntArray(DapRealtime.BANDS); geqQ = 10; geqMaster = 0
         peqData = defaultPeq()
@@ -1938,6 +2016,7 @@ private fun EffectsScreen() {
             .putInt("lim_thr", -20).putInt("lim_atk", 10).putInt("lim_rel", 60)
             .putInt("lim_rat", 100).putInt("lim_post", 0).putInt("lim_link", 0)
             .putBoolean("mbc_on", false).putBoolean("rev_on", false)
+            .putInt("rev_mode", 0).putInt("rev_preset", 3)
             .putBoolean("post_on", false).putInt("eq_tab", 0)
             .putInt("geq_q", 10).putInt("geq_master", 0)
             .putInt("eq_intensity", 100).putString("aeq", "")
@@ -1964,6 +2043,7 @@ private fun EffectsScreen() {
                     DynProc.setMbc(dpMbc(defaultMbcInts(), false))
                     DynProc.setPostEq(IntArray(10), false)
                     DynReverb.stop()
+                    DynPresetReverb.stop()
                 }
             }
             status = DynProc.status
@@ -2147,7 +2227,7 @@ private fun EffectsScreen() {
                     DynProc.setMbc(toDynMbc(mbcStore))
                     if (postOn) DynProc.setPostEq(postData.copyOf(), true)
                     else DynProc.setPostEq(IntArray(10), false)
-                    if (revOn) DynReverb.start(revData.copyOf()) else DynReverb.stop()
+                    applyRevEngine()
                 }
             }
             status = DynProc.status
@@ -2184,9 +2264,9 @@ private fun EffectsScreen() {
         if (dpOn) {
             pushAllDp()
         }
-        if (revOn && !DynReverb.running) {
-            withContext(Dispatchers.IO) { DynReverb.start(revData.copyOf()) }
-            status = DynReverb.status
+        if (revOn && !DynReverb.running && !DynPresetReverb.running) {
+            withContext(Dispatchers.IO) { applyRevEngine() }
+            status = if (revMode == 0) DynReverb.status else DynPresetReverb.status
         }
     }
 
@@ -2796,8 +2876,9 @@ private fun EffectsScreen() {
         }
 
         // ===== 空间环境混响 =====
+        val revEngineTag = (if (revMode == 0) DynReverb.shortStatus else DynPresetReverb.shortStatus)
         EffectCard(
-            title = "空间环境混响" + DynReverb.shortStatus.let { if (it.isBlank()) "" else " · $it" },
+            title = "空间环境混响" + if (revEngineTag.isBlank()) "" else " · $revEngineTag",
             subtitle = "Reverb · 空间感与残响",
             icon = Icons.Default.Wallpaper,
             enabled = revOn,
@@ -2805,6 +2886,20 @@ private fun EffectsScreen() {
             accent = Color(0xFF0EA5E9)
         ) {
             val cRev = Color(0xFF0EA5E9)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                EqTab("参数混响", revMode == 0, cRev, dpOn) {
+                    revMode = 0
+                    prefs.edit().putInt("rev_mode", 0).apply()
+                    if (revOn) revEngineSwitch()
+                }
+                EqTab("预设混响", revMode == 1, cRev, dpOn) {
+                    revMode = 1
+                    prefs.edit().putInt("rev_mode", 1).apply()
+                    if (revOn) revEngineSwitch()
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            if (revMode == 0) {
             val revPresets = listOf(
                 "原声" to intArrayOf(-200, -100, 2200, 850, -800, 15, 300, 20, 1000, 1000),
                 "演奏厅" to intArrayOf(-100, -200, 2800, 900, -600, 20, 400, 25, 1000, 1000),
@@ -2876,6 +2971,38 @@ private fun EffectsScreen() {
                 "密度 · Density", String.format("%.2f", revData[9] / 1000f), revData[9], 0..1000, revOn,
                 onLive = { liveRev(9, it) }, onDone = { commitRev(9, it) }
             )
+            } else {
+                val rvItems = DynPresetReverb.PRESET_NAMES.mapIndexed { i, s -> i to s }
+                rvItems.chunked(3).forEach { row ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        row.forEach { pr ->
+                            val sel = revPreset == pr.first
+                            Surface(
+                                Modifier.weight(1f).clickable(enabled = revOn && dpOn) {
+                                    revPreset = pr.first
+                                    prefs.edit().putInt("rev_preset", pr.first).apply()
+                                    applyRev()
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                color = cRev.copy(alpha = if (sel) 0.26f else 0.10f),
+                                border = BorderStroke(1.dp, cRev.copy(alpha = if (sel) 0.7f else 0.3f))
+                            ) {
+                                Box(Modifier.padding(vertical = 7.dp), contentAlignment = Alignment.Center) {
+                                    Text(
+                                        pr.second, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                                        color = if (sel) cRev else cs.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                }
+                Text(
+                    "预设混响是系统自带的经典混响档位，听感比参数混响明显；想细调请切到「参数混响」。",
+                    fontSize = 9.sp, lineHeight = 13.sp, color = cs.onSurfaceVariant
+                )
+            }
         }
 
         // ===== 后置均衡器 =====
@@ -3246,6 +3373,46 @@ private fun SettingsScreen(activity: Activity) {
                             runCatching { ctx.stopService(Intent(ctx, DeviceAutomationService::class.java)) }
                         }
                     }
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+            Row(
+                Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable {
+                        if (!deviceService) {
+                            android.widget.Toast.makeText(
+                                ctx, "请先开启「后台设备监听」", android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                            return@clickable
+                        }
+                        if (Build.VERSION.SDK_INT >= 33) {
+                            notifPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                        runCatching {
+                            ctx.startForegroundService(
+                                Intent(ctx, DeviceAutomationService::class.java)
+                                    .setAction(DeviceAutomationService.ACTION_REFRESH)
+                            )
+                        }
+                        android.widget.Toast.makeText(
+                            ctx, "已重新下发监听通知", android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Refresh, null,
+                    tint = Accent, modifier = Modifier.size(15.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("重新下发监听通知", fontSize = 11.sp, color = Accent)
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "按当前设备刷新一次常驻通知",
+                    fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

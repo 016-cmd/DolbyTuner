@@ -639,6 +639,12 @@ private fun PresetDetailDialog(p: Preset, onClose: () -> Unit) {
 
                     DetailTitle("音效页（DP）· 空间与修形", cs)
                     DetailRow("空间混响", mark(d.revOn), cs)
+                    DetailRow(
+                        "混响引擎",
+                        if (d.revMode == 1) "预设混响 · " + DynPresetReverb.PRESET_NAMES.getOrElse(d.revPreset) { "--" }
+                        else "参数混响",
+                        cs
+                    )
                     DetailRow("房间 / 高频吸收", String.format("%.1f / %.1f dB", d.rev.getOrElse(0) { -200 } / 100f, d.rev.getOrElse(1) { -100 } / 100f), cs)
                     DetailRow("衰减 / 高频衰减比", String.format("%d ms / %.2f", d.rev.getOrElse(2) { 2200 }, d.rev.getOrElse(3) { 850 } / 1000f), cs)
                     DetailRow("早期反射 / 延迟", String.format("%.1f dB / %d ms", d.rev.getOrElse(4) { -800 } / 100f, d.rev.getOrElse(5) { 15 }), cs)

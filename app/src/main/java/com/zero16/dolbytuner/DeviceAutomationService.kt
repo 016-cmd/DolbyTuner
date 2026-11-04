@@ -41,7 +41,19 @@ class DeviceAutomationService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (!registered) register()
+        // 设置页「重新下发监听通知」：按当前设备/绑定刷新一次常驻通知
+        if (intent?.action == ACTION_REFRESH) refreshNotice()
         return START_STICKY
+    }
+
+    private fun refreshNotice() {
+        scope.launch {
+            runCatching {
+                val device = detectOutputDevice(this@DeviceAutomationService)
+                val binding = DeviceTuningStore.find(this@DeviceAutomationService, device.key)
+                updateNotification(device.name, binding?.presetName ?: "未绑定（平直）")
+            }
+        }
     }
 
     override fun onDestroy() {
@@ -140,6 +152,8 @@ class DeviceAutomationService : Service() {
     }
 
     companion object {
+        /** 设置页点「重新下发监听通知」时带的 action */
+        const val ACTION_REFRESH = "com.zero16.dolbytuner.ACTION_REFRESH_NOTICE"
         private const val CHANNEL_ID = "device_automation"
         private const val NOTIFICATION_ID = 1001
     }
