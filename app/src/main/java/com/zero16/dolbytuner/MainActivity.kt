@@ -1129,7 +1129,7 @@ Column(
             subtitle = "dvle · 声场扩展强度",
             icon = Icons.Default.Tune,
             enabled = dapFx.surroundOn,
-            onEnabledChange = { setDap(dapFx.copy(surroundOn = it), false) }
+            onEnabledChange = { setDap(dapFx.copy(surroundOn = it), false) },
             accent = Color(0xFF3B82F6)
         ) {
             ParamSlider(
@@ -1166,7 +1166,7 @@ Column(
             subtitle = "deon 105 · 只提升人声频段",
             icon = Icons.Default.RecordVoiceOver,
             enabled = fx.dialogOn,
-            onEnabledChange = { apply(fx.copy(dialogOn = it)) }
+            onEnabledChange = { apply(fx.copy(dialogOn = it)) },
             accent = Color(0xFF22C55E)
         ) {
             FxSlider(
@@ -1182,7 +1182,7 @@ Column(
             subtitle = "ieon · 随内容自动补偿",
             icon = Icons.Default.Equalizer,
             enabled = dapFx.ieqOn,
-            onEnabledChange = { setDap(dapFx.copy(ieqOn = it), false) }
+            onEnabledChange = { setDap(dapFx.copy(ieqOn = it), false) },
             accent = Color(0xFF06B6D4)
         ) {
             ParamSlider(
@@ -1204,7 +1204,7 @@ Column(
             subtitle = "dplp · 防破音",
             icon = Icons.Default.Warning,
             enabled = dapFx.limiterOn,
-            onEnabledChange = { setDap(dapFx.copy(limiterOn = it), false) }
+            onEnabledChange = { setDap(dapFx.copy(limiterOn = it), false) },
             accent = Color(0xFFEF4444)
         ) {
             ParamSlider(
@@ -1235,7 +1235,7 @@ Column(
             subtitle = "vol · 整体电平补偿",
             icon = Icons.Default.VolumeUp,
             enabled = dapFx.postGainOn,
-            onEnabledChange = { setDap(dapFx.copy(postGainOn = it), false) }
+            onEnabledChange = { setDap(dapFx.copy(postGainOn = it), false) },
             accent = Color(0xFF8B5CF6)
         ) {
             ParamSlider(
