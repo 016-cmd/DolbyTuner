@@ -86,6 +86,7 @@ internal fun ConfigScreen() {
 
     var showExportConfirm by remember { mutableStateOf(false) }
     var exportName by remember { mutableStateOf("") }
+    var exportSel by remember { mutableStateOf(-1) }   // -1 = 全部
 
     var applyTarget by remember { mutableStateOf<Preset?>(null) }
     var deleteTarget by remember { mutableStateOf<Preset?>(null) }
@@ -160,6 +161,7 @@ internal fun ConfigScreen() {
                     }
                     ConfigBtn(Icons.Default.Share, "导出预设", Modifier.weight(1f)) {
                         exportName = exportFileName()
+                        exportSel = -1
                         showExportConfirm = true
                     }
                 }
@@ -302,17 +304,30 @@ internal fun ConfigScreen() {
             title = { Text("导出预设", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
             text = {
                 Column {
-                    Text("将导出 ${presets.size} 个预设（JSON）", fontSize = 11.sp)
+                    Text(
+                        if (exportSel < 0) "选择要导出的预设（当前：全部 ${presets.size} 个）"
+                        else "选择要导出的预设（当前：${presets.getOrNull(exportSel)?.name ?: "--"}）",
+                        fontSize = 11.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Column(
+                        Modifier.fillMaxWidth().height(190.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        ExportPickRow("全部预设（${presets.size} 个）", exportSel < 0, cs) { exportSel = -1 }
+                        presets.forEachIndexed { i, p ->
+                            ExportPickRow(p.name, exportSel == i, cs) { exportSel = i }
+                        }
+                    }
                     Spacer(Modifier.height(8.dp))
                     Text("保存位置", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = cs.onSurfaceVariant)
                     Text("内部存储 / Download / DolbyTuner /", fontSize = 10.sp, color = Accent)
                     Spacer(Modifier.height(6.dp))
                     Text("文件名", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = cs.onSurfaceVariant)
-                    Text(exportName, fontSize = 10.sp, color = Accent)
-                    Spacer(Modifier.height(8.dp))
                     Text(
-                        "若已有同名文件，系统会自动加序号，不会覆盖旧的。",
-                        fontSize = 9.sp, color = cs.onSurfaceVariant
+                        if (exportSel < 0) exportName
+                        else exportName.replace(".json", "_${presets.getOrNull(exportSel)?.name ?: ""}.json"),
+                        fontSize = 10.sp, color = Accent
                     )
                 }
             },
@@ -320,7 +335,15 @@ internal fun ConfigScreen() {
                 TextButton(onClick = {
                     showExportConfirm = false
                     scope.launch {
-                        val name = withContext(Dispatchers.IO) { exportPresets(ctx, exportName) }
+                        val sel = exportSel
+                        val target = if (sel < 0) presets else listOfNotNull(presets.getOrNull(sel))
+                        if (target.isEmpty()) {
+                            status = "没有可导出的预设"
+                            return@launch
+                        }
+                        val fname = if (sel < 0) exportName
+                        else exportName.replace(".json", "_${target[0].name}.json")
+                        val name = withContext(Dispatchers.IO) { exportPresets(ctx, fname, target) }
                         status = if (name == null) "导出失败：无法写入 Download/DolbyTuner"
                         else "已导出：Download/DolbyTuner/$name"
                     }
@@ -633,6 +656,10 @@ private fun PresetDetailDialog(p: Preset, onClose: () -> Unit) {
                     DetailRow("等响补偿", mark(d.elOn), cs)
                     DetailRow("基准音量", if (d.elBase > 0) "${d.elBase}%" else "未设定", cs)
                     DetailRow("补偿强度 / 上限", String.format("%.1f / %.1f dB", d.elStrength / 10f, d.elMaxDb / 10f), cs)
+                    DetailRow("整体强度", "${d.eqIntensity}%", cs)
+                    if (d.aeq.isNotBlank()) DetailRow("曲线来源", "AutoEQ 导入（127 点）", cs)
+                    val nz = d.geqInt.count { it != 100 }
+                    if (nz > 0) DetailRow("逐段强度", "$nz 段已调整", cs)
                 }
 
             }
@@ -678,6 +705,30 @@ private fun FxLine(label: String, value: String, color: Color) {
 }
 
 @Composable
+private fun ExportPickRow(name: String, selected: Boolean, cs: androidx.compose.material3.ColorScheme, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 2.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (selected) Accent.copy(alpha = 0.16f) else androidx.compose.ui.graphics.Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            if (selected) "◉" else "○",
+            fontSize = 11.sp,
+            color = if (selected) Accent else cs.onSurfaceVariant
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            name, fontSize = 11.sp, maxLines = 1,
+            color = if (selected) Accent else cs.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
 private fun GreenMiniButton(text: String, bg: Color, onClick: () -> Unit) {
     Box(
         Modifier.fillMaxWidth().height(38.dp)
@@ -714,8 +765,7 @@ private fun exportFileName(): String =
         ".json"
 
 /** 写入 Download/DolbyTuner/<name>，成功返回实际文件名 */
-private fun exportPresets(ctx: Context, name: String): String? {
-    val list = loadPresets(ctx)
+private fun exportPresets(ctx: Context, name: String, list: List<Preset>): String? {
     val arr = org.json.JSONArray()
     list.forEach { p ->
         arr.put(org.json.JSONObject().apply {
@@ -729,6 +779,8 @@ private fun exportPresets(ctx: Context, name: String): String? {
             put("width", p.fx.bassWidth)
             put("dialog", if (p.fx.dialogOn) 1 else 0)
             put("damt", p.fx.dialogAmt)
+            put("scope", p.scope)
+            put("dp", p.dp?.let { dpPack(it) } ?: "")
         })
     }
     return try {

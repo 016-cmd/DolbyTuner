@@ -91,6 +91,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -111,6 +112,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -789,7 +791,11 @@ internal class DpSnapshot(
     val elOn: Boolean,
     val elBase: Int,
     val elStrength: Int,
-    val elMaxDb: Int
+    val elMaxDb: Int,
+    // 强度 / AutoEQ（v2.12.5 起，旧预设没有这几项就走默认值）
+    val eqIntensity: Int = 100,
+    val geqInt: IntArray = IntArray(DapRealtime.BANDS) { 100 },
+    val aeq: String = ""
 )
 
 internal const val SCOPE_DOLBY = 0
@@ -815,7 +821,10 @@ internal fun dpPack(d: DpSnapshot): String = listOf(
     d.geqQ.toString(),
     d.geqMaster.toString(),
     d.peq,
-    d.curve.joinToString(",")
+    d.curve.joinToString(","),
+    d.eqIntensity.toString(),
+    d.geqInt.joinToString(","),
+    d.aeq
 ).joinToString("|")
 
 internal fun dpUnpack(s: String): DpSnapshot? {
@@ -846,7 +855,11 @@ internal fun dpUnpack(s: String): DpSnapshot? {
             elOn = p[9] == "1",
             elBase = p[10].toInt(),
             elStrength = p[11].toInt(),
-            elMaxDb = p[12].toInt()
+            elMaxDb = p[12].toInt(),
+            eqIntensity = p.getOrNull(19)?.toIntOrNull() ?: 100,
+            geqInt = (p.getOrNull(20) ?: "").split(",").mapNotNull { it.toIntOrNull() }.toIntArray()
+                .let { if (it.size == DapRealtime.BANDS) it else IntArray(DapRealtime.BANDS) { 100 } },
+            aeq = p.getOrNull(21) ?: ""
         )
     }.getOrNull()
 }
@@ -998,8 +1011,19 @@ internal fun loadDpSnapshot(ctx: Context): DpSnapshot {
     val elBase = p.getInt("el_base", -1)
     val elStrength = p.getInt("el_strength", 10)
     val elMaxDb = p.getInt("el_maxdb", 80)
-    val raw = if (eqTab == 0) EqMath.geq20To127(geq, q / 10f, m / 10f)
-    else EqMath.peqTo127(peq)
+    val gi = (p.getString("geq_int", "") ?: "").split(",").mapNotNull { it.toIntOrNull() }
+        .let { if (it.size == DapRealtime.BANDS) it.toIntArray() else IntArray(DapRealtime.BANDS) { 100 } }
+    val inten = p.getInt("eq_intensity", 100)
+    val aeqCsv = p.getString("aeq", "") ?: ""
+    val aeqCurve = AutoEq.fromCsv(aeqCsv)
+    val base = aeqCurve ?: if (eqTab == 0) {
+        EqMath.geq20To127(
+            IntArray(DapRealtime.BANDS) { i ->
+                (geq.getOrElse(i) { 0 } * gi.getOrElse(i) { 100 } / 100f).toInt()
+            }, q / 10f, m / 10f
+        )
+    } else EqMath.peqTo127(peq)
+    val raw = AutoEq.scale(base, inten)
     var pct = 100
     runCatching {
         val am = ctx.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
@@ -1022,7 +1046,8 @@ internal fun loadDpSnapshot(ctx: Context): DpSnapshot {
         mbcOn = p.getBoolean("mbc_on", false), mbc = loadMbc(p),
         revOn = p.getBoolean("rev_on", false), rev = loadRev(p),
         postOn = p.getBoolean("post_on", false), post = loadPost(p),
-        elOn = elOn, elBase = elBase, elStrength = elStrength, elMaxDb = elMaxDb
+        elOn = elOn, elBase = elBase, elStrength = elStrength, elMaxDb = elMaxDb,
+        eqIntensity = inten, geqInt = gi, aeq = aeqCsv
     )
 }
 
@@ -1079,6 +1104,9 @@ private fun saveDpPrefs(ctx: Context, d: DpSnapshot) {
         .putInt("el_base", d.elBase)
         .putInt("el_strength", d.elStrength)
         .putInt("el_maxdb", d.elMaxDb)
+        .putInt("eq_intensity", d.eqIntensity)
+        .putString("geq_int", d.geqInt.joinToString(","))
+        .putString("aeq", d.aeq)
         .apply()
     saveDpGeq(p, d.geqQ4)
     savePeq(p, parsePeqStr(d.peq))
@@ -1609,6 +1637,18 @@ private fun EffectsScreen() {
     var eqCurve by remember { mutableStateOf(FloatArray(127)) }
     var eqRaw by remember { mutableStateOf(FloatArray(127)) }
 
+    // ===== AutoEQ 导入 + EQ 强度（整体 / 逐段）=====
+    var aeqCurve by remember { mutableStateOf(AutoEq.fromCsv(prefs.getString("aeq", "") ?: "")) }
+    var showAeqDlg by remember { mutableStateOf(false) }
+    var aeqText by remember { mutableStateOf("") }
+    var eqIntensity by remember { mutableIntStateOf(prefs.getInt("eq_intensity", 100)) }
+    var geqInt by remember {
+        mutableStateOf(
+            (prefs.getString("geq_int", "") ?: "").split(",").mapNotNull { it.toIntOrNull() }
+                .let { if (it.size == DapRealtime.BANDS) it.toIntArray() else IntArray(DapRealtime.BANDS) { 100 } }
+        )
+    }
+
     // ===== 等响补偿 =====
     var elOn by remember { mutableStateOf(prefs.getBoolean("el_on", false)) }
     var elBase by remember { mutableIntStateOf(prefs.getInt("el_base", -1)) }
@@ -1633,6 +1673,25 @@ private fun EffectsScreen() {
                 elStrength / 10f, elMaxDb / 10f
             )
         } else raw
+
+    /**
+     * 当前 EQ 的原始曲线（未套等响补偿）：
+     * AutoEQ 导入 > GEQ(20 段 × 逐段强度) > PEQ，最后统一乘整体强度。
+     */
+    fun rawCurve(peqOverride: List<PeqBand>? = null): FloatArray {
+        val ae = aeqCurve
+        val base: FloatArray = if (ae != null) {
+            ae.copyOf()
+        } else if (eqTab == 0) {
+            val scaled = IntArray(DapRealtime.BANDS) { i ->
+                (geqQ4.getOrElse(i) { 0 } * geqInt.getOrElse(i) { 100 } / 100f).toInt()
+            }
+            EqMath.geq20To127(scaled, geqQ / 10f, geqMaster / 10f)
+        } else {
+            EqMath.peqTo127(peqOverride ?: peqData)
+        }
+        return AutoEq.scale(base, eqIntensity)
+    }
 
 
     var sel by remember { mutableIntStateOf(prefs.getInt("mbc_sel", 0)) }
@@ -1848,11 +1907,7 @@ private fun EffectsScreen() {
     }
 
     fun pushEq() {
-        val raw = if (eqTab == 0) {
-            EqMath.geq20To127(geqQ4, geqQ / 10f, geqMaster / 10f)
-        } else {
-            EqMath.peqTo127(peqLive())
-        }
+        val raw = rawCurve(peqLive())
         eqRaw = raw
         val curve = finalEq(raw)
         eqCurve = curve
@@ -1872,6 +1927,8 @@ private fun EffectsScreen() {
         eqTab = 0; geqQ4 = IntArray(DapRealtime.BANDS); geqQ = 10; geqMaster = 0
         peqData = defaultPeq()
         eqRaw = FloatArray(127); eqCurve = FloatArray(127)
+        aeqCurve = null; eqIntensity = 100
+        geqInt = IntArray(DapRealtime.BANDS) { 100 }
         elOn = false; elBase = -1; elStrength = 10; elMaxDb = 80
         prefs.edit()
             .putInt("gain", 0).putBoolean("lim_on", true)
@@ -1880,6 +1937,8 @@ private fun EffectsScreen() {
             .putBoolean("mbc_on", false).putBoolean("rev_on", false)
             .putBoolean("post_on", false).putInt("eq_tab", 0)
             .putInt("geq_q", 10).putInt("geq_master", 0)
+            .putInt("eq_intensity", 100).putString("aeq", "")
+            .putString("geq_int", IntArray(DapRealtime.BANDS) { 100 }.joinToString(","))
             .putBoolean("el_on", false).putInt("el_base", -1)
             .putInt("el_strength", 10).putInt("el_maxdb", 80)
             .apply()
@@ -1947,7 +2006,7 @@ private fun EffectsScreen() {
         val n = geqQ4.copyOf()
         n[i] = q4
         geqQ4 = n
-        eqRaw = EqMath.geq20To127(n, geqQ / 10f, geqMaster / 10f)
+        eqRaw = rawCurve()
         eqCurve = finalEq(eqRaw)
         saveDpGeq(prefs, n)
         scheduleEq()
@@ -1956,7 +2015,7 @@ private fun EffectsScreen() {
     fun updGeqQ(v: Int) {
         geqQ = v
         prefs.edit().putInt("geq_q", v).apply()
-        eqRaw = EqMath.geq20To127(geqQ4, v / 10f, geqMaster / 10f)
+        eqRaw = rawCurve()
         eqCurve = finalEq(eqRaw)
         scheduleEq()
     }
@@ -1964,7 +2023,7 @@ private fun EffectsScreen() {
     fun updGeqMaster(v: Int) {
         geqMaster = v
         prefs.edit().putInt("geq_master", v).apply()
-        eqRaw = EqMath.geq20To127(geqQ4, geqQ / 10f, v / 10f)
+        eqRaw = rawCurve()
         eqCurve = finalEq(eqRaw)
         scheduleEq()
     }
@@ -1985,7 +2044,7 @@ private fun EffectsScreen() {
         val l = peqLive()
         peqData = l
         savePeq(prefs, l)
-        eqRaw = EqMath.peqTo127(l)
+        eqRaw = rawCurve(l)
         eqCurve = finalEq(eqRaw)
         scheduleEq()
     }
@@ -2006,7 +2065,7 @@ private fun EffectsScreen() {
         peqData = l
         savePeq(prefs, l)
         selectPeq((peqSel - 1).coerceAtLeast(0))
-        eqRaw = EqMath.peqTo127(l)
+        eqRaw = rawCurve(l)
         eqCurve = finalEq(eqRaw)
         scheduleEq()
     }
@@ -2063,9 +2122,7 @@ private fun EffectsScreen() {
     }
 
 
-    fun currentRaw(): FloatArray = if (eqTab == 0) {
-        EqMath.geq20To127(geqQ4, geqQ / 10f, geqMaster / 10f)
-    } else EqMath.peqTo127(peqData)
+    fun currentRaw(): FloatArray = rawCurve()
 
     /** 启动/重启引擎，并把界面上的全部参数一次性下发（含 EQ 曲线） */
     fun pushAllDp() {
@@ -2203,7 +2260,7 @@ private fun EffectsScreen() {
                     EqTab("GEQ", eqTab == 0, cEq, dpOn) {
                         eqTab = 0
                         prefs.edit().putInt("eq_tab", 0).apply()
-                        eqRaw = EqMath.geq20To127(geqQ4, geqQ / 10f, geqMaster / 10f)
+                        eqRaw = rawCurve()
                         eqCurve = finalEq(eqRaw)
                         scheduleEq()
                     }
@@ -2211,7 +2268,7 @@ private fun EffectsScreen() {
                     EqTab("PEQ", eqTab == 1, cEq, dpOn) {
                         eqTab = 1
                         prefs.edit().putInt("eq_tab", 1).apply()
-                        eqRaw = EqMath.peqTo127(peqData)
+                        eqRaw = rawCurve()
                         eqCurve = finalEq(eqRaw)
                         scheduleEq()
                     }
@@ -2239,8 +2296,40 @@ private fun EffectsScreen() {
                     accent = cEq
                 )
                 Spacer(Modifier.height(6.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (aeqCurve != null) "AutoEQ 曲线生效中 · 127 点"
+                        else "可从 AutoEQ 的 GraphicEQ 文本导入整条曲线",
+                        fontSize = 9.sp,
+                        color = if (aeqCurve != null) Color(0xFF10B981) else cs.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (aeqCurve != null) {
+                        TextButton(
+                            onClick = {
+                                if (!dpOn) return@TextButton
+                                aeqCurve = null
+                                prefs.edit().putString("aeq", "").apply()
+                                eqRaw = rawCurve()
+                                eqCurve = finalEq(eqRaw)
+                                scheduleEq()
+                            },
+                            enabled = dpOn
+                        ) { Text("清除", fontSize = 10.sp, color = cs.onSurfaceVariant) }
+                    }
+                    TextButton(
+                        onClick = { if (dpOn) { aeqText = ""; showAeqDlg = true } },
+                        enabled = dpOn
+                    ) { Text("导入 AutoEQ", fontSize = 10.sp, color = cEq) }
+                }
+                Spacer(Modifier.height(2.dp))
 
-                if (eqTab == 0) {
+                if (aeqCurve != null) {
+                    Text(
+                        "GEQ / PEQ 编辑已暂停（曲线来自导入文件）；点「清除」可回到手动调节。",
+                        fontSize = 9.sp, color = cs.onSurfaceVariant
+                    )
+                } else if (eqTab == 0) {
                     LazyRow(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -2346,6 +2435,66 @@ private fun EffectsScreen() {
             }
         }
 
+        // ===== EQ 强度（整体 / 逐段）=====
+        EffectCard(
+            title = "EQ 强度",
+            subtitle = "整体与逐段缩放 · 100% 为调好的原曲线",
+            icon = Icons.Default.Tune,
+            enabled = true,
+            onEnabledChange = {},
+            showSwitch = false,
+            initiallyExpanded = true,
+            accent = cEq
+        ) {
+            FxSlider(
+                "整体强度", "$eqIntensity%", eqIntensity, 0..150, debugOn,
+                onLive = {
+                    eqIntensity = it
+                    prefs.edit().putInt("eq_intensity", it).apply()
+                    scheduleEq()
+                },
+                onDone = {
+                    eqIntensity = it
+                    prefs.edit().putInt("eq_intensity", it).apply()
+                    scheduleEq()
+                }
+            )
+            if (eqTab == 0 && aeqCurve == null) {
+                Spacer(Modifier.height(6.dp))
+                Text("逐段强度 · 按住左右拖动", fontSize = 9.sp, color = cs.onSurfaceVariant)
+                Spacer(Modifier.height(4.dp))
+                LazyRow(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 2.dp)
+                ) {
+                    items(DapRealtime.BANDS) { i ->
+                        PctBandSlider(
+                            label = fmtFreq(DapRealtime.FREQS[i]),
+                            value = geqInt.getOrElse(i) { 100 },
+                            accent = cEq,
+                            enabled = debugOn && dpOn,
+                            onChange = { v ->
+                                val n = geqInt.copyOf()
+                                if (i < n.size) n[i] = v
+                                geqInt = n
+                                prefs.edit().putString("geq_int", n.joinToString(",")).apply()
+                                eqRaw = rawCurve()
+                                eqCurve = finalEq(eqRaw)
+                                scheduleEq()
+                            }
+                        )
+                    }
+                }
+            } else {
+                Text(
+                    if (aeqCurve != null) "AutoEQ 曲线模式下只用整体强度"
+                    else "PEQ 模式下只用整体强度",
+                    fontSize = 9.sp, color = cs.onSurfaceVariant
+                )
+            }
+        }
+
         // ===== 等响补偿 =====
         val cEl = Color(0xFF8B5CF6)
         EffectCard(
@@ -2364,9 +2513,7 @@ private fun EffectsScreen() {
                 if (on) {
                     pushEq()
                 } else {
-                    eqRaw = if (eqTab == 0) {
-                        EqMath.geq20To127(geqQ4, geqQ / 10f, geqMaster / 10f)
-                    } else EqMath.peqTo127(peqData)
+                    eqRaw = rawCurve()
                     eqCurve = eqRaw
                     scope.launch {
                         withContext(Dispatchers.IO) { DynProc.setPreEq(eqRaw) }
@@ -2781,6 +2928,48 @@ private fun EffectsScreen() {
             )
         }
         }
+    }
+
+    if (showAeqDlg) {
+        AlertDialog(
+            onDismissRequest = { showAeqDlg = false },
+            title = { Text("导入 AutoEQ 曲线", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
+            text = {
+                Column {
+                    Text(
+                        "粘贴 AutoEQ 输出的 GraphicEQ 文本，或每行「频率 增益」两列。",
+                        fontSize = 9.sp, color = cs.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = aeqText,
+                        onValueChange = { aeqText = it },
+                        modifier = Modifier.fillMaxWidth().height(150.dp),
+                        textStyle = TextStyle(fontSize = 10.sp),
+                        placeholder = { Text("GraphicEQ:20 -1.5;21 -1.4; …", fontSize = 10.sp) }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val c = AutoEq.parse(aeqText)
+                    if (c == null) {
+                        status = "导入失败：没解析出频点"
+                    } else {
+                        aeqCurve = c
+                        prefs.edit().putString("aeq", AutoEq.toCsv(c)).apply()
+                        eqRaw = rawCurve()
+                        eqCurve = finalEq(eqRaw)
+                        scheduleEq()
+                        status = "已导入 AutoEQ 曲线（127 点）"
+                        showAeqDlg = false
+                    }
+                }) { Text("导入", color = cEq, fontSize = 12.sp) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAeqDlg = false }) { Text("取消", fontSize = 12.sp) }
+            }
+        )
     }
 
     if (showDebugDlg) {

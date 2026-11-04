@@ -6,6 +6,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -291,4 +292,63 @@ fun DapBandSlider(
             maxLines = 1
         )
     }
+}
+
+/**
+ * 百分比竖向滑杆（用于「逐段强度」）：0~100，按住上下拖或点击跳转。
+ * 与 DapBandSlider 同样的自绘风格，但数值是百分比而不是 dB。
+ */
+@Composable
+internal fun PctBandSlider(
+    label: String,
+    value: Int,
+    accent: Color,
+    enabled: Boolean = true,
+    onChange: (Int) -> Unit
+) {
+    val cs = MaterialTheme.colorScheme
+    Column(
+        Modifier.width(40.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(label, fontSize = 8.sp, color = cs.onSurfaceVariant, maxLines = 1)
+        Spacer(Modifier.height(3.dp))
+        Box(
+            Modifier.width(26.dp).height(74.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(accent.copy(alpha = 0.10f))
+                .pointerInput(enabled) {
+                    if (enabled) {
+                        detectTapGestures { o ->
+                            onChange(pctOf(o.y, size.height))
+                        }
+                    }
+                }
+                .pointerInput(enabled) {
+                    if (enabled) {
+                        detectDragGestures { change, _ ->
+                            onChange(pctOf(change.position.y, size.height))
+                        }
+                    }
+                },
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            Box(
+                Modifier.fillMaxWidth()
+                    .fillMaxHeight(value.coerceIn(0, 100) / 100f)
+                    .background(accent.copy(alpha = if (enabled) 0.45f else 0.20f))
+            )
+            Text(
+                "$value",
+                fontSize = 8.sp,
+                color = cs.onSurface,
+                modifier = Modifier.padding(bottom = 2.dp)
+            )
+        }
+    }
+}
+
+private fun pctOf(y: Float, h: Int): Int {
+    if (h <= 0) return 100
+    return ((1f - y / h) * 100f).roundToInt().coerceIn(0, 100)
 }
