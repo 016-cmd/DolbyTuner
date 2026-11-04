@@ -32,6 +32,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
@@ -1389,6 +1390,7 @@ private fun EffectsScreen() {
     var eqTab by remember { mutableIntStateOf(prefs.getInt("eq_tab", 0)) }
     var debugOn by remember { mutableStateOf(prefs.getBoolean("dp_debug", false)) }
     var showDebugDlg by remember { mutableStateOf(false) }
+    var delPeqIdx by remember { mutableIntStateOf(-1) }
     var geqQ4 by remember { mutableStateOf(loadDpGeq(prefs)) }
     var peqData by remember { mutableStateOf(loadPeq(prefs)) }
     var peqSel by remember { mutableIntStateOf(0) }
@@ -1790,7 +1792,7 @@ private fun EffectsScreen() {
     Column(
         Modifier.fillMaxSize().statusBarsPadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp).padding(top = 18.dp).padding(bottom = 150.dp)
+            .padding(horizontal = 14.dp).padding(top = 18.dp).padding(bottom = 180.dp)
     ) {
         Text("DynamicsProcessing音效", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
@@ -1867,21 +1869,22 @@ private fun EffectsScreen() {
                         scheduleEq()
                     }
                     Spacer(Modifier.weight(1f))
-                    OutlinedButton(
-                        onClick = { showDebugDlg = true },
-                        modifier = Modifier.height(32.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = if (debugOn) Color(0xFF10B981) else cs.onSurfaceVariant
+                    androidx.compose.material3.Switch(
+                        checked = debugOn,
+                        onCheckedChange = { showDebugDlg = true },
+                        modifier = Modifier.height(28.dp),
+                        colors = androidx.compose.material3.SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = Color(0xFF10B981),
+                            uncheckedThumbColor = cs.onSurfaceVariant,
+                            uncheckedTrackColor = cs.surfaceVariant
                         )
-                    ) {
-                        Text(if (debugOn) "已开启" else "开启", fontSize = 10.sp)
-                    }
+                    )
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
                     if (debugOn) "杜比 GEQ 已切平直 · 当前 EQ 由 DP 接管"
-                    else "点「开启」后杜比 GEQ 临时平直，改由 DP 调节",
+                    else "打开右侧开关后杜比 GEQ 临时平直，改由 DP 调节",
                     fontSize = 9.sp,
                     color = if (debugOn) Color(0xFF10B981) else cs.onSurfaceVariant
                 )
@@ -1921,38 +1924,61 @@ private fun EffectsScreen() {
                         onLive = { updGeqMaster(it) }, onDone = { updGeqMaster(it) }
                     )
                 } else {
-                    peqData.forEachIndexed { i, b ->
-                        Row(
-                            Modifier.fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (peqSel == i) cEq.copy(alpha = 0.14f) else Color.Transparent)
-                                .clickable { selectPeq(i) }
-                                .padding(horizontal = 6.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("${i + 1}", fontSize = 9.sp, color = cs.onSurfaceVariant, modifier = Modifier.width(16.dp))
-                            Text(fmtFreq(b.freqHz.toInt()), fontSize = 11.sp, modifier = Modifier.weight(1f))
-                            Text(String.format("%+.1f dB", b.gainDb), fontSize = 10.sp, color = cs.onSurfaceVariant)
-                            Spacer(Modifier.width(8.dp))
-                            Text(String.format("Q %.2f", b.q), fontSize = 9.sp, color = cs.onSurfaceVariant)
-                            if (peqData.size > 1) {
-                                IconButton(
-                                    onClick = { if (peqSel != i) selectPeq(i); delPeq() },
-                                    modifier = Modifier.size(26.dp)
-                                ) {
-                                    Icon(Icons.Default.Close, null, Modifier.size(13.dp), tint = cs.onSurfaceVariant)
-                                }
+                    LazyRow(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 2.dp, vertical = 2.dp)
+                    ) {
+                        items(peqData.size) { i ->
+                            val b = peqData[i]
+                            val sel = peqSel == i
+                            Column(
+                                Modifier.width(80.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(
+                                        if (sel) cEq.copy(alpha = 0.22f)
+                                        else cs.surfaceVariant.copy(alpha = 0.45f)
+                                    )
+                                    .pointerInput(i, peqData.size) {
+                                        detectTapGestures(
+                                            onTap = { selectPeq(i) },
+                                            onLongPress = { if (peqData.size > 1) delPeqIdx = i }
+                                        )
+                                    }
+                                    .padding(horizontal = 6.dp, vertical = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    fmtFreq(b.freqHz.toInt()),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (sel) cEq else cs.onSurface
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    String.format("%+.1f dB", b.gainDb),
+                                    fontSize = 9.sp,
+                                    color = cs.onSurfaceVariant
+                                )
+                                Text(
+                                    String.format("Q %.2f", b.q),
+                                    fontSize = 8.sp,
+                                    color = cs.onSurfaceVariant
+                                )
                             }
                         }
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    OutlinedButton(
-                        onClick = { addPeq() },
-                        modifier = Modifier.height(32.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = cEq)
-                    ) {
-                        Text("+ 添加频段", fontSize = 10.sp)
+                        item {
+                            Box(
+                                Modifier.width(58.dp)
+                                    .height(62.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(cEq.copy(alpha = 0.10f))
+                                    .clickable { addPeq() },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("+", fontSize = 22.sp, color = cEq)
+                            }
+                        }
                     }
                     Spacer(Modifier.height(4.dp))
                     if (peqSel in peqData.indices) {
@@ -2304,11 +2330,11 @@ private fun EffectsScreen() {
     if (showDebugDlg) {
         AlertDialog(
             onDismissRequest = { showDebugDlg = false },
-            title = { Text(if (debugOn) "关闭 EQ 调试？" else "打开 EQ 调试？", fontWeight = FontWeight.Bold) },
+            title = { Text(if (debugOn) "关闭 DP 接管？" else "用 DP 接管 EQ？", fontWeight = FontWeight.Bold) },
             text = {
                 Text(
-                    if (debugOn) "关闭后会把杜比 GEQ 恢复成你之前存的那条曲线，DP 侧曲线保留但不再需要手动切回。"
-                    else "开启后会把杜比 GEQ 的 20 段全部写成平直（0 dB），EQ 改由 DynamicsProcessing 接管。关闭调试时会恢复你原来的杜比曲线。",
+                    if (debugOn) "关闭后会把杜比 GEQ 恢复成你之前那条曲线；同时 DP 侧 EQ 自动写回平直（0 dB），不会留下残余影响。"
+                    else "开启后会把杜比 GEQ 的 20 段全部写成平直（0 dB），EQ 改由 DynamicsProcessing 接管。关闭时会恢复原来的杜比曲线，并把 DP 侧归平直。",
                     fontSize = 12.sp
                 )
             },
@@ -2319,6 +2345,32 @@ private fun EffectsScreen() {
             },
             dismissButton = {
                 TextButton(onClick = { showDebugDlg = false }) { Text("取消") }
+            }
+        )
+    }
+
+    if (delPeqIdx in peqData.indices) {
+        AlertDialog(
+            onDismissRequest = { delPeqIdx = -1 },
+            title = { Text("删除这个频段？", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "将删除 ${fmtFreq(peqData[delPeqIdx].freqHz.toInt())} 这一段，其它频段不受影响。",
+                    fontSize = 12.sp
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val k = delPeqIdx
+                    delPeqIdx = -1
+                    if (k in peqData.indices) {
+                        selectPeq(k)
+                        delPeq()
+                    }
+                }) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { delPeqIdx = -1 }) { Text("取消") }
             }
         )
     }
