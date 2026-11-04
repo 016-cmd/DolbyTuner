@@ -16,18 +16,18 @@ internal data class DapFx(
     val preoDb: Int = 0,
     val vmbDb: Int = 0,
 
-    // A2 虚拟低音（默认值取自本机官方 tunings：overall_gain 35、mix 30–150Hz）
+    // A2 虚拟低音（官方 tunings：overall_gain 0、src 35–160Hz、mix 94–469Hz）
     val vbOn: Boolean = false,
-    val vbStrength: Int = 35,
-    val vbLowHz: Int = 30,
-    val vbHighHz: Int = 150,
-    // A4 环绕（默认值取自本机官方 profile_endpoints：speaker surround_boost 105）
+    val vbStrength: Int = 0,
+    val vbLowHz: Int = 35,
+    val vbHighHz: Int = 160,
+    // A4 环绕（官方 profile_endpoints：speaker surround_boost 0）
     val surroundOn: Boolean = false,
-    val surroundBoost: Int = 105,
-    // A5 IEQ（默认值取自本机官方 profile_endpoints：speaker ieq_amount 12、preset 0）
+    val surroundBoost: Int = 0,
+    // A5 IEQ（官方 profile_endpoints：speaker ieq_amount 9、preset 1）
     val ieqOn: Boolean = false,
-    val ieqAmount: Int = 12,
-    val ieqPreset: Int = 0,
+    val ieqAmount: Int = 9,
+    val ieqPreset: Int = 1,
 
     // A7 MBDRC
     val mbdrcOn: Boolean = false,
