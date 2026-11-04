@@ -146,7 +146,10 @@ object DapRealtime {
         var last: Throwable? = null
         for (type in candidates.distinct()) {
             try {
-                val e = ctor.newInstance(type, IMPL_UUID, 0, 0) as AudioEffect
+                // 逆向 C1113iG.l(...) 建实例时 priority 传的是 0x64 = 100，
+// 相当于把实例插到效果链最前面并优先拿到控制权。
+                // 我们之前用 0，能写、但写不进“正在用的那条链”。
+                val e = ctor.newInstance(type, IMPL_UUID, 100, 0) as AudioEffect
                 attachWatchers(e)
                 return e
             } catch (t: Throwable) {
