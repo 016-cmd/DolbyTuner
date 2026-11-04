@@ -1273,6 +1273,17 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
     }
 }
 
+private fun loadRev(prefs: android.content.SharedPreferences): IntArray {
+    val s = prefs.getString("rev_data", "").orEmpty()
+    if (s.isBlank()) return DynReverb.DEFAULTS.copyOf()
+    val a = s.split(",").mapNotNull { it.trim().toIntOrNull() }
+    return if (a.size == 10) a.toIntArray() else DynReverb.DEFAULTS.copyOf()
+}
+
+private fun saveRev(prefs: android.content.SharedPreferences, a: IntArray) {
+    prefs.edit().putString("rev_data", a.joinToString(",")).apply()
+}
+
 private fun defaultMbcInts(): List<IntArray> =
     List(4) { intArrayOf(-200, 30, 10, 80, 60, -900, 10, 0, 0, 1) }
 
@@ -1312,6 +1323,8 @@ private fun EffectsScreen() {
     var post by remember { mutableIntStateOf(prefs.getInt("lim_post", 0)) }
     var link by remember { mutableIntStateOf(prefs.getInt("lim_link", 0)) }
     var mbcOn by remember { mutableStateOf(prefs.getBoolean("mbc_on", false)) }
+    var revOn by remember { mutableStateOf(prefs.getBoolean("rev_on", false)) }
+    var revData by remember { mutableStateOf(loadRev(prefs)) }
     var sel by remember { mutableIntStateOf(prefs.getInt("mbc_sel", 0)) }
     var mbcStore by remember { mutableStateOf(loadMbc(prefs)) }
     var status by remember { mutableStateOf(DynProc.status) }
@@ -1348,6 +1361,36 @@ private fun EffectsScreen() {
         mbcStore = l
         saveMbc(prefs, l)
         applyMbc()
+    }
+
+    fun applyRev() {
+        val d = revData.copyOf()
+        scope.launch {
+            withContext(Dispatchers.IO) { DynReverb.set(d) }
+            status = DynReverb.status
+        }
+    }
+
+    fun toggleRev(on: Boolean) {
+        if (busy) return
+        revOn = on
+        prefs.edit().putBoolean("rev_on", on).apply()
+        scope.launch {
+            busy = true
+            withContext(Dispatchers.IO) {
+                if (on) DynReverb.start(revData.copyOf()) else DynReverb.stop()
+            }
+            status = DynReverb.status
+            busy = false
+        }
+    }
+
+    fun updRev(idx: Int, v: Int) {
+        val a = revData.copyOf()
+        a[idx] = v
+        revData = a
+        saveRev(prefs, a)
+        applyRev()
     }
 
     fun cfg() = DynProc.LimiterCfg(
@@ -1402,6 +1445,10 @@ private fun EffectsScreen() {
             withContext(Dispatchers.IO) { DynProc.start(gain.toFloat(), cfg(), toDynMbc(mbcStore)) }
             status = DynProc.status
         }
+        if (revOn && !DynReverb.running) {
+            withContext(Dispatchers.IO) { DynReverb.start(revData.copyOf()) }
+            status = DynReverb.status
+        }
     }
 
     val accent = Color(0xFF38BDF8)
@@ -1441,7 +1488,7 @@ private fun EffectsScreen() {
                 Column(Modifier.weight(1f)) {
                     Text("DynamicsProcessing 引擎", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     Text(
-                        if (dpOn) status else "音效引擎未运行 · 点右上角开启",
+                        if (dpOn) status else "音效引擎未运行",
                         fontSize = 9.sp, lineHeight = 11.sp,
                         color = if (dpOn) accent else cs.onSurfaceVariant
                     )
@@ -1488,10 +1535,10 @@ private fun EffectsScreen() {
             accent = cLim
         ) {
             val presets = listOf(
-                Triple("标准", intArrayOf(-20, 10, 60, 100, 0), "10:1 · -2dB"),
-                Triple("砖墙", intArrayOf(-5, 1, 30, 500, 0), "50:1 · -0.5dB"),
-                Triple("紧实", intArrayOf(-40, 5, 100, 80, 0), "8:1 · -4dB"),
-                Triple("柔和", intArrayOf(-30, 50, 200, 40, 0), "4:1 · -3dB")
+                Triple("稳妥", intArrayOf(-20, 10, 60, 100, 0), "10:1 · -2dB"),
+                Triple("硬顶", intArrayOf(-5, 1, 30, 500, 0), "50:1 · -0.5dB"),
+                Triple("冲击", intArrayOf(-40, 5, 100, 80, 0), "8:1 · -4dB"),
+                Triple("轻柔", intArrayOf(-30, 50, 200, 40, 0), "4:1 · -3dB")
             )
             Row(
                 Modifier.fillMaxWidth().padding(top = 2.dp),
@@ -1599,9 +1646,9 @@ private fun EffectsScreen() {
             }
 
             val mbcPresets = listOf(
-                "温和" to intArrayOf(-180, 20, 20, 150, 60, -900, 10, 0, 0, 1),
-                "紧实" to intArrayOf(-240, 40, 5, 80, 40, -900, 10, 30, -30, 1),
-                "平直" to intArrayOf(-200, 10, 10, 80, 60, -900, 10, 0, 0, 1)
+                "轻压" to intArrayOf(-180, 20, 20, 150, 60, -900, 10, 0, 0, 1),
+                "收束" to intArrayOf(-240, 40, 5, 80, 40, -900, 10, 30, -30, 1),
+                "通透" to intArrayOf(-200, 10, 10, 80, 60, -900, 10, 0, 0, 1)
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 mbcPresets.forEach { pr ->
@@ -1661,6 +1708,88 @@ private fun EffectsScreen() {
             FxSlider(
                 "后级 · Post Gain", String.format("%+.1f dB", b[8] / 10f), b[8], -400..400, mbcOn,
                 onLive = { updMbc(8, it) }, onDone = { updMbc(8, it) }
+            )
+        }
+
+        // ===== 空间环境混响 =====
+        EffectCard(
+            title = "空间环境混响",
+            subtitle = "Reverb · 空间感与残响",
+            icon = Icons.Default.Wallpaper,
+            enabled = revOn,
+            onEnabledChange = { toggleRev(it) },
+            accent = Color(0xFF0EA5E9)
+        ) {
+            val cRev = Color(0xFF0EA5E9)
+            val revPresets = listOf(
+                "原声" to intArrayOf(-200, -100, 2200, 850, -800, 15, 300, 20, 1000, 1000),
+                "演奏厅" to intArrayOf(-100, -200, 2800, 900, -600, 20, 400, 25, 1000, 1000),
+                "圣殿" to intArrayOf(0, -300, 5000, 700, -400, 35, 600, 40, 1000, 1000),
+                "金属板" to intArrayOf(-200, -50, 1800, 1200, -800, 5, 400, 10, 950, 1000),
+                "耳语室" to intArrayOf(-300, -200, 1000, 800, -700, 8, 200, 12, 1000, 1000),
+                "深谷" to intArrayOf(0, -500, 7000, 600, -200, 50, 600, 60, 1000, 1000)
+            )
+            revPresets.chunked(3).forEach { row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    row.forEach { pr ->
+                        Surface(
+                            Modifier.weight(1f).clickable(enabled = revOn) {
+                                revData = pr.second.copyOf()
+                                saveRev(prefs, revData)
+                                applyRev()
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            color = cRev.copy(alpha = 0.14f),
+                            border = BorderStroke(1.dp, cRev.copy(alpha = 0.4f))
+                        ) {
+                            Box(Modifier.padding(vertical = 7.dp), contentAlignment = Alignment.Center) {
+                                Text(pr.first, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+            }
+
+            FxSlider(
+                "房间大小 · Room", String.format("%.1f dB", revData[0] / 100f), revData[0], -9000..0, revOn,
+                onLive = { updRev(0, it) }, onDone = { updRev(0, it) }
+            )
+            FxSlider(
+                "高频吸收 · Room HF", String.format("%.1f dB", revData[1] / 100f), revData[1], -9000..0, revOn,
+                onLive = { updRev(1, it) }, onDone = { updRev(1, it) }
+            )
+            FxSlider(
+                "衰减时间 · Decay", "${revData[2]} ms", revData[2], 100..20000, revOn,
+                onLive = { updRev(2, it) }, onDone = { updRev(2, it) }
+            )
+            FxSlider(
+                "高频衰减比 · HF Ratio", String.format("%.2f", revData[3] / 1000f), revData[3], 100..2000, revOn,
+                onLive = { updRev(3, it) }, onDone = { updRev(3, it) }
+            )
+            FxSlider(
+                "早期反射 · Reflections", String.format("%.1f dB", revData[4] / 100f), revData[4], -9000..0, revOn,
+                onLive = { updRev(4, it) }, onDone = { updRev(4, it) }
+            )
+            FxSlider(
+                "反射延迟 · Reflect Delay", "${revData[5]} ms", revData[5], 0..300, revOn,
+                onLive = { updRev(5, it) }, onDone = { updRev(5, it) }
+            )
+            FxSlider(
+                "混响量 · Reverb Level", String.format("%.1f dB", revData[6] / 100f), revData[6], -9000..0, revOn,
+                onLive = { updRev(6, it) }, onDone = { updRev(6, it) }
+            )
+            FxSlider(
+                "混响延迟 · Reverb Delay", "${revData[7]} ms", revData[7], 0..100, revOn,
+                onLive = { updRev(7, it) }, onDone = { updRev(7, it) }
+            )
+            FxSlider(
+                "扩散度 · Diffusion", String.format("%.2f", revData[8] / 1000f), revData[8], 0..1000, revOn,
+                onLive = { updRev(8, it) }, onDone = { updRev(8, it) }
+            )
+            FxSlider(
+                "密度 · Density", String.format("%.2f", revData[9] / 1000f), revData[9], 0..1000, revOn,
+                onLive = { updRev(9, it) }, onDone = { updRev(9, it) }
             )
         }
 
