@@ -1037,7 +1037,7 @@ private suspend fun applyDpPreset(ctx: Context, d: DpSnapshot?): String? {
     if (d == null) return "预设里没有音效页参数"
     return withContext(Dispatchers.IO) {
         val ok = DynProc.start(
-            d.gain.toFloat(),
+            d.gain / 10f,
             DynProc.LimiterCfg(
                 enabled = d.limOn,
                 thresholdDb = d.lim.getOrElse(0) { -20 } / 10f,
@@ -2062,25 +2062,57 @@ private fun EffectsScreen() {
         }
     }
 
-    fun toggleEngine(on: Boolean) {
-        if (busy) return
-        dpOn = on
-        prefs.edit().putBoolean("on", on).apply()
+
+    fun currentRaw(): FloatArray = if (eqTab == 0) {
+        EqMath.geq20To127(geqQ4, geqQ / 10f, geqMaster / 10f)
+    } else EqMath.peqTo127(peqData)
+
+    /** 启动/重启引擎，并把界面上的全部参数一次性下发（含 EQ 曲线） */
+    fun pushAllDp() {
+        val raw = currentRaw()
+        eqRaw = raw
+        val curve = finalEq(raw)
+        eqCurve = curve
+        val gDb = gain / 10f
         scope.launch {
             busy = true
             withContext(Dispatchers.IO) {
-                if (on) {
-                    DynProc.start(gain.toFloat(), cfg(), toDynMbc(mbcStore))
+                runCatching {
+                    if (!DynProc.running) {
+                        DynProc.start(gDb, cfg(), toDynMbc(mbcStore))
+                    } else {
+                        DynProc.setInputGain(gDb)
+                    }
+                    DynProc.setPreEq(curve)
+                    DynProc.setMbc(toDynMbc(mbcStore))
                     if (postOn) DynProc.setPostEq(postData.copyOf(), true)
-                } else DynProc.stop()
+                    else DynProc.setPostEq(IntArray(10), false)
+                    if (revOn) DynReverb.start(revData.copyOf()) else DynReverb.stop()
+                }
             }
             status = DynProc.status
             busy = false
         }
     }
 
+    fun toggleEngine(on: Boolean) {
+        if (busy) return
+        dpOn = on
+        prefs.edit().putBoolean("on", on).apply()
+        if (on) {
+            pushAllDp()
+        } else {
+            scope.launch {
+                busy = true
+                withContext(Dispatchers.IO) { DynProc.stop() }
+                status = DynProc.status
+                busy = false
+            }
+        }
+    }
+
     fun applyGain() {
-        val g = gain.toFloat()
+        val g = gain / 10f
         scope.launch {
             withContext(Dispatchers.IO) { DynProc.setInputGain(g) }
             status = DynProc.status
@@ -2089,12 +2121,8 @@ private fun EffectsScreen() {
     }
 
     LaunchedEffect(Unit) {
-        if (dpOn && !DynProc.running) {
-            withContext(Dispatchers.IO) {
-                DynProc.start(gain.toFloat(), cfg(), toDynMbc(mbcStore))
-                if (postOn) DynProc.setPostEq(postData.copyOf(), true)
-            }
-            status = DynProc.status
+        if (dpOn) {
+            pushAllDp()
         }
         if (revOn && !DynReverb.running) {
             withContext(Dispatchers.IO) { DynReverb.start(revData.copyOf()) }
