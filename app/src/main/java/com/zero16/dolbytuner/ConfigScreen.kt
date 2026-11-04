@@ -393,7 +393,7 @@ internal fun ConfigScreen() {
                     writePresets(ctx, presets.filterNot { it.name == name })
                     reload()
                     status = "已删除：$name"
-                }) { Text("删除", color = Color(0xFFDC2626), fontSize = 12.sp) }
+                }) { Text("删除", color = hintInk(Color(0xFFDC2626), Color(0xFFF87171)), fontSize = 12.sp) }
             },
             dismissButton = {
                 TextButton(onClick = { deleteTarget = null }) { Text("取消", fontSize = 12.sp) }
@@ -412,7 +412,7 @@ internal fun ConfigScreen() {
                     Spacer(Modifier.height(10.dp))
                     Text(
                         "注意：这只是实时生效。要让重启手机后继续沿用，请到「音效」页点『保存到 Dolby（GEQ + 音效）』按钮。",
-                        fontSize = 10.sp, color = Color(0xFFB45309)
+                        fontSize = 10.sp, color = hintInk(Color(0xFFB45309), Color(0xFFFBBF24))
                     )
                 }
             },

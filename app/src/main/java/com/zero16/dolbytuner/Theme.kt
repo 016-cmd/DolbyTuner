@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
@@ -78,6 +79,14 @@ private val DarkColorScheme = darkColorScheme(
     onError = Color(0xFF0D0D0F),
     scrim = Color.Black
 )
+
+/**
+ * 自适应提示色：背景亮时用深色，背景暗时自动换亮色。
+ * 深色模式下固定的深棕/深红几乎看不见，所有提示文字都走这里。
+ */
+@Composable
+fun hintInk(light: Color, dark: Color): Color =
+    if (MaterialTheme.colorScheme.background.luminance() > 0.5f) light else dark
 
 enum class ThemeMode { LIGHT, DARK, SYSTEM }
 
@@ -152,6 +161,11 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
     val version = wallpaperVersion
 
     MaterialTheme(colorScheme = colorScheme, typography = Typography()) {
+        // Material3 的 LocalContentColor 默认值是「黑色」，而我们整个页面是直接铺在
+        // 背景/壁纸上的（没有 Surface 兜底），于是所有没显式写 color 的 Text
+        // ——包括页标题、卡片标题——在深色模式下都会变成黑字。
+        // 这里统一按 onBackground 提供，深色/浅色都跟着主题走。
+        CompositionLocalProvider(LocalContentColor provides colorScheme.onBackground) {
         Box(modifier = Modifier
             .fillMaxSize()
             .background(colorScheme.background)
@@ -171,6 +185,7 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
             }
             // 内容层直接叠加在壁纸（或纯色背景）上
             content()
+        }
         }
     }
 }

@@ -320,7 +320,7 @@ private fun MainApp(activity: Activity, deviceLine: String) {
 
                     baseMsg?.let {
                         Spacer(Modifier.height(8.dp))
-                        Text(it, fontSize = 11.sp, lineHeight = 17.sp, color = Color(0xFFB91C1C))
+                        Text(it, fontSize = 11.sp, lineHeight = 17.sp, color = hintInk(Color(0xFFB91C1C), Color(0xFFF87171)))
                     }
                 }
             },
@@ -748,7 +748,7 @@ private fun GeqScreen(deviceLine: String) {
                             TextButton(onClick = {
                                 DeviceTuningStore.unbind(ctx, b.key)
                                 DeviceState.sync(ctx)
-                            }) { Text("删除", fontSize = 11.sp, color = Color(0xFFB45309)) }
+                            }) { Text("删除", fontSize = 11.sp, color = hintInk(Color(0xFFB45309), Color(0xFFFBBF24))) }
                         }
                     }
                 }
@@ -1427,10 +1427,10 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
                         } else {
                             Text("• 音效恢复内置默认：环绕 / 人声增强 / 低音增强全部关闭，低音增益与带宽归 0", fontSize = 11.sp, color = cs.onSurfaceVariant)
                             Spacer(Modifier.height(4.dp))
-                            Text("尚未检测本机音效默认参数，当前使用的是内置默认值。", fontSize = 11.sp, color = Color(0xFFB45309))
+                            Text("尚未检测本机音效默认参数，当前使用的是内置默认值。", fontSize = 11.sp, color = hintInk(Color(0xFFB45309), Color(0xFFFBBF24)))
                         }
                         Spacer(Modifier.height(6.dp))
-                        Text("会立即写入 Dolby 并自动保存，重启后仍是重置状态。此操作不可撤销。", fontSize = 11.sp, color = Color(0xFFB45309))
+                        Text("会立即写入 Dolby 并自动保存，重启后仍是重置状态。此操作不可撤销。", fontSize = 11.sp, color = hintInk(Color(0xFFB45309), Color(0xFFFBBF24)))
                     }
                 },
                 confirmButton = {
@@ -1449,7 +1449,7 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
                                 else -> "已恢复为内置默认值（未检测本机参数）"
                             }
                         }
-                    }) { Text("重置", color = Color(0xFFB45309), fontWeight = FontWeight.Bold, fontSize = 12.sp) }
+                    }) { Text("重置", color = hintInk(Color(0xFFB45309), Color(0xFFFBBF24)), fontWeight = FontWeight.Bold, fontSize = 12.sp) }
                 },
                 dismissButton = {
                     TextButton(onClick = { showResetConfirm = false }) { Text("取消", fontSize = 12.sp) }
@@ -3144,7 +3144,7 @@ private fun SettingsScreen(activity: Activity) {
             text = {
                 Column {
                     if (bootDialogFailed) {
-                        Text("无法自动打开自启动设置。", fontSize = 12.sp, color = Color(0xFFB45309))
+                        Text("无法自动打开自启动设置。", fontSize = 12.sp, color = hintInk(Color(0xFFB45309), Color(0xFFFBBF24)))
                         Spacer(Modifier.height(6.dp))
                     }
                     Text("已开启。请允许 Dolby Tuner 自启动，否则重启后系统不会唤醒 APP 写回参数。", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)

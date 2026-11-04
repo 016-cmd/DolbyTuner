@@ -112,7 +112,7 @@ internal fun EffectCard(
                 )
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(title, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text(title, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = cs.onSurface)
                     if (subtitle.isNotBlank()) {
                         Text(
                             subtitle, fontSize = 9.sp, lineHeight = 11.sp,
