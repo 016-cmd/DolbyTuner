@@ -608,8 +608,12 @@ object DapRealtime {
             val e = session ?: openEffect().also { session = it }
             if (!e.hasControl()) return "无控制权"
             if (!e.enabled) return "杜比音效未启用"
-            val st = e.setParam(CMD_PARAM, buildParamPayload(0, paramId, intArrayOf(value)))
-            if (st < 0) return statusText(st, "参数 $paramId")
+            // 每个 profile 都写一遍：普通参数以前写死在 profile 0，
+            // 一动它就把当前档切成 0，A 类再写回 4 就落空（表现为"再调没反应"）。
+            for (p in allProfiles(e)) {
+                val st = e.setParam(CMD_PARAM, buildParamPayload(p, paramId, intArrayOf(value)))
+                if (st < 0) return statusText(st, "参数 $paramId / profile $p")
+            }
             val s = e.setParam(CMD_PARAM, buildSavePayload())
             if (s < 0) statusText(s, "保存") else null
         } catch (t: Throwable) {
@@ -641,13 +645,14 @@ object DapRealtime {
      * 光写"属性里那个"不够：实际播放的档可能是别的编号，
      * 所以跟 GEQ 一样，把所有可能生效的档全写一遍。
      */
-    private fun profilesForWrite(e: AudioEffect): List<Int> {
-        // 只写两个：属性里的 profile（官方配置）与 AudioService 当前的 profile。
-        // 不再 0..N 全写——批量包里混多个 profile 会让 Dolby 判「未生效」。
-        val prop = propProfile()
-        val cur = curProfile(e)
-        return if (prop != null && prop != cur) listOf(cur, prop) else listOf(cur)
+    /** 写入要覆盖的 profile：0..max(count, 属性 profile)。每次一条命令，不混包 */
+    private fun allProfiles(e: AudioEffect): List<Int> {
+        val cnt = runCatching { queryInt(e, COMMAND_GET_PROFILE_COUNT) }.getOrNull() ?: 0
+        val n = maxOf(cnt, (propProfile() ?: 0) + 1).coerceIn(1, 16)
+        return (0 until n).toList()
     }
+
+    private fun profilesForWrite(e: AudioEffect): List<Int> = allProfiles(e)
 
     /** 读 persist.audio.dolby.profile（普通 App 可用 getprop，不需要权限） */
     private fun propProfile(): Int? = runCatching {
