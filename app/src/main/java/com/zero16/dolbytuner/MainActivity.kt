@@ -992,10 +992,8 @@ internal suspend fun captureDspBaseline(ctx: Context): String? = withContext(Dis
     val width = pick(235, 0, 64)
     val hit = listOf(hp, sp, dialog, damt, bass, gain, cutoff, width).count { it != null }
 
-    // A 类（FourCC）也一起采集：读不到就保留本地值，不硬写默认
-    val dapRead = readDapFxFromDsp(DapFxStore.load(ctx))
-
-    if (hit == 0 && dapRead == null) {
+    // 音效页（PARA 通道）可读回；A 类（FourCC）本机只写不读，所以不采集，直接用官方基线
+    if (hit == 0) {
         return@withContext "读取失败：本机实时层不支持回读，暂时只能用内置默认值"
     }
 
@@ -1010,8 +1008,7 @@ internal suspend fun captureDspBaseline(ctx: Context): String? = withContext(Dis
             bassWidth = width ?: 0,
             dialogOn = dialog == 1,
             dialogAmt = damt ?: 4
-        ),
-        dapRead?.first
+        )
     )
     null
 }
@@ -1093,17 +1090,7 @@ private fun EffectsScreen() {
             saveFx(ctx, synced.first)
             status = "已同步 ${synced.second}/8 项 DSP 实时参数"
         }
-
-        // A 类：逐项读回（本机若不支持，会明确写出来，不再静默）
-        val dapSynced = withContext(Dispatchers.IO) { readDapFxFromDsp(dapFx) }
-        val fxPart = if (synced != null) "已同步 ${synced.second}/8 音效 · " else ""
-        if (dapSynced != null) {
-            dapFx = dapSynced.first
-            DapFxStore.save(ctx, dapSynced.first)
-            status = fxPart + "A 类读回 ${dapSynced.second}/13 项"
-        } else {
-            status = fxPart + "A 类读回不可用（沿用本地记录）"
-        }
+        // A 类不回读：本机 FourCC 只写不读，直接用本地记录（dapFx 初值即 DapFxStore.load）
     }
     DisposableEffect(Unit) { onDispose { DapRealtime.closeSession() } }
 

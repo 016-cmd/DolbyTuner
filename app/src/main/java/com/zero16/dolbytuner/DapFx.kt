@@ -107,53 +107,6 @@ internal data class DapFx(
     }
 }
 
-/**
- * 从 DSP 读回 A 类参数。
- *
- * 每一项单独读：读不到就保留本地记录里的值（不硬写默认值）。
- * @return null = 一项都没读到（说明本机不支持这条读回通道）
- */
-internal fun readDapFxFromDsp(local: DapFx): Pair<DapFx, Int>? {
-    var d = local
-    var hit = 0
-    fun rd(tag: String, n: Int = 1): IntArray? = DapRealtime.readFourCC(tag, n)
-
-    rd("dplp")?.firstOrNull()?.let { lin ->
-        if (lin in 1..256) {
-            // dplp 是线性增益 ×256，换回 dBFS
-            val db = (20.0 * Math.log10(lin / 256.0)).toFloat().coerceIn(-12f, 0f)
-            d = d.copy(limiterOn = lin < 256, dplpDb = db)
-            hit++
-        }
-    }
-    rd("preg")?.firstOrNull()?.let { d = d.copy(pregOn = it != 0); hit++ }
-    rd("preo")?.firstOrNull()?.let { d = d.copy(preoDb = (it / 16).coerceIn(0, 12)); hit++ }
-    rd("vmb ")?.firstOrNull()?.let { d = d.copy(vmbDb = (it / 16).coerceIn(0, 6)); hit++ }
-
-    rd("dvle")?.firstOrNull()?.let { d = d.copy(surroundOn = it != 0); hit++ }
-    rd("dvla")?.firstOrNull()?.let { d = d.copy(surroundBoost = it.coerceIn(0, 192)); hit++ }
-
-    rd("beon")?.firstOrNull()?.let { d = d.copy(vbOn = it != 0); hit++ }
-    rd("beb")?.firstOrNull()?.let { d = d.copy(vbStrength = it.coerceIn(0, 192)); hit++ }
-    rd("becf", 2)?.let { a ->
-        if (a.size >= 2) {
-            d = d.copy(vbHighHz = a[0].coerceIn(60, 240), vbLowHz = a[1].coerceIn(20, 160))
-            hit++
-        }
-    }
-
-    rd("ieon")?.firstOrNull()?.let { d = d.copy(ieqOn = it != 0); hit++ }
-    rd("iea")?.firstOrNull()?.let { d = d.copy(ieqAmount = it.coerceIn(0, 16)); hit++ }
-    rd("ieid")?.firstOrNull()?.let { d = d.copy(ieqPreset = it.coerceIn(0, 10)); hit++ }
-
-    rd("vol")?.firstOrNull()?.let { v ->
-        d = d.copy(postGainOn = v != 0, postGainDb = v.coerceIn(-12, 12))
-        hit++
-    }
-
-    return if (hit == 0) null else d to hit
-}
-
 internal object DapFxStore {
     private const val PREF = "dolby_tuner"
     private const val KEY = "dap_fx"
