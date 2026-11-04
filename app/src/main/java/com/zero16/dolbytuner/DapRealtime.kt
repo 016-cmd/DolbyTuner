@@ -645,12 +645,20 @@ object DapRealtime {
      * 光写"属性里那个"不够：实际播放的档可能是别的编号，
      * 所以跟 GEQ 一样，把所有可能生效的档全写一遍。
      */
-    /** 写入要覆盖的 profile：0..max(count, 属性 profile)。每次一条命令，不混包 */
-    private fun allProfiles(e: AudioEffect): List<Int> {
-        val cnt = runCatching { queryInt(e, COMMAND_GET_PROFILE_COUNT) }.getOrNull() ?: 0
-        val n = maxOf(cnt, (propProfile() ?: 0) + 1).coerceIn(1, 16)
-        return (0 until n).toList()
-    }
+    /**
+     * 写入统一使用「同一个 profile」。
+     *
+     * 普通参数（101/102/105/108/111/233/234/235）与 A 类（FourCC）
+     * 必须落在同一档，否则会互相顶掉：
+     *   以前普通参数写死 profile 0 → 之后的 A 类写到 4 就完全没反应。
+     *
+     * 取法：优先 getprop persist.audio.dolby.profile（Dolby 自己持久化的真值），
+     *       读不到才退回 AudioService 的 GET_CURRENT。
+     */
+    private fun currentProfile(e: AudioEffect): Int =
+        propProfile() ?: curProfile(e)
+
+    private fun allProfiles(e: AudioEffect): List<Int> = listOf(currentProfile(e))
 
     private fun profilesForWrite(e: AudioEffect): List<Int> = allProfiles(e)
 
