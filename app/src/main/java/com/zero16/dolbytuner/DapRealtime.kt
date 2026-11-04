@@ -545,6 +545,54 @@ object DapRealtime {
     }
 
     /**
+     * 一次性诊断：把 profile 结构、当前档、每档写入后的 DAP 状态全部记下来。
+     * 只写 beon（虚拟低音开关）这一条，写完复位，不改其它参数。
+     */
+    @Synchronized
+    fun diagReport(): String {
+        val sb = StringBuilder()
+        fun line(s: String) { sb.append(s).append('\n') }
+        try {
+            line("Dolby profile 诊断")
+            line("prop(persist.audio.dolby.profile)=${propProfile() ?: "读不到"}")
+            val e = session ?: openEffect().also { session = it }
+            line("enabled=${runCatching { e.enabled }.getOrNull()}")
+            line("hasControl=${runCatching { e.hasControl() }.getOrNull()}")
+            val count = runCatching { queryInt(e, COMMAND_GET_PROFILE_COUNT) }.getOrNull()
+            val cur = runCatching { queryInt(e, COMMAND_GET_CURRENT) }.getOrNull()
+            val on0 = runCatching { queryInt(e, COMMAND_GET_DAP_ON) }.getOrNull()
+            line("queryInt(GET_PROFILE_COUNT)=$count")
+            line("queryInt(GET_CURRENT)=$cur")
+            line("queryInt(GET_DAP_ON)=$on0")
+            line("")
+
+            fun onNow(): String =
+                runCatching { queryInt(e, COMMAND_GET_DAP_ON) }.getOrNull()?.toString() ?: "err"
+
+            fun writeBeon(prof: Int, v: Int): String {
+                val buf = ByteBuffer.allocate((1 + 4) * 4).order(ByteOrder.LITTLE_ENDIAN)
+                buf.putInt(COMMAND_SET_PROFILE)
+                buf.putInt(2)
+                buf.putInt(prof)
+                buf.putInt(fourcc("beon"))
+                buf.putInt(v)
+                val st = runCatching { e.setParam(CMD_PARAM, buf.array()) }.getOrElse { -999 }
+                return "profile=$prof beon=$v → rc=$st  之后 GET_DAP_ON=${onNow()}"
+            }
+
+            val tryProfs = listOf(0, 1, 2, 3, 4, 5)
+            tryProfs.forEach { p -> line(writeBeon(p, 1)) }
+            line("")
+            tryProfs.forEach { p -> line(writeBeon(p, 0)) }
+            line("")
+            line("复位后 GET_DAP_ON=${onNow()}")
+        } catch (t: Throwable) {
+            line("异常：${rootCause(t)}")
+        }
+        return sb.toString()
+    }
+
+    /**
      * 主动丢弃当前句柄。
      * A 类写入后 Dolby 可能已经重建效果链，旧句柄写不进 GEQ，
      * 丢掉它，下一次操作会自动重开。

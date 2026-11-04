@@ -956,10 +956,9 @@ internal object DspBaseline {
     }
 }
 
-/** 把读回测试报告写到 Download/DolbyTuner/readback_probe.txt */
-private fun saveProbeReport(ctx: Context, text: String): String? {
+/** 把文本报告写到 Download/DolbyTuner/<name> */
+private fun saveTextReport(ctx: Context, name: String, text: String): String? {
     return try {
-        val name = "readback_probe.txt"
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, name)
             put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
@@ -1691,6 +1690,24 @@ private fun SettingsScreen(activity: Activity) {
                 "检测会读取当前 Dolby DSP 里的音效参数作为基准；GEQ 出厂即平直，不需要检测。",
                 fontSize = 9.sp, lineHeight = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        val txt = withContext(Dispatchers.IO) { DapRealtime.diagReport() }
+                        val path = withContext(Dispatchers.IO) {
+                            saveTextReport(ctx, "dap_profile_diag.txt", txt)
+                        }
+                        android.widget.Toast.makeText(
+                            ctx,
+                            if (path != null) "已写入 $path" else "写入失败",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(40.dp),
+                shape = RoundedCornerShape(10.dp)
+            ) { Text("写入 profile 诊断文件", fontSize = 11.sp) }
         }
 
         Spacer(Modifier.height(12.dp))
