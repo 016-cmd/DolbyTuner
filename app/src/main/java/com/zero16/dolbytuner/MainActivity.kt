@@ -1391,6 +1391,58 @@ private fun EffectsScreen() {
     var debugOn by remember { mutableStateOf(prefs.getBoolean("dp_debug", false)) }
     var showDebugDlg by remember { mutableStateOf(false) }
     var delPeqIdx by remember { mutableIntStateOf(-1) }
+
+    // ===== 等响补偿 =====
+    var volOn by remember { mutableStateOf(prefs.getBoolean("vol_on", false)) }
+    var eqMode by remember { mutableIntStateOf(prefs.getInt("eq_mode", 0)) }
+    var volCurves by remember { mutableStateOf(loadVolCurves(prefs)) }
+    val am = remember {
+        ctx.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+    }
+    val volMax = remember {
+        am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+    }
+    var curVol by remember {
+        mutableIntStateOf(am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC))
+    }
+
+    fun applyVolCurve() {
+        if (!volOn) return
+        val c = volCurves[curVol]
+            ?: volCurves.keys.filter { it <= curVol }.maxOrNull()?.let { volCurves[it] }
+            ?: return
+        scope.launch {
+            withContext(Dispatchers.IO) { DynProc.setPreEq(c) }
+            eqCurve = c
+            status = DynProc.status
+        }
+    }
+
+    DisposableEffect(Unit) {
+        val obs = object : android.database.ContentObserver(
+            android.os.Handler(android.os.Looper.getMainLooper())
+        ) {
+            override fun onChange(selfChange: Boolean) {
+                val v = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+                if (v == curVol) return
+                curVol = v
+                if (volOn) applyVolCurve()
+            }
+        }
+        val cr = ctx.contentResolver
+        runCatching {
+            cr.registerContentObserver(
+                android.provider.Settings.System.getUriFor("volume_music_speaker"), false, obs
+            )
+            cr.registerContentObserver(
+                android.provider.Settings.System.getUriFor("volume_music_headphone"), false, obs
+            )
+            cr.registerContentObserver(
+                android.provider.Settings.System.getUriFor("volume_music_headset"), false, obs
+            )
+        }
+        onDispose { runCatching { cr.unregisterContentObserver(obs) } }
+    }
     var geqQ4 by remember { mutableStateOf(loadDpGeq(prefs)) }
     var peqData by remember { mutableStateOf(loadPeq(prefs)) }
     var peqSel by remember { mutableIntStateOf(0) }
@@ -1996,6 +2048,161 @@ private fun EffectsScreen() {
                             onLive = { livePeq(2, it) }, onDone = { commitPeq(2, it) }
                         )
                     }
+                }
+            }
+        }
+
+        // ===== 等响补偿 · 按音量切换曲线 =====
+        val cVol = Color(0xFF8B5CF6)
+        Card(
+            Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, cVol.copy(alpha = if (volOn) 0.7f else 0.3f)),
+            colors = CardDefaults.cardColors(
+                containerColor = cVol.copy(alpha = if (volOn) 0.16f else 0.07f)
+            )
+        ) {
+            Column(
+                Modifier.fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 12.dp)
+                    .alpha(if (dpOn) 1f else 0.45f)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("等响补偿", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.weight(1f))
+                    androidx.compose.material3.Switch(
+                        checked = volOn,
+                        enabled = dpOn,
+                        onCheckedChange = {
+                            volOn = it
+                            prefs.edit().putBoolean("vol_on", it).apply()
+                            if (it) applyVolCurve()
+                        }
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    EqTab("按音量", eqMode == 0, cVol, dpOn) {
+                        eqMode = 0
+                        prefs.edit().putInt("eq_mode", 0).apply()
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    EqTab("自动", eqMode == 1, cVol, dpOn) {
+                        eqMode = 1
+                        prefs.edit().putInt("eq_mode", 1).apply()
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+
+                if (eqMode == 0) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("当前音量 $curVol / $volMax", fontSize = 10.sp, color = cs.onSurfaceVariant)
+                        Text(
+                            "${(curVol * 100 / volMax)}%",
+                            fontSize = 10.sp, color = cVol
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Box(
+                        Modifier.fillMaxWidth().height(6.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(cs.surfaceVariant)
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth((curVol.toFloat() / volMax).coerceIn(0f, 1f))
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(cVol)
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                val m = volCurves.toMutableMap()
+                                m[curVol] = eqCurve.copyOf()
+                                volCurves = m
+                                saveVolCurves(prefs, m)
+                            },
+                            modifier = Modifier.weight(1f).height(34.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            enabled = dpOn,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = cVol)
+                        ) { Text("存到这一档", fontSize = 10.sp) }
+                        OutlinedButton(
+                            onClick = {
+                                if (volCurves.containsKey(curVol)) {
+                                    val m = volCurves.toMutableMap()
+                                    m.remove(curVol)
+                                    volCurves = m
+                                    saveVolCurves(prefs, m)
+                                }
+                            },
+                            modifier = Modifier.weight(1f).height(34.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            enabled = dpOn && volCurves.containsKey(curVol),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = cs.onSurfaceVariant)
+                        ) { Text("删除本档", fontSize = 10.sp) }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    if (volCurves.isEmpty()) {
+                        Text(
+                            "还没有存过曲线 · 把音量调到某一档，再点「存到这一档」",
+                            fontSize = 9.sp, color = cs.onSurfaceVariant
+                        )
+                    } else {
+                        LazyRow(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 2.dp)
+                        ) {
+                            items(volCurves.keys.sorted().toList()) { k ->
+                                val active = k == curVol
+                                Surface(
+                                    Modifier
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .clickable(enabled = dpOn) {
+                                            val c = volCurves[k] ?: return@clickable
+                                            scope.launch {
+                                                withContext(Dispatchers.IO) { DynProc.setPreEq(c) }
+                                                eqCurve = c
+                                                status = DynProc.status
+                                            }
+                                        },
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = cVol.copy(alpha = if (active) 0.28f else 0.10f),
+                                    border = BorderStroke(1.dp, cVol.copy(alpha = if (active) 0.75f else 0.25f))
+                                ) {
+                                    Text(
+                                        "$k / $volMax",
+                                        fontSize = 10.sp,
+                                        fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "播放时按当前音量自动套用对应曲线",
+                            fontSize = 9.sp, color = cs.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    Text("自动补偿", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        "按实时响度自动计算补偿曲线，需要另一支 APP 提供数据，接口预留中。",
+                        fontSize = 9.sp, color = cs.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { },
+                        modifier = Modifier.fillMaxWidth().height(34.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        enabled = false
+                    ) { Text("自动 · 待接入", fontSize = 10.sp) }
                 }
             }
         }
@@ -2855,4 +3062,26 @@ private fun DolbyBadge(on: Boolean?, modifier: Modifier = Modifier) {
         Spacer(Modifier.width(6.dp))
         Text(label, fontSize = 10.sp, color = color.copy(alpha = 0.85f))
     }
+}
+
+private fun loadVolCurves(prefs: android.content.SharedPreferences): Map<Int, FloatArray> {
+    val s = prefs.getString("vol_curves", "").orEmpty()
+    val m = linkedMapOf<Int, FloatArray>()
+    if (s.isBlank()) return m
+    s.split(";").forEach { seg ->
+        val kv = seg.split("=", limit = 2)
+        if (kv.size == 2) {
+            val k = kv[0].trim().toIntOrNull()
+            val a = kv[1].split(",").mapNotNull { it.trim().toFloatOrNull() }
+            if (k != null && a.size == 127) m[k] = a.toFloatArray()
+        }
+    }
+    return m
+}
+
+private fun saveVolCurves(prefs: android.content.SharedPreferences, m: Map<Int, FloatArray>) {
+    val s = m.entries.joinToString(";") { e ->
+        e.key.toString() + "=" + e.value.joinToString(",")
+    }
+    prefs.edit().putString("vol_curves", s).apply()
 }
