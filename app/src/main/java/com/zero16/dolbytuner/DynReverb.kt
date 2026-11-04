@@ -67,13 +67,24 @@ object DynReverb {
 
     @Synchronized
     fun set(data: IntArray) {
+        val prev = last
         last = data.copyOf()
         val r = rv ?: return
         if (!runCatching { r.hasControl() }.getOrDefault(false)) {
             status = "被其他应用占用 · 未写入"
             return
         }
-        applyTo(r, data)
+        // 只写变化项：拖动一个滑块只发 1 条参数，避免整页卡顿
+        if (prev[0] != data[0]) runCatching { r.setRoomLevel(data[0].coerceIn(-9000, 0).toShort()) }
+        if (prev[1] != data[1]) runCatching { r.setRoomHFLevel(data[1].coerceIn(-9000, 0).toShort()) }
+        if (prev[2] != data[2]) runCatching { r.setDecayTime(data[2].coerceIn(100, 20000)) }
+        if (prev[3] != data[3]) runCatching { r.setDecayHFRatio(data[3].coerceIn(100, 2000).toShort()) }
+        if (prev[4] != data[4]) runCatching { r.setReflectionsLevel(data[4].coerceIn(-9000, 0).toShort()) }
+        if (prev[5] != data[5]) runCatching { r.setReflectionsDelay(data[5].coerceIn(0, 300)) }
+        if (prev[6] != data[6]) runCatching { r.setReverbLevel(data[6].coerceIn(-9000, 0).toShort()) }
+        if (prev[7] != data[7]) runCatching { r.setReverbDelay(data[7].coerceIn(0, 100)) }
+        if (prev[8] != data[8]) runCatching { r.setDiffusion(data[8].coerceIn(0, 1000).toShort()) }
+        if (prev[9] != data[9]) runCatching { r.setDensity(data[9].coerceIn(0, 1000).toShort()) }
         status = "混响已开启"
     }
 

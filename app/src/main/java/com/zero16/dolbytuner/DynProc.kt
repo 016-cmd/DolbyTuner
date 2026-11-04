@@ -105,7 +105,7 @@ object DynProc {
                 applyLimiterTo(d, limiter)
 
                 // 多段压缩器
-                applyMbcTo(d, lastMbc)
+                applyMbcAll(d, lastMbc)
 
                 // 控制权 / 启用状态监听：被系统或别的 App 关掉时标记失联
                 runCatching {
@@ -162,9 +162,8 @@ object DynProc {
 
     private val MBC_CUTOFFS = floatArrayOf(250f, 2000f, 8000f, 20000f)
 
-    private fun applyMbcTo(d: DynamicsProcessing, bands: List<MbcBandCfg>) {
-        for (i in 0 until 4) {
-            val c = bands.getOrNull(i) ?: MbcBandCfg()
+    private fun applyMbcBand(d: DynamicsProcessing, i: Int, c: MbcBandCfg) {
+        runCatching {
             val band = DynamicsProcessing.MbcBand(
                 c.enabled,
                 MBC_CUTOFFS[i],
@@ -188,16 +187,25 @@ object DynProc {
         }
     }
 
+    private fun applyMbcAll(d: DynamicsProcessing, bands: List<MbcBandCfg>) {
+        for (i in 0 until 4) applyMbcBand(d, i, bands.getOrNull(i) ?: MbcBandCfg())
+    }
+
     /** 运行时改 MBC */
     @Synchronized
     fun setMbc(bands: List<MbcBandCfg>) {
+        val prev = lastMbc
         lastMbc = bands
         val d = dp ?: return
         if (!runCatching { d.hasControl() }.getOrDefault(false)) {
             status = "被其他应用占用 · 未写入"
             return
         }
-        applyMbcTo(d, bands)
+        // 只写变化段
+        for (i in 0 until 4) {
+            val cur = bands.getOrNull(i) ?: continue
+            if (prev.getOrNull(i) != cur) applyMbcBand(d, i, cur)
+        }
     }
 
     private fun flatLimiter() = DynamicsProcessing.Limiter(
@@ -221,6 +229,7 @@ object DynProc {
     /** 运行时改 Limiter */
     @Synchronized
     fun setLimiter(c: LimiterCfg) {
+        if (c == lastLimiter) return
         lastLimiter = c
         val d = dp ?: return
         if (!runCatching { d.hasControl() }.getOrDefault(false)) {
