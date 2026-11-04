@@ -75,7 +75,7 @@ internal fun ConfigScreen() {
     val scope = rememberCoroutineScope()
 
     var presets by remember { mutableStateOf(loadPresets(ctx)) }
-    var status by remember { mutableStateOf("预设包含 GEQ 20 段 + 音效页 8 项参数") }
+    var status by remember { mutableStateOf("预设包含 GEQ、音效与 A 类参数") }
 
     var showSaveDialog by remember { mutableStateOf(false) }
     var presetName by remember { mutableStateOf("") }
@@ -182,7 +182,7 @@ internal fun ConfigScreen() {
                 Spacer(Modifier.width(8.dp))
                 Column {
                     Text("保存当前为预设", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Accent)
-                    Text("GEQ 20 段 + 音效页 8 项", fontSize = 9.sp, color = cs.onSurfaceVariant)
+                    Text("GEQ 20 段 + 全部音效参数", fontSize = 9.sp, color = cs.onSurfaceVariant)
                 }
             }
         }

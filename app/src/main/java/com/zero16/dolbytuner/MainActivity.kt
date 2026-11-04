@@ -1056,13 +1056,15 @@ private fun EffectsScreen() {
             status = "已同步 ${synced.second}/8 项 DSP 实时参数"
         }
 
-        // A 类：逐项读回，读不到的项保留本地值（不硬写默认）
+        // A 类：逐项读回（本机若不支持，会明确写出来，不再静默）
         val dapSynced = withContext(Dispatchers.IO) { readDapFxFromDsp(dapFx) }
+        val fxPart = if (synced != null) "已同步 ${synced.second}/8 音效 · " else ""
         if (dapSynced != null) {
             dapFx = dapSynced.first
             DapFxStore.save(ctx, dapSynced.first)
-            status = (if (synced != null) "已同步 ${synced.second}/8 音效 · " else "已同步 ")
-                .plus("A 类 ${dapSynced.second} 项")
+            status = fxPart + "A 类读回 ${dapSynced.second}/13 项"
+        } else {
+            status = fxPart + "A 类读回不可用（沿用本地记录）"
         }
     }
     DisposableEffect(Unit) { onDispose { DapRealtime.closeSession() } }
@@ -1086,7 +1088,7 @@ private fun EffectsScreen() {
             status = "写入中…"
             scope.launch {
                 val err = pushDapFx(next)
-                status = if (err == null) "已写入 · 重启后仍生效" else "写入失败：$err"
+                status = if (err == null) "A 类已写入 · 重启后仍生效" else "写入失败：$err"
             }
         }
     }
