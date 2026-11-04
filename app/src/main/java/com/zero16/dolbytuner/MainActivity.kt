@@ -1185,6 +1185,18 @@ private fun EffectsScreen() {
         return out
     }
 
+    // 虚拟低音「强度」变化时走最小实验通道：
+    // 只发 vbm / vbog 两条，profile = 0x40000000，command(0) 批量包。
+    fun pushItems(items: List<Pair<String, IntArray>>): String? {
+        val isVbStrength = items.any { it.first == "vbog" }
+        return if (isVbStrength) {
+            val vb = items.filter { it.first == "vbm" || it.first == "vbog" }
+            DapRealtime.writeFourCCMasked(vb)
+        } else {
+            DapRealtime.writeFourCCBatch(items)
+        }
+    }
+
     fun setDap(next: DapFx, live: Boolean) {
         val prev = dapFx
         dapFx = next
@@ -1193,7 +1205,7 @@ private fun EffectsScreen() {
             // 拖动中：只写变化的参数，不重建、不整套重发
             if (items.isNotEmpty()) {
                 scope.launch {
-                    withContext(Dispatchers.IO) { DapRealtime.writeFourCCBatch(items) }
+                    withContext(Dispatchers.IO) { pushItems(items) }
                 }
             }
         } else {
@@ -1203,7 +1215,7 @@ private fun EffectsScreen() {
                 val err = if (items.isEmpty()) {
                     null
                 } else {
-                    withContext(Dispatchers.IO) { DapRealtime.writeFourCCBatch(items) }
+                    withContext(Dispatchers.IO) { pushItems(items) }
                 }
                 status = if (err == null) "A 类已写入 · 重启后仍生效" else "写入失败：$err"
             }

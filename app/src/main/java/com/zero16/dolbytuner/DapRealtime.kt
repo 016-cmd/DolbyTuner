@@ -802,6 +802,34 @@ object DapRealtime {
         }
     }
 
+    /**
+     * 最小实验：只把给定参数按「设备掩码 + command(0) 批量包」写一次。
+     *
+     * 目的只有一个 —— 验证逆向 APP 那条路在本机到底行不行：
+     *   profile = 0x40000000（扬声器掩码）
+     *   payload = [profile, count, (profile, fourcc, len, values)…]
+     *   setParameter(0, payload)
+     * 不提交、不碰其他参数，出问题 killall audioserver 就能恢复。
+     */
+    @Synchronized
+    fun writeFourCCMasked(items: List<Pair<String, IntArray>>): String? {
+        if (items.isEmpty()) return null
+        return try {
+            val e = session ?: openEffect().also { session = it }
+            if (!e.hasControl()) return "无控制权"
+            if (!e.enabled) return "杜比音效未启用"
+            val payload = buildParamSetPayload(0x40000000, items)
+            val st = e.setParam(CMD_SET_BATCH, payload)
+            android.util.Log.i(
+                "DapWr",
+                "masked p=0x40000000 rc=$st ${items.joinToString(" ") { it.first }}"
+            )
+            if (st < 0) statusText(st, "A 类(掩码)") else null
+        } catch (t: Throwable) {
+            rootCause(t)
+        }
+    }
+
     /** 读 persist.audio.dolby.profile（普通 App 可用 getprop，不需要权限） */
     private fun propProfile(): Int? = runCatching {
         val p = Runtime.getRuntime().exec(arrayOf("getprop", "persist.audio.dolby.profile"))
