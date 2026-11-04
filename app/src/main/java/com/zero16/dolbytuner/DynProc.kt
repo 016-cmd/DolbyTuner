@@ -36,6 +36,7 @@ object DynProc {
     private var lastGain: Float = 0f
     private var lastLimiter: LimiterCfg = LimiterCfg()
     private var lastMbc: List<MbcBandCfg> = defaultMbc()
+    private var lastMbcOn: Boolean = true
     private var lastPost: IntArray? = null
 
     /** 后置均衡 10 段中心频率 */
@@ -196,19 +197,50 @@ object DynProc {
     }
 
     /** 运行时改 MBC */
+    /** 多段压缩器模块总开关（不影响每段自己的 bypass 状态） */
+    @Synchronized
+    fun setMbcModuleEnabled(on: Boolean) {
+        val d = dp ?: return
+        runCatching { d.setMbcEnabled(on) }
+    }
+
     @Synchronized
     fun setMbc(bands: List<MbcBandCfg>) {
-        val prev = lastMbc
         lastMbc = bands
         val d = dp ?: return
         if (!runCatching { d.hasControl() }.getOrDefault(false)) {
             status = "被其他应用占用 · 未写入"
             return
         }
-        // 只写变化段
-        for (i in 0 until 4) {
-            val cur = bands.getOrNull(i) ?: continue
-            if (prev.getOrNull(i) != cur) applyMbcBand(d, i, cur)
+        // 整体替换：单段 setMbcBandAllChannelsTo 在部分机型上改 enabled 不生效
+        val okAll = runCatching {
+            val mbc = d.mbc ?: DynamicsProcessing.Mbc(4)
+            for (i in 0 until 4) {
+                val c = bands.getOrNull(i) ?: continue
+                mbc.setBand(
+                    i,
+                    DynamicsProcessing.MbcBand(
+                        c.enabled,
+                        MBC_CUTOFFS[i],
+                        c.attackMs.coerceIn(0.1f, 100f),
+                        c.releaseMs.coerceIn(1f, 5000f),
+                        c.ratio.coerceIn(1f, 30f),
+                        c.thresholdDb.coerceIn(-80f, 0f),
+                        c.kneeWidth.coerceIn(0f, 60f),
+                        c.noiseGateDb.coerceIn(-90f, 0f),
+                        c.expanderRatio.coerceIn(1f, 10f),
+                        c.preGainDb.coerceIn(-40f, 40f),
+                        c.postGainDb.coerceIn(-40f, 40f)
+                    )
+                )
+            }
+            d.setMbcAllChannelsTo(mbc)
+        }.isSuccess
+        if (!okAll) {
+            for (i in 0 until 4) {
+                val c = bands.getOrNull(i) ?: continue
+                applyMbcBand(d, i, c)
+            }
         }
     }
 
