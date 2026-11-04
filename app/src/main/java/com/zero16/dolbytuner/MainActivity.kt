@@ -1392,21 +1392,15 @@ private fun EffectsScreen() {
     var debugOn by remember { mutableStateOf(prefs.getBoolean("dp_debug", false)) }
     var showDebugDlg by remember { mutableStateOf(false) }
     var delPeqIdx by remember { mutableIntStateOf(-1) }
-
-    fun toDynMbc(l: List<IntArray>) = l.map { a ->
-        DynProc.MbcBandCfg(
-            enabled = mbcOn && a[9] == 1,
-            thresholdDb = a[0] / 10f,
-            ratio = a[1] / 10f,
-            attackMs = a[2] / 10f,
-            releaseMs = a[3].toFloat(),
-            kneeWidth = a[4].toFloat(),
-            noiseGateDb = a[5] / 10f,
-            expanderRatio = a[6] / 10f,
-            preGainDb = a[7] / 10f,
-            postGainDb = a[8] / 10f
-        )
-    }
+    var mbcStore by remember { mutableStateOf(loadMbc(prefs)) }
+    var geqQ4 by remember { mutableStateOf(loadDpGeq(prefs)) }
+    var geqQ by remember { mutableIntStateOf(prefs.getInt("geq_q", 10)) }
+    var geqMaster by remember { mutableIntStateOf(prefs.getInt("geq_master", 0)) }
+    var peqData by remember { mutableStateOf(loadPeq(prefs)) }
+    var peqSel by remember { mutableIntStateOf(0) }
+    var eqCurve by remember { mutableStateOf(FloatArray(127)) }
+    var status by remember { mutableStateOf(DynProc.status) }
+    var busy by remember { mutableStateOf(false) }
 
     // ===== 设备槽位 =====
     var curSlot by remember { mutableIntStateOf(DeviceSlots.currentSlot(ctx)) }
@@ -1514,6 +1508,22 @@ private fun EffectsScreen() {
         }
         amD.registerAudioDeviceCallback(cb, android.os.Handler(android.os.Looper.getMainLooper()))
         onDispose { runCatching { amD.unregisterAudioDeviceCallback(cb) } }
+    }
+
+
+    fun toDynMbc(l: List<IntArray>) = l.map { a ->
+        DynProc.MbcBandCfg(
+            enabled = mbcOn && a[9] == 1,
+            thresholdDb = a[0] / 10f,
+            ratio = a[1] / 10f,
+            attackMs = a[2] / 10f,
+            releaseMs = a[3].toFloat(),
+            kneeWidth = a[4].toFloat(),
+            noiseGateDb = a[5] / 10f,
+            expanderRatio = a[6] / 10f,
+            preGainDb = a[7] / 10f,
+            postGainDb = a[8] / 10f
+        )
     }
 
     fun applyMbc() {
