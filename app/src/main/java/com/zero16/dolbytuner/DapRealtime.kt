@@ -784,8 +784,13 @@ object DapRealtime {
             val e = session ?: openEffect().also { session = it }
             if (!e.hasControl()) return "无控制权"
             if (!e.enabled) return "杜比音效未启用"
-            val buf = buildParamSetPayload(curProfile(e), listOf(tag to values))
-            val st = e.setParam(CMD_SET_BATCH, buf)
+            val buf = ByteBuffer.allocate((values.size + 4) * 4).order(ByteOrder.LITTLE_ENDIAN)
+            buf.putInt(COMMAND_SET_PROFILE)
+            buf.putInt(values.size + 1)
+            buf.putInt(curProfile(e))
+            buf.putInt(fourcc(tag))
+            values.forEach { buf.putInt(it) }
+            val st = e.setParam(CMD_PARAM, buf.array())
             android.util.Log.i("DapWr", "$tag p=${curProfile(e)} rc=$st ${values.joinToString(",")}")
             if (st < 0) statusText(st, tag) else null
         } catch (t: Throwable) {
@@ -801,25 +806,23 @@ object DapRealtime {
             val e = session ?: openEffect().also { session = it }
             if (!e.hasControl()) return "无控制权"
             if (!e.enabled) return "杜比音效未启用"
-            // 逆向 APP 的做法（C0650ag → C0832dg.O → C1113iG.I(effect, 0, payload)）：
-            //   command(0) + [profile, count, (profile, fourcc, len, values…)×n]
-            // 之前用的 command(5) 逐条，DSP 收下 rc=0 但不会真正生效。
+            // 回到已验证可用的发送方式：command(5) 逐条
+            //   [0x01000000, count, profile, fourcc, values...]
+            // command(0) 批量那条（逆向用的）在压上主链路前必须单独验证，
+            // 不能直接拿正在用的 Dolby 链做实验。
             for (prof in profilesForWrite(e)) {
-                val st = e.setParam(CMD_SET_BATCH, buildParamSetPayload(prof, items))
-                android.util.Log.i(
-                    "DapWr",
-                    "batch p=$prof rc=$st n=${items.size} ${items.joinToString(" ") { it.first }}"
-                )
-                if (st < 0) {
-                    // 整包被拒：退回逐条（每条一个 count=1 的小包）
-                    for ((tag, vs) in items) {
-                        val st2 = e.setParam(
-                            CMD_SET_BATCH,
-                            buildParamSetPayload(prof, listOf(tag to vs))
-                        )
-                        android.util.Log.i("DapWr", "$tag p=$prof rc=$st2 ${vs.joinToString(",")}")
-                        if (st2 < 0) return statusText(st2, tag)
-                    }
+                for ((tag, vs) in items) {
+                    val buf = ByteBuffer
+                        .allocate((vs.size + 4) * 4)
+                        .order(ByteOrder.LITTLE_ENDIAN)
+                    buf.putInt(COMMAND_SET_PROFILE)
+                    buf.putInt(vs.size + 1)
+                    buf.putInt(prof)
+                    buf.putInt(fourcc(tag))
+                    vs.forEach { buf.putInt(it) }
+                    val st = e.setParam(CMD_PARAM, buf.array())
+                    android.util.Log.i("DapWr", "$tag p=$prof rc=$st ${vs.joinToString(",")}")
+                    if (st < 0) return statusText(st, tag)
                 }
             }
             null
