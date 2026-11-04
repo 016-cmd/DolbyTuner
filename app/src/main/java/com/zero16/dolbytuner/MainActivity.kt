@@ -848,6 +848,10 @@ private suspend fun pushFx(next: FxState): String? = withContext(Dispatchers.IO)
     e
 }
 
+/** Q6 线性值 → dB 文本（64 = 0 dB，0 = -∞） */
+private fun q6db(v: Int): String =
+    if (v <= 0) "-∞ dB" else String.format("%+.1f dB", 20.0 * Math.log10(v / 64.0))
+
 /**
  * A 类：把 DapFx 一次批量写进 Dolby。
  * 关闭态也必须写复位值，不能"什么都不写"（否则会停在上一次的值）。
@@ -871,20 +875,25 @@ private suspend fun pushDapFx(next: DapFx): String? = withContext(Dispatchers.IO
 
     // A4 环绕
     items += "dvle" to intArrayOf(if (next.surroundOn) 1 else 0)
-    items += "dvla" to intArrayOf(next.surroundBoost.coerceIn(0, 192))
+    items += "dvla" to intArrayOf(if (next.surroundOn) next.surroundBoost.coerceIn(0, 192) else 0)
+    items += "dvli" to intArrayOf(next.dvli.coerceIn(-512, 0))
+    items += "dvlo" to intArrayOf(next.dvlo.coerceIn(-512, 0))
 
-    // A2 虚拟低音（Dolby Virtual Bass）
-    // 逆向证据（C0650ag.II 第4块）：虚拟低音用的是
-    //   vbm  = 开关 / 模式      ← 不是 beon
-    //   vbog = overall gain 强度
-    //   vbsf = src freq (low, high)
-    // 而 beon / beb / becf 属于 Bass Enhancer（低音增强），
-    // 本机 profile 的 bass_enhancer_enable = 0，写它永远不会有声音变化。
+    // A2 虚拟低音（Dolby Virtual Bass）—— 完整参数组
+    // vbm 开关 / vbog 总力度 / vbhm 谐波混音 / vbsf 源频段 / vbhg 4 阶谐波
+    // 数值口径：64 = 0 dB（线性 Q6）
     items += "vbm" to intArrayOf(if (next.vbOn) 1 else 0)
-    items += "vbog" to intArrayOf(if (next.vbOn) next.vbStrength.coerceIn(0, 192) else 0)
+    items += "vbog" to intArrayOf(if (next.vbOn) next.vbStrength.coerceIn(0, 192) else 64)
+    items += "vbhm" to intArrayOf(if (next.vbOn) next.vbMix.coerceIn(0, 192) else 64)
     items += "vbsf" to intArrayOf(
         next.vbLowHz.coerceIn(20, 160),
         next.vbHighHz.coerceIn(60, 240)
+    )
+    items += "vbhg" to intArrayOf(
+        next.vbH2.coerceIn(0, 192),
+        next.vbH3.coerceIn(0, 192),
+        next.vbH4.coerceIn(0, 192),
+        next.vbH5.coerceIn(0, 192)
     )
 
     // A5 IEQ
@@ -1140,12 +1149,27 @@ private fun EffectsScreen() {
                 next.vbHighHz.coerceIn(60, 240)
             )
         }
+        if (next.vbMix != prev.vbMix || next.vbOn != prev.vbOn) {
+            out += "vbhm" to intArrayOf(if (next.vbOn) next.vbMix.coerceIn(0, 192) else 64)
+        }
+        if (next.vbH2 != prev.vbH2 || next.vbH3 != prev.vbH3 ||
+            next.vbH4 != prev.vbH4 || next.vbH5 != prev.vbH5
+        ) {
+            out += "vbhg" to intArrayOf(
+                next.vbH2.coerceIn(0, 192),
+                next.vbH3.coerceIn(0, 192),
+                next.vbH4.coerceIn(0, 192),
+                next.vbH5.coerceIn(0, 192)
+            )
+        }
 
         // A4 环绕
         if (next.surroundOn != prev.surroundOn) out += "dvle" to intArrayOf(if (next.surroundOn) 1 else 0)
-        if (next.surroundBoost != prev.surroundBoost) {
-            out += "dvla" to intArrayOf(next.surroundBoost.coerceIn(0, 192))
+        if (next.surroundBoost != prev.surroundBoost || next.surroundOn != prev.surroundOn) {
+            out += "dvla" to intArrayOf(if (next.surroundOn) next.surroundBoost.coerceIn(0, 192) else 0)
         }
+        if (next.dvli != prev.dvli) out += "dvli" to intArrayOf(next.dvli.coerceIn(-512, 0))
+        if (next.dvlo != prev.dvlo) out += "dvlo" to intArrayOf(next.dvlo.coerceIn(-512, 0))
 
         // A5 IEQ
         if (next.ieqOn != prev.ieqOn) out += "ieon" to intArrayOf(if (next.ieqOn) 1 else 0)
@@ -1202,16 +1226,23 @@ Column(
         // ── 低音组 ──────────────────────────────
         EffectCard(
             title = "虚拟低音",
-            subtitle = "beon · 谐波增强 · 仅外放生效",
+            subtitle = "vbm · 谐波合成 · 仅外放生效",
             icon = Icons.Default.GraphicEq,
             enabled = dapFx.vbOn,
             onEnabledChange = { setDap(dapFx.copy(vbOn = it), false) },
             accent = Color(0xFFF59E0B)
         ) {
             ParamSlider(
-                "强度", dapFx.vbStrength.toString(), dapFx.vbStrength.toFloat(), 0f..192f,
+                "总力度", "${dapFx.vbStrength} · ${q6db(dapFx.vbStrength)}",
+                dapFx.vbStrength.toFloat(), 0f..192f,
                 onValue = { setDap(dapFx.copy(vbStrength = it.toInt(), vbOn = true), true) },
                 onFinished = { setDap(dapFx.copy(vbStrength = it.toInt(), vbOn = true), false) }
+            )
+            ParamSlider(
+                "谐波混音", "${dapFx.vbMix} · ${q6db(dapFx.vbMix)}",
+                dapFx.vbMix.toFloat(), 0f..192f,
+                onValue = { setDap(dapFx.copy(vbMix = it.toInt(), vbOn = true), true) },
+                onFinished = { setDap(dapFx.copy(vbMix = it.toInt(), vbOn = true), false) }
             )
             ParamSlider(
                 "低频下限 · Hz", dapFx.vbLowHz.toString(), dapFx.vbLowHz.toFloat(), 20f..160f,
@@ -1222,6 +1253,32 @@ Column(
                 "低频上限 · Hz", dapFx.vbHighHz.toString(), dapFx.vbHighHz.toFloat(), 60f..240f,
                 onValue = { setDap(dapFx.copy(vbHighHz = it.toInt(), vbOn = true), true) },
                 onFinished = { setDap(dapFx.copy(vbHighHz = it.toInt(), vbOn = true), false) }
+            )
+            Spacer(Modifier.height(6.dp))
+            Text("谐波塑形 · 64 = 0 dB", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurfaceVariant)
+            ParamSlider(
+                "2 次 · 2f", "${dapFx.vbH2} · ${q6db(dapFx.vbH2)}",
+                dapFx.vbH2.toFloat(), 0f..192f,
+                onValue = { setDap(dapFx.copy(vbH2 = it.toInt(), vbOn = true), true) },
+                onFinished = { setDap(dapFx.copy(vbH2 = it.toInt(), vbOn = true), false) }
+            )
+            ParamSlider(
+                "3 次 · 3f", "${dapFx.vbH3} · ${q6db(dapFx.vbH3)}",
+                dapFx.vbH3.toFloat(), 0f..192f,
+                onValue = { setDap(dapFx.copy(vbH3 = it.toInt(), vbOn = true), true) },
+                onFinished = { setDap(dapFx.copy(vbH3 = it.toInt(), vbOn = true), false) }
+            )
+            ParamSlider(
+                "4 次 · 4f", "${dapFx.vbH4} · ${q6db(dapFx.vbH4)}",
+                dapFx.vbH4.toFloat(), 0f..192f,
+                onValue = { setDap(dapFx.copy(vbH4 = it.toInt(), vbOn = true), true) },
+                onFinished = { setDap(dapFx.copy(vbH4 = it.toInt(), vbOn = true), false) }
+            )
+            ParamSlider(
+                "5 次 · 5f", "${dapFx.vbH5} · ${q6db(dapFx.vbH5)}",
+                dapFx.vbH5.toFloat(), 0f..192f,
+                onValue = { setDap(dapFx.copy(vbH5 = it.toInt(), vbOn = true), true) },
+                onFinished = { setDap(dapFx.copy(vbH5 = it.toInt(), vbOn = true), false) }
             )
             Text("耳机 / 蓝牙下 Dolby 会自动旁路，只对外放有效", fontSize = 9.sp, color = cs.onSurfaceVariant)
         }
@@ -1262,7 +1319,17 @@ Column(
                 onValue = { setDap(dapFx.copy(surroundBoost = it.toInt(), surroundOn = true), true) },
                 onFinished = { setDap(dapFx.copy(surroundBoost = it.toInt(), surroundOn = true), false) }
             )
-            Text("与下面的虚拟环绕是两套，建议只开一个", fontSize = 9.sp, color = cs.onSurfaceVariant)
+            ParamSlider(
+                "前级 · dvli", dapFx.dvli.toString(), dapFx.dvli.toFloat(), -512f..0f,
+                onValue = { setDap(dapFx.copy(dvli = it.toInt(), surroundOn = true), true) },
+                onFinished = { setDap(dapFx.copy(dvli = it.toInt(), surroundOn = true), false) }
+            )
+            ParamSlider(
+                "后级 · dvlo", dapFx.dvlo.toString(), dapFx.dvlo.toFloat(), -512f..0f,
+                onValue = { setDap(dapFx.copy(dvlo = it.toInt(), surroundOn = true), true) },
+                onFinished = { setDap(dapFx.copy(dvlo = it.toInt(), surroundOn = true), false) }
+            )
+            Text("前后级越接近 0 越响；出厂 -256", fontSize = 9.sp, color = cs.onSurfaceVariant)
         }
 
         EffectCard(

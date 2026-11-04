@@ -39,11 +39,17 @@ internal object DapOfficial {
     const val BASS_BOOST = 192
     const val BASS_CUTOFF = 200
     const val BASS_WIDTH = 16
-    const val VB_OVERALL_GAIN = 0
+    // DSP 侧：64 = 0 dB（线性 Q6）
+    const val VB_OVERALL_GAIN = 64
     const val VB_MIX_LOW = 94
     const val VB_MIX_HIGH = 469
     const val VB_SRC_LOW = 35
     const val VB_SRC_HIGH = 160
+    // 官方 harmgains 后 8 位全是 48（48/64 ≈ -2.5 dB）
+    const val VB_HARM = 48
+    // 逆向写死的环绕前后级
+    const val VIR_PRE = -256
+    const val VIR_POST = -256
 
     /**
      * A 类出厂默认：功能全关，参数取官方基线。
@@ -59,8 +65,15 @@ internal object DapOfficial {
         vbStrength = VB_OVERALL_GAIN,
         vbLowHz = VB_SRC_LOW,
         vbHighHz = VB_SRC_HIGH,
+        vbMix = VB_OVERALL_GAIN,
+        vbH2 = VB_HARM,
+        vbH3 = VB_HARM,
+        vbH4 = VB_HARM,
+        vbH5 = VB_HARM,
         surroundOn = false,
         surroundBoost = SURROUND_SPEAKER,
+        dvli = VIR_PRE,
+        dvlo = VIR_POST,
         ieqOn = false,
         ieqAmount = IEQ_AMOUNT_SPEAKER,
         ieqPreset = IEQ_PRESET_SPEAKER,

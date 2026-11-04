@@ -18,12 +18,22 @@ internal data class DapFx(
 
     // A2 虚拟低音（官方 tunings：overall_gain 0、src 35–160Hz、mix 94–469Hz）
     val vbOn: Boolean = false,
-    val vbStrength: Int = 0,
+    val vbStrength: Int = 64,
     val vbLowHz: Int = 35,
     val vbHighHz: Int = 160,
+    // 谐波生成总混音（vbhm，64 = 0 dB）
+    val vbMix: Int = 64,
+    // 4 阶独立谐波塑形（vbhg）：2f / 3f / 4f / 5f，48 = -2.5 dB（官方 tunings harmgains）
+    val vbH2: Int = 48,
+    val vbH3: Int = 48,
+    val vbH4: Int = 48,
+    val vbH5: Int = 48,
     // A4 环绕（官方 profile_endpoints：speaker surround_boost 0）
     val surroundOn: Boolean = false,
     val surroundBoost: Int = 0,
+    // 环绕前后级（逆向写死 -256，Q8）
+    val dvli: Int = -256,
+    val dvlo: Int = -256,
     // A5 IEQ（官方 profile_endpoints：speaker ieq_amount 9、preset 1）
     val ieqOn: Boolean = false,
     val ieqAmount: Int = 9,
@@ -62,7 +72,14 @@ internal data class DapFx(
         mbdrcReleaseMs,
         mbdrcOffsets.joinToString(":") { it.toString() },
         if (postGainOn) 1 else 0,
-        postGainDb
+        postGainDb,
+        vbMix,
+        vbH2,
+        vbH3,
+        vbH4,
+        vbH5,
+        dvli,
+        dvlo
     ).joinToString(",")
 
     companion object {
@@ -101,7 +118,14 @@ internal data class DapFx(
                 mbdrcReleaseMs = i(17, 60),
                 mbdrcOffsets = offsets,
                 postGainOn = b(19, false),
-                postGainDb = i(20, 0)
+                postGainDb = i(20, 0),
+                vbMix = i(21, 64),
+                vbH2 = i(22, 48),
+                vbH3 = i(23, 48),
+                vbH4 = i(24, 48),
+                vbH5 = i(25, 48),
+                dvli = i(26, -256),
+                dvlo = i(27, -256)
             )
         }
     }

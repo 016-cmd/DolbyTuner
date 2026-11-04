@@ -753,22 +753,18 @@ object DapRealtime {
     private fun allProfiles(e: AudioEffect): List<Int> = listOf(currentProfile(e))
 
     /**
-     * A 类写入要覆盖哪些 profile。
+     * A 类写入使用的 profile —— 这里是**设备掩码**，不是音效档号。
      *
-     * 现在的取法跟 GEQ 一样：**全部档都写**。
-     *   · 逆向 APP 的 Il() 就是 for (i = 0; i < 4; i++) 逐档下发
-     *     （说明多档覆盖本来就是官方用法）
-     *   · 之前只写单档，设备/音效模式一换（persist 属性从 4 变 0）就整条失效
+     * 逆向 C0892eg.O(Context) 会按当前 AudioDeviceInfo.type 返回：
+     *   扬声器 / 默认      → 0x40000000
+     *   耳机 / USB / 蓝牙  → 0x20000000
+     * 它写入时把这两个都写一遍（扬声器一遍 + 当前设备一遍）。
      *
-     * 覆盖范围：0..3（逆向范围）∪ 0..profileCount-1 ∪ persist 属性档。
+     * 之前把这里当 0/1/2/3/4 档号用，DSP 收到不认识的掩码就会
+     * "rc = 0 但什么都不改"，这正是写入成功却没有声音变化的原因。
      */
-    private fun profilesForWrite(e: AudioEffect): List<Int> {
-        val set = sortedSetOf(0, 1, 2, 3)
-        val n = runCatching { queryInt(e, COMMAND_GET_PROFILE_COUNT) }.getOrDefault(0)
-        if (n in 1..32) for (p in 0 until n) set.add(p)
-        propProfile()?.let { set.add(it) }
-        return set.filter { it in 0..31 }
-    }
+    private fun profilesForWrite(e: AudioEffect): List<Int> =
+        listOf(0x40000000, 0x20000000)
 
     /** 读 persist.audio.dolby.profile（普通 App 可用 getprop，不需要权限） */
     private fun propProfile(): Int? = runCatching {
