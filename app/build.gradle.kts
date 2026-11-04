@@ -12,7 +12,7 @@ android {
         applicationId = "com.zero16.dolbytuner"
         minSdk = 30
         targetSdk = 36
-        versionCode = 30
+        versionCode = 31
         versionName = "1.3.0"
     }
 

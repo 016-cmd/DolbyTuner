@@ -132,10 +132,6 @@ internal fun ConfigScreen() {
     ) {
         Spacer(Modifier.height(14.dp))
         Text("配置预设", fontSize = 25.sp, fontWeight = FontWeight.Bold)
-        Text(
-            "导入导出 JSON · 一行一个预设 · 应用后需在音效页「保存到 Dolby」才会持久化",
-            fontSize = 11.sp, color = cs.onSurfaceVariant
-        )
         Spacer(Modifier.height(12.dp))
 
         // ── 顶部：导入 / 导出 ──────────────────────────────
@@ -427,26 +423,23 @@ private fun PresetBigCard(p: Preset, onApply: () -> Unit, onDelete: () -> Unit) 
                 FxLine("带宽", p.fx.bassWidth.toString(), ink)
             }
 
-            // 右 20%：名字 + 应用 / 删除
+            // 右 20%：名字 + 应用 / 删除（从上到下均分整列高度）
             Column(
-                Modifier.fillMaxHeight().weight(0.20f).padding(6.dp),
-                verticalArrangement = Arrangement.SpaceBetween,
+                Modifier.fillMaxHeight().weight(0.20f).padding(horizontal = 5.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.SpaceEvenly,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
                     p.name,
                     color = Color.White,
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 2,
                     textAlign = TextAlign.Center,
-                    lineHeight = 12.sp
+                    lineHeight = 13.sp
                 )
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    GreenMiniButton("应用", Color.White.copy(alpha = 0.26f), onApply)
-                    Spacer(Modifier.height(5.dp))
-                    GreenMiniButton("删除", Color.Black.copy(alpha = 0.18f), onDelete)
-                }
+                GreenMiniButton("应用", Color.White.copy(alpha = 0.26f), onApply)
+                GreenMiniButton("删除", Color.Black.copy(alpha = 0.20f), onDelete)
             }
         }
     }
@@ -469,13 +462,13 @@ private fun FxLine(label: String, value: String, color: Color) {
 @Composable
 private fun GreenMiniButton(text: String, bg: Color, onClick: () -> Unit) {
     Box(
-        Modifier.fillMaxWidth().height(24.dp)
-            .clip(RoundedCornerShape(7.dp))
+        Modifier.fillMaxWidth().height(38.dp)
+            .clip(RoundedCornerShape(9.dp))
             .background(bg)
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        Text(text, color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+        Text(text, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
     }
 }
 
