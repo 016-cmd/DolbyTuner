@@ -281,6 +281,8 @@ private fun MainApp(activity: Activity, deviceLine: String) {
             val p = loadPresets(ctx).firstOrNull { it.name == b.presetName }
             if (p != null) {
                 val err = applyPreset(ctx, p)
+                // 预设里不含音效页参数时，把 DP 复位，避免沿用上一个设备的声音
+                if (err == null && p.scope == SCOPE_DOLBY) resetDpOnly(ctx)
                 if (err == null) {
                     prefs.edit().putString("device_last_applied", d.key).apply()
                     DeviceState.notifyApplied()
@@ -1278,6 +1280,52 @@ internal suspend fun captureDspBaseline(ctx: Context): String? = withContext(Dis
 }
 
 /** 恢复为已检测的 DSP 默认值（没检测过则退回平直 + 内置默认）；未绑定设备时也用这套 */
+/** 音效页（DP）恢复出厂：只写 dynproc 偏好，不动 Dolby 侧 */
+internal fun resetDpPrefsToDefault(ctx: Context) {
+    val p = ctx.getSharedPreferences("dynproc", Context.MODE_PRIVATE)
+    val flatGeq = IntArray(DapRealtime.BANDS)
+    val peq = defaultPeq()
+    val mbc = defaultMbcInts()
+    val rev = DynReverb.DEFAULTS.copyOf()
+    val post = IntArray(11)
+    p.edit()
+        .putInt("gain", 0).putBoolean("lim_on", true)
+        .putInt("lim_thr", -20).putInt("lim_atk", 10).putInt("lim_rel", 60)
+        .putInt("lim_rat", 100).putInt("lim_post", 0).putInt("lim_link", 0)
+        .putBoolean("mbc_on", false).putBoolean("rev_on", false)
+        .putInt("rev_mode", 0).putInt("rev_preset", 3)
+        .putBoolean("post_on", false).putInt("eq_tab", 0)
+        .putInt("geq_q", 10).putInt("geq_master", 0)
+        .putBoolean("el_on", false).putInt("el_base", -1)
+        .putInt("el_strength", 10).putInt("el_maxdb", 80)
+        .putInt("eq_intensity", 100).putString("aeq", "")
+        .putString("geq_int", IntArray(DapRealtime.BANDS) { 100 }.joinToString(","))
+        .apply()
+    saveDpGeq(p, flatGeq)
+    savePeq(p, peq)
+    saveMbc(p, mbc)
+    saveRev(p, rev)
+    savePost(p, post)
+}
+
+/** 音效页（DP）参数与运行中的 DSP 一并恢复默认 */
+internal suspend fun resetDpOnly(ctx: Context) {
+    resetDpPrefsToDefault(ctx)
+    withContext(Dispatchers.IO) {
+        runCatching {
+            if (DynProc.running) {
+                DynProc.setInputGain(0f)
+                DynProc.setPreEq(FloatArray(127))
+                DynProc.setLimiter(DynProc.LimiterCfg())
+                DynProc.setMbc(DynProc.defaultMbc())
+                DynProc.setPostEq(IntArray(10), false)
+            }
+            DynReverb.stop()
+            DynPresetReverb.stop()
+        }
+    }
+}
+
 internal suspend fun resetToDefault(ctx: Context): String? {
     val flat = IntArray(DapRealtime.BANDS)
     val def = if (DspBaseline.captured(ctx)) DspBaseline.fx(ctx) else FxState()
@@ -1290,6 +1338,8 @@ internal suspend fun resetToDefault(ctx: Context): String? {
         saveGeq(ctx, flat)
         saveFx(ctx, def)
     }
+    // 没绑定预设的设备：音效页（DP）也要一起回到默认，否则会把上一个设备的调音带过来
+    resetDpOnly(ctx)
     return e
 }
 
