@@ -218,6 +218,37 @@ object DapRealtime {
         ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
             .putInt(COMMAND_SAVE).array()
 
+    /**
+     * command(0) 批量设置包 —— 逆向 C0832dg.O(profile) 的原始格式：
+     *
+     *   putInt(profile)
+     *   putInt(参数条数)
+     *   每条：
+     *     putInt(profile)
+     *     putInt(fourcc)
+     *     putInt(值的个数)
+     *     putInt(值…)
+     *
+     * 这是真正能改 DSP 参数的那条通道；之前用的 command(5) 逐条是读/写单参数的旧接口。
+     */
+    private fun buildParamSetPayload(
+        profile: Int,
+        items: List<Pair<String, IntArray>>
+    ): ByteArray {
+        var words = 2
+        items.forEach { words += it.second.size + 3 }
+        val buf = ByteBuffer.allocate(words * 4).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt(profile)
+        buf.putInt(items.size)
+        items.forEach { (tag, vs) ->
+            buf.putInt(profile)
+            buf.putInt(fourcc(tag))
+            buf.putInt(vs.size)
+            vs.forEach { buf.putInt(it) }
+        }
+        return buf.array()
+    }
+
     private fun buildQueryBuffer(): ByteArray = ByteArray(12)
 
     private fun buildCurveBuffer(): ByteArray = ByteArray((BANDS + 2) * 4)
@@ -762,14 +793,9 @@ object DapRealtime {
             val e = session ?: openEffect().also { session = it }
             if (!e.hasControl()) return "无控制权"
             if (!e.enabled) return "杜比音效未启用"
-            val buf = ByteBuffer.allocate((values.size + 4) * 4).order(ByteOrder.LITTLE_ENDIAN)
-            buf.putInt(COMMAND_SET_PROFILE)
-            buf.putInt(values.size + 1)
-            // 关键：这里必须是「当前 profile」，写 0 会把 Dolby 切到 profile 0
-            buf.putInt(curProfile(e))
-            buf.putInt(fourcc(tag))
-            values.forEach { buf.putInt(it) }
-            val st = e.setParam(CMD_PARAM, buf.array())
+            val buf = buildParamSetPayload(curProfile(e), listOf(tag to values))
+            val st = e.setParam(CMD_SET_BATCH, buf)
+            android.util.Log.i("DapWr", "$tag p=${curProfile(e)} rc=$st ${values.joinToString(",")}")
             if (st < 0) statusText(st, tag) else null
         } catch (t: Throwable) {
             rootCause(t)
@@ -784,22 +810,25 @@ object DapRealtime {
             val e = session ?: openEffect().also { session = it }
             if (!e.hasControl()) return "无控制权"
             if (!e.enabled) return "杜比音效未启用"
-            // 逆向 APP 的做法：每条参数单独一条 command(5)
-            //   [0x01000000, count+1, profile, fourcc, values...]
-            // 不把多个 profile 塞进同一个批量包（那样 Dolby 会判未生效）。
+            // 逆向 APP 的做法（C0650ag → C0832dg.O → C1113iG.I(effect, 0, payload)）：
+            //   command(0) + [profile, count, (profile, fourcc, len, values…)×n]
+            // 之前用的 command(5) 逐条，DSP 收下 rc=0 但不会真正生效。
             for (prof in profilesForWrite(e)) {
-                for ((tag, vs) in items) {
-                    val buf = ByteBuffer
-                        .allocate((vs.size + 4) * 4)
-                        .order(ByteOrder.LITTLE_ENDIAN)
-                    buf.putInt(COMMAND_SET_PROFILE)
-                    buf.putInt(vs.size + 1)
-                    buf.putInt(prof)
-                    buf.putInt(fourcc(tag))
-                    vs.forEach { buf.putInt(it) }
-                    val st = e.setParam(CMD_PARAM, buf.array())
-                    android.util.Log.i("DapWr", "$tag p=$prof rc=$st ${vs.joinToString(",")}")
-                    if (st < 0) return statusText(st, tag)
+                val st = e.setParam(CMD_SET_BATCH, buildParamSetPayload(prof, items))
+                android.util.Log.i(
+                    "DapWr",
+                    "batch p=$prof rc=$st n=${items.size} ${items.joinToString(" ") { it.first }}"
+                )
+                if (st < 0) {
+                    // 整包被拒：退回逐条（每条一个 count=1 的小包）
+                    for ((tag, vs) in items) {
+                        val st2 = e.setParam(
+                            CMD_SET_BATCH,
+                            buildParamSetPayload(prof, listOf(tag to vs))
+                        )
+                        android.util.Log.i("DapWr", "$tag p=$prof rc=$st2 ${vs.joinToString(",")}")
+                        if (st2 < 0) return statusText(st2, tag)
+                    }
                 }
             }
             null
