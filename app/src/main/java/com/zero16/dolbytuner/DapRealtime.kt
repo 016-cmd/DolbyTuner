@@ -900,21 +900,17 @@ object DapRealtime {
             //   [0x01000000, count, profile, fourcc, values...]
             // command(0) 批量那条（逆向用的）在压上主链路前必须单独验证，
             // 不能直接拿正在用的 Dolby 链做实验。
-            for (prof in profilesForWrite(e)) {
-                for ((tag, vs) in items) {
-                    val buf = ByteBuffer
-                        .allocate((vs.size + 4) * 4)
-                        .order(ByteOrder.LITTLE_ENDIAN)
-                    buf.putInt(COMMAND_SET_PROFILE)
-                    buf.putInt(vs.size + 1)
-                    buf.putInt(prof)
-                    buf.putInt(fourcc(tag))
-                    vs.forEach { buf.putInt(it) }
-                    val st = e.setParam(CMD_PARAM, buf.array())
-                    android.util.Log.i("DapWr", "$tag p=$prof rc=$st ${vs.joinToString(",")}")
-                    if (st < 0) return statusText(st, tag)
-                }
-            }
+            // ── 改用逆向 C0832dg.O 的批量包 + command(0)
+            //    [profile, count, (profile, fourcc, len, values)…]
+            // 探针实测：command(5) 对 A 类是“哑写”——rc=0，但值从不进 DapParamCache，
+            // updateEffectParams 下发时 vbog 仍是 0。command(0) 才会走 setParamValues 分支。
+            val payload = buildParamSetPayload(DEVICE_SPEAKER, items)
+            val st = e.setParam(CMD_SET_BATCH, payload)
+            android.util.Log.i(
+                "DapWr",
+                "batch p=0x${DEVICE_SPEAKER.toString(16)} rc=$st ${items.joinToString(" ") { it.first }}"
+            )
+            if (st < 0) return statusText(st, "A 类批量")
             // 关键：普通参数（101/111/233…）每次写完都会补一条 COMMAND_SAVE，
             // 所以它能落进 DSP 的当前参数集；
             // A 类以前只写不提交，DSP 侧一直停在"待提交"状态 —— 这就是写成功没声音的原因。
