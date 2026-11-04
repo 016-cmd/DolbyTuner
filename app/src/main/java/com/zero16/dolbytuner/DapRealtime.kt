@@ -530,6 +530,18 @@ object DapRealtime {
     }
 
     /**
+     * A 类写完之后：丢句柄 + 立刻把最后一次 GEQ 曲线重注回去。
+     * Dolby 重建效果链后，GEQ 的曲线不会自己回来，必须重注。
+     */
+    @Synchronized
+    fun rebindAndReapply() {
+        runCatching { session?.release() }
+        session = null
+        val c = lastCurve?.copyOf() ?: return
+        writeLive(c)
+    }
+
+    /**
      * 主动丢弃当前句柄。
      * A 类写入后 Dolby 可能已经重建效果链，旧句柄写不进 GEQ，
      * 丢掉它，下一次操作会自动重开。
@@ -613,9 +625,22 @@ object DapRealtime {
     // ────────────────────────────────────────────────────────────
 
     /** 当前生效的 profile 编号；读不到就用 0（不做假设） */
-    private fun curProfile(e: AudioEffect): Int =
-        runCatching { queryInt(e, COMMAND_GET_CURRENT) }
+    private fun curProfile(e: AudioEffect): Int {
+        // AudioService 内部那份 profile 可能已经被写成 0，
+        // 用 queryInt(GET_CURRENT) 取回来会一直拿到 0（自锁）。
+        // persist.audio.dolby.profile 是 Dolby 自己持久化的真值，优先用它。
+        propProfile()?.let { return it }
+        return runCatching { queryInt(e, COMMAND_GET_CURRENT) }
             .getOrNull()?.takeIf { it in 0..31 } ?: 0
+    }
+
+    /** 读 persist.audio.dolby.profile（普通 App 可用 getprop，不需要权限） */
+    private fun propProfile(): Int? = runCatching {
+        val p = Runtime.getRuntime().exec(arrayOf("getprop", "persist.audio.dolby.profile"))
+        val txt = p.inputStream.bufferedReader().use { it.readText() }.trim()
+        p.waitFor()
+        txt.toIntOrNull()
+    }.getOrNull()?.takeIf { it in 0..31 }
 
     /** 四字符 → int（小端：'d' | 'p'<<8 | 'l'<<16 | 'p'<<24） */
     private fun fourcc(tag: String): Int {
@@ -821,7 +846,12 @@ object DapRealtime {
         if (count !in 1..32) return "无法取得 profile 数量（返回 $count）"
 
         val targets: List<Int> = when {
-            onlyProfile == null -> (0 until count).toList()
+            onlyProfile == null -> {
+                // 至少覆盖「当前 profile」：某些固件 queryInt(GET_PROFILE_COUNT)
+                // 只返回 4，而当前 profile 是 4，写 0..3 会完全落空。
+                val n = maxOf(count, curProfile(effect) + 1)
+                (0 until n).toList()
+            }
             onlyProfile in 0 until count -> listOf(onlyProfile)
             else -> (0 until count).toList()
         }
