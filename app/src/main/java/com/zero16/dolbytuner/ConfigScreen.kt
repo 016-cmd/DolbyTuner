@@ -49,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -85,6 +86,7 @@ internal fun ConfigScreen() {
 
     var applyTarget by remember { mutableStateOf<Preset?>(null) }
     var deleteTarget by remember { mutableStateOf<Preset?>(null) }
+    var detailTarget by remember { mutableStateOf<Preset?>(null) }
     var appliedName by remember { mutableStateOf("") }
     var showAppliedTip by remember { mutableStateOf(false) }
 
@@ -113,7 +115,8 @@ internal fun ConfigScreen() {
                             o.optInt("bass", 0) == 1, o.optInt("gain", 0),
                             o.optInt("cutoff", 150), o.optInt("width", 0),
                             o.optInt("dialog", 0) == 1, o.optInt("damt", 4)
-                        )
+                        ),
+                        DapFx.fromPref(o.optString("dap", null))
                     )
                 }
                 val merged = (presets + incoming).distinctBy { it.name }
@@ -199,6 +202,7 @@ internal fun ConfigScreen() {
             presets.forEach { p ->
                 PresetBigCard(
                     p = p,
+                    onOpen = { detailTarget = p },
                     onApply = { applyTarget = p },
                     onDelete = { deleteTarget = p }
                 )
@@ -210,6 +214,11 @@ internal fun ConfigScreen() {
         Text(status, fontSize = 10.sp, color = cs.onSurfaceVariant)
     }
 
+    // 点击预设卡片：详细参数
+    detailTarget?.let { p ->
+        PresetDetailDialog(p) { detailTarget = null }
+    }
+
     // ── 保存预设：输入名字 ─────────────────────────────────
     if (showSaveDialog) {
         AlertDialog(
@@ -218,7 +227,7 @@ internal fun ConfigScreen() {
             text = {
                 Column {
                     Text(
-                        "会把当前 GEQ 20 段与音效页 8 项参数一起保存",
+                        "会把当前 GEQ 20 段、音效页参数与 A 类扩展参数一起保存",
                         fontSize = 10.sp, color = cs.onSurfaceVariant
                     )
                     Spacer(Modifier.height(10.dp))
@@ -235,7 +244,7 @@ internal fun ConfigScreen() {
             confirmButton = {
                 TextButton(onClick = {
                     val name = presetName.trim().ifBlank { "预设 ${presets.size + 1}" }
-                    writePresets(ctx, presets.filterNot { it.name == name } + Preset(name, loadGeq(ctx), loadFx(ctx)))
+                    writePresets(ctx, presets.filterNot { it.name == name } + Preset(name, loadGeq(ctx), loadFx(ctx), DapFxStore.load(ctx)))
                     reload()
                     presetName = ""
                     showSaveDialog = false
@@ -377,7 +386,12 @@ internal fun ConfigScreen() {
 // ────────────────────────────────────────────────────────────
 
 @Composable
-private fun PresetBigCard(p: Preset, onApply: () -> Unit, onDelete: () -> Unit) {
+private fun PresetBigCard(
+    p: Preset,
+    onOpen: () -> Unit,
+    onApply: () -> Unit,
+    onDelete: () -> Unit
+) {
     val cs = MaterialTheme.colorScheme
     val light = Color(0xFFF0FDF4)
     val mid = Color(0xFFBBF7D0)
@@ -398,9 +412,9 @@ private fun PresetBigCard(p: Preset, onApply: () -> Unit, onDelete: () -> Unit) 
             )
     ) {
         Row(Modifier.fillMaxSize()) {
-            // 左 60%：GEQ 曲线
+            // 左 60%：GEQ 曲线（点击看详细参数）
             Box(
-                Modifier.fillMaxHeight().weight(0.60f),
+                Modifier.fillMaxHeight().weight(0.60f).clickable { onOpen() },
                 contentAlignment = Alignment.Center
             ) {
                 BandCurveCanvas(
@@ -410,17 +424,23 @@ private fun PresetBigCard(p: Preset, onApply: () -> Unit, onDelete: () -> Unit) 
                 )
             }
 
-            // 中 20%：音效页 8 项（文字精简但全部呈现）
+            // 中 20%：音效页 8 项 + A 类摘要（点击看详细参数）
             Column(
-                Modifier.fillMaxHeight().weight(0.20f).padding(horizontal = 2.dp),
+                Modifier.fillMaxHeight().weight(0.20f).padding(horizontal = 2.dp)
+                    .clickable { onOpen() },
                 verticalArrangement = Arrangement.Center
             ) {
+                val d = p.dapFx
                 FxLine("环绕", "耳${mark(p.fx.hpVirtual)} 外${mark(p.fx.spVirtual)}", ink)
                 FxLine("人声", "${mark(p.fx.dialogOn)} ${p.fx.dialogAmt}", ink)
                 FxLine("低音", mark(p.fx.bassOn), ink)
                 FxLine("增益", p.fx.bassGain.toString(), ink)
                 FxLine("截止", p.fx.bassCutoff.toString(), ink)
                 FxLine("带宽", p.fx.bassWidth.toString(), ink)
+                FxLine("限幅", if (d.limiterOn) "●${d.dplpDb}" else "○", ink)
+                FxLine("虚低", if (d.vbOn) "●${d.vbStrength} ${d.vbLowHz}-${d.vbHighHz}" else "○", ink)
+                FxLine("IEQ", if (d.ieqOn) "●${d.ieqAmount}/${d.ieqPreset}" else "○", ink)
+                FxLine("后级", if (d.postGainOn) "●${d.postGainDb}" else "○", ink)
             }
 
             // 右 20%：名字 + 应用 / 删除（从上到下均分整列高度）
@@ -442,6 +462,89 @@ private fun PresetBigCard(p: Preset, onApply: () -> Unit, onDelete: () -> Unit) 
                 GreenMiniButton("删除", Color.Black.copy(alpha = 0.20f), onDelete)
             }
         }
+    }
+}
+
+@Composable
+private fun PresetDetailDialog(p: Preset, onClose: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val d = p.dapFx
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = {
+            Text(p.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 2)
+        },
+        text = {
+            Column(
+                Modifier.fillMaxWidth().height(380.dp).verticalScroll(rememberScrollState())
+            ) {
+                DetailTitle("GEQ · 20 段", cs)
+                Text(
+                    DapRealtime.FREQS.mapIndexed { i, f -> "${f.toInt()}Hz ${p.geq[i]}" }
+                        .chunked(3).joinToString("\n") { it.joinToString("   ") },
+                    fontSize = 10.sp, lineHeight = 15.sp, color = cs.onSurfaceVariant
+                )
+
+                DetailTitle("音效页参数", cs)
+                DetailRow("耳机虚拟环绕", mark(p.fx.hpVirtual), cs)
+                DetailRow("扬声器虚拟环绕", mark(p.fx.spVirtual), cs)
+                DetailRow("人声增强", mark(p.fx.dialogOn), cs)
+                DetailRow("人声强度", p.fx.dialogAmt.toString(), cs)
+                DetailRow("低音增强", mark(p.fx.bassOn), cs)
+                DetailRow("低音增益", p.fx.bassGain.toString(), cs)
+                DetailRow("低音截止", p.fx.bassCutoff.toString(), cs)
+                DetailRow("低音带宽", p.fx.bassWidth.toString(), cs)
+
+                DetailTitle("A 类 · Dolby 扩展", cs)
+                DetailRow(
+                    "峰值限幅",
+                    if (d.limiterOn) "开 · ${d.dplpDb} dBFS" else "关", cs
+                )
+                DetailRow("限幅释放", if (d.pregOn) "开" else "关", cs)
+                DetailRow("前级增益", "${d.preoDb} dB", cs)
+                DetailRow("VMB 推限", "${d.vmbDb} dB", cs)
+                DetailRow("虚拟低音", if (d.vbOn) "开" else "关", cs)
+                DetailRow("低音强度", d.vbStrength.toString(), cs)
+                DetailRow("低音频段", "${d.vbLowHz} - ${d.vbHighHz} Hz", cs)
+                DetailRow(
+                    "环绕声场",
+                    if (d.surroundOn) "开 · ${d.surroundBoost}" else "关", cs
+                )
+                DetailRow(
+                    "智能均衡 IEQ",
+                    if (d.ieqOn) "开 · 强度 ${d.ieqAmount} · 预置 ${d.ieqPreset}" else "关", cs
+                )
+                DetailRow(
+                    "MBDRC",
+                    if (d.mbdrcOn) "开 · P${d.mbdrcProfile} · ${d.mbdrcAttackMs}/${d.mbdrcReleaseMs}ms · ${d.mbdrcOffsets.joinToString(",")}"
+                    else "关", cs
+                )
+                DetailRow("后级增益", if (d.postGainOn) "${d.postGainDb} dB" else "关", cs)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onClose) { Text("关闭", fontSize = 12.sp) }
+        }
+    )
+}
+
+@Composable
+private fun DetailTitle(text: String, cs: androidx.compose.material3.ColorScheme) {
+    Spacer(Modifier.height(10.dp))
+    Text(
+        text,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        color = if (cs.background.luminance() > 0.5f) Color(0xFF14532D) else Color(0xFF86EFAC)
+    )
+    Spacer(Modifier.height(4.dp))
+}
+
+@Composable
+private fun DetailRow(label: String, value: String, cs: androidx.compose.material3.ColorScheme) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
+        Text(label, fontSize = 10.sp, color = cs.onSurfaceVariant, modifier = Modifier.weight(1f))
+        Text(value, fontSize = 10.sp, color = cs.onSurface, fontWeight = FontWeight.Medium)
     }
 }
 

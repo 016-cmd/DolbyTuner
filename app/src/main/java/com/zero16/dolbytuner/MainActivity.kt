@@ -743,7 +743,8 @@ internal data class FxState(
 internal data class Preset(
     val name: String,
     val geq: IntArray,
-    val fx: FxState
+    val fx: FxState,
+    val dapFx: DapFx = DapFx()
 )
 
 internal fun loadFx(ctx: Context): FxState {
@@ -791,7 +792,8 @@ internal fun loadPresets(ctx: Context): List<Preset> {
                         o.optInt("bass", 0) == 1, o.optInt("gain", 0),
                         o.optInt("cutoff", 150), o.optInt("width", 0),
                         o.optInt("dialog", 0) == 1, o.optInt("damt", 4)
-                    )
+                    ),
+                    DapFx.fromPref(o.optString("dap", null))
                 )
             }.getOrNull()
         }
@@ -812,6 +814,7 @@ internal fun writePresets(ctx: Context, list: List<Preset>) {
             put("width", p.fx.bassWidth)
             put("dialog", if (p.fx.dialogOn) 1 else 0)
             put("damt", p.fx.dialogAmt)
+            put("dap", p.dapFx.toPref())
         })
     }
     presetFile(ctx).writeText(arr.toString(2))
@@ -829,6 +832,7 @@ private fun presetJsonString(p: Preset): String = org.json.JSONObject().apply {
     put("width", p.fx.bassWidth)
     put("dialog", if (p.fx.dialogOn) 1 else 0)
     put("damt", p.fx.dialogAmt)
+    put("dap", p.dapFx.toPref())
 }.toString(2)
 
 /** 正式写入全部音效参数（失败返回原因） */
@@ -894,11 +898,13 @@ internal suspend fun applyPreset(ctx: Context, p: Preset): String? {
     val e1 = withContext(Dispatchers.IO) { DapRealtime.writeLive(p.geq) }
     val e2 = if (e1 == null) withContext(Dispatchers.IO) { DapRealtime.commit(p.geq) } else e1
     val e3 = if (e2 == null) pushFx(p.fx) else e2
-    if (e3 == null) {
+    val e4 = if (e3 == null) pushDapFx(p.dapFx) else e3
+    if (e4 == null) {
         saveGeq(ctx, p.geq)
         saveFx(ctx, p.fx)
+        DapFxStore.save(ctx, p.dapFx)
     }
-    return e3
+    return e4
 }
 
 /**
