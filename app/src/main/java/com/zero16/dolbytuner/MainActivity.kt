@@ -1274,7 +1274,7 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
 }
 
 private fun defaultMbcInts(): List<IntArray> =
-    List(4) { intArrayOf(-200, 30, 10, 80, 60, -900, 10, 0, 0) }
+    List(4) { intArrayOf(-200, 30, 10, 80, 60, -900, 10, 0, 0, 1) }
 
 private fun loadMbc(prefs: android.content.SharedPreferences): List<IntArray> {
     val s = prefs.getString("mbc_data", "").orEmpty()
@@ -1283,7 +1283,11 @@ private fun loadMbc(prefs: android.content.SharedPreferences): List<IntArray> {
     if (parts.size != 4) return defaultMbcInts()
     return parts.map { seg ->
         val a = seg.split(",").mapNotNull { it.trim().toIntOrNull() }
-        if (a.size == 9) a.toIntArray() else intArrayOf(-200, 30, 10, 80, 60, -900, 10, 0, 0)
+        when {
+            a.size >= 10 -> a.take(10).toIntArray()
+            a.size == 9 -> (a + 1).toIntArray()
+            else -> intArrayOf(-200, 30, 10, 80, 60, -900, 10, 0, 0, 1)
+        }
     }
 }
 
@@ -1315,7 +1319,7 @@ private fun EffectsScreen() {
 
     fun toDynMbc(l: List<IntArray>) = l.map { a ->
         DynProc.MbcBandCfg(
-            enabled = mbcOn,
+            enabled = mbcOn && a[9] == 1,
             thresholdDb = a[0] / 10f,
             ratio = a[1] / 10f,
             attackMs = a[2] / 10f,
@@ -1406,7 +1410,7 @@ private fun EffectsScreen() {
     Column(
         Modifier.fillMaxSize().statusBarsPadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp).padding(top = 18.dp).padding(bottom = 120.dp)
+            .padding(horizontal = 14.dp).padding(top = 18.dp).padding(bottom = 150.dp)
     ) {
         Text("DynamicsProcessing音效", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
@@ -1495,12 +1499,13 @@ private fun EffectsScreen() {
             ) {
                 presets.forEach { pr ->
                     Surface(
-                        Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
+                        Modifier.weight(1f)
                             .clickable(enabled = limOn) {
                                 thr = pr.second[0]; atk = pr.second[1]; rel = pr.second[2]
                                 rat = pr.second[3]; post = pr.second[4]
                                 applyLim(true)
                             },
+                        shape = RoundedCornerShape(10.dp),
                         color = cLim.copy(alpha = 0.14f),
                         border = BorderStroke(1.dp, cLim.copy(alpha = 0.4f))
                     ) {
@@ -1561,8 +1566,9 @@ private fun EffectsScreen() {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 segNames.forEachIndexed { i, n ->
                     Surface(
-                        Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
+                        Modifier.weight(1f)
                             .clickable { sel = i; prefs.edit().putInt("mbc_sel", i).apply() },
+                        shape = RoundedCornerShape(10.dp),
                         color = cMbc.copy(alpha = if (sel == i) 0.30f else 0.08f),
                         border = BorderStroke(1.dp, cMbc.copy(alpha = if (sel == i) 0.72f else 0.26f))
                     ) {
@@ -1577,21 +1583,37 @@ private fun EffectsScreen() {
             }
             Spacer(Modifier.height(6.dp))
 
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "${segNames[sel]} 段启用",
+                    fontSize = 11.sp, modifier = Modifier.weight(1f)
+                )
+                androidx.compose.material3.Switch(
+                    checked = mbcStore[sel][9] == 1,
+                    enabled = mbcOn,
+                    onCheckedChange = { updMbc(9, if (it) 1 else 0) }
+                )
+            }
+
             val mbcPresets = listOf(
-                "温和" to intArrayOf(-180, 20, 20, 150, 60, -900, 10, 0, 0),
-                "紧实" to intArrayOf(-240, 40, 5, 80, 40, -900, 10, 30, -30),
-                "平直" to intArrayOf(-200, 10, 10, 80, 60, -900, 10, 0, 0)
+                "温和" to intArrayOf(-180, 20, 20, 150, 60, -900, 10, 0, 0, 1),
+                "紧实" to intArrayOf(-240, 40, 5, 80, 40, -900, 10, 30, -30, 1),
+                "平直" to intArrayOf(-200, 10, 10, 80, 60, -900, 10, 0, 0, 1)
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 mbcPresets.forEach { pr ->
                     Surface(
-                        Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
+                        Modifier.weight(1f)
                             .clickable(enabled = mbcOn) {
                                 val l = List(4) { pr.second.copyOf() }
                                 mbcStore = l
                                 saveMbc(prefs, l)
                                 applyMbc()
                             },
+                        shape = RoundedCornerShape(10.dp),
                         color = cMbc.copy(alpha = 0.14f),
                         border = BorderStroke(1.dp, cMbc.copy(alpha = 0.4f))
                     ) {
@@ -1605,7 +1627,7 @@ private fun EffectsScreen() {
 
             val b = mbcStore[sel]
             FxSlider(
-                "阈值 · Threshold", String.format("%.1f dB", b[0] / 10f), b[0], -800..0, mbcOn,
+                "阈值 · Threshold", String.format("%.1f dB", b[0] / 10f), b[0], -600..0, mbcOn,
                 onLive = { updMbc(0, it) }, onDone = { updMbc(0, it) }
             )
             FxSlider(
