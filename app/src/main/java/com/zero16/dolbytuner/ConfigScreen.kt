@@ -429,15 +429,12 @@ private fun PresetBigCard(
                     .clickable { onOpen() },
                 verticalArrangement = Arrangement.Center
             ) {
-                val d = p.dapFx
                 FxLine("环绕", "耳${mark(p.fx.hpVirtual)} 外${mark(p.fx.spVirtual)}", ink)
                 FxLine("人声", "${mark(p.fx.dialogOn)} ${p.fx.dialogAmt}", ink)
                 FxLine("低音", mark(p.fx.bassOn), ink)
                 FxLine("增益", p.fx.bassGain.toString(), ink)
                 FxLine("截止", p.fx.bassCutoff.toString(), ink)
                 FxLine("带宽", p.fx.bassWidth.toString(), ink)
-                FxLine("限幅", if (d.limiterOn) "●${d.dplpDb}" else "○", ink)
-                FxLine("虚低", if (d.vbOn) "●${d.vbStrength} ${d.vbLowHz}-${d.vbHighHz}" else "○", ink)
                 FxLine("IEQ", if (d.ieqOn) "●${d.ieqAmount}/${d.ieqPreset}" else "○", ink)
                 FxLine("后级", if (d.postGainOn) "●${d.postGainDb}" else "○", ink)
             }
@@ -467,7 +464,6 @@ private fun PresetBigCard(
 @Composable
 private fun PresetDetailDialog(p: Preset, onClose: () -> Unit) {
     val cs = MaterialTheme.colorScheme
-    val d = p.dapFx
     AlertDialog(
         onDismissRequest = onClose,
         title = {
@@ -494,31 +490,6 @@ private fun PresetDetailDialog(p: Preset, onClose: () -> Unit) {
                 DetailRow("低音截止", p.fx.bassCutoff.toString(), cs)
                 DetailRow("低音带宽", p.fx.bassWidth.toString(), cs)
 
-                DetailTitle("A 类 · Dolby 扩展", cs)
-                DetailRow(
-                    "峰值限幅",
-                    if (d.limiterOn) "开 · ${d.dplpDb} dBFS" else "关", cs
-                )
-                DetailRow("限幅释放", if (d.pregOn) "开" else "关", cs)
-                DetailRow("前级增益", "${d.preoDb} dB", cs)
-                DetailRow("VMB 推限", "${d.vmbDb} dB", cs)
-                DetailRow("虚拟低音", if (d.vbOn) "开" else "关", cs)
-                DetailRow("低音强度", d.vbStrength.toString(), cs)
-                DetailRow("低音频段", "${d.vbLowHz} - ${d.vbHighHz} Hz", cs)
-                DetailRow(
-                    "环绕声场",
-                    if (d.surroundOn) "开 · ${d.surroundBoost}" else "关", cs
-                )
-                DetailRow(
-                    "智能均衡 IEQ",
-                    if (d.ieqOn) "开 · 强度 ${d.ieqAmount} · 预置 ${d.ieqPreset}" else "关", cs
-                )
-                DetailRow(
-                    "MBDRC",
-                    if (d.mbdrcOn) "开 · P${d.mbdrcProfile} · ${d.mbdrcAttackMs}/${d.mbdrcReleaseMs}ms · ${d.mbdrcOffsets.joinToString(",")}"
-                    else "关", cs
-                )
-                DetailRow("后级增益", if (d.postGainOn) "${d.postGainDb} dB" else "关", cs)
             }
         },
         confirmButton = {
