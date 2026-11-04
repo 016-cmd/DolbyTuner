@@ -499,14 +499,17 @@ object DapRealtime {
      * 一收到就丢弃句柄、重开、把最后的曲线写回去。
      */
     private fun attachWatchers(e: AudioEffect) {
+        // 只记日志，不主动重建：
+        // Dolby 重建时会回调，但如果我们在回调里立刻 release 再 open，
+        // 会让它反复重建，最终被判「未生效」。
         runCatching {
             e.setControlStatusListener { _, granted ->
-                if (!granted) scheduleRebind("控制权丢失")
+                android.util.Log.w("DapRealtime", "DAP controlGranted=$granted")
             }
         }
         runCatching {
             e.setEnableStatusListener { _, enabled ->
-                if (!enabled) scheduleRebind("效果被系统关闭")
+                android.util.Log.w("DapRealtime", "DAP enabled=$enabled")
             }
         }
     }
@@ -639,9 +642,10 @@ object DapRealtime {
      * 所以跟 GEQ 一样，把所有可能生效的档全写一遍。
      */
     private fun profilesForWrite(e: AudioEffect): List<Int> {
-        val cnt = runCatching { queryInt(e, COMMAND_GET_PROFILE_COUNT) }.getOrNull() ?: 0
-        val n = maxOf(cnt, curProfile(e) + 1).coerceIn(1, 16)
-        return (0 until n).toList()
+        // 只写「当前 profile」一个。
+        // 之前试过把 0..N 全写一遍，结果 Dolby 的 profile 状态被写乱，
+        // 表现为「动一下 A 类就显示未生效」。
+        return listOf(propProfile() ?: curProfile(e))
     }
 
     /** 读 persist.audio.dolby.profile（普通 App 可用 getprop，不需要权限） */

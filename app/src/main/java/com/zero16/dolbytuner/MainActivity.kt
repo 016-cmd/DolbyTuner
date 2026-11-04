@@ -1114,7 +1114,7 @@ private fun EffectsScreen() {
             scope.launch {
                 val err = pushDapFx(next)
                 // A 类写完，Dolby 可能重建了效果链：丢掉旧句柄，让 GEQ 下次重开
-                if (err == null) DapRealtime.rebindAndReapply()
+                // 写 A 类后不再动句柄：重建会把 Dolby 弄成未生效
                 status = if (err == null) "A 类已写入 · 重启后仍生效" else "写入失败：$err"
             }
         }
@@ -1364,7 +1364,7 @@ Column(
                             if (e == null) e = withContext(Dispatchers.IO) { DapRealtime.commit(g) }
                             val err = if (e == null) pushFx(fx) else e
                             val dapErr = if (err == null) pushDapFx(dapFx) else null
-                            if (err == null && dapErr == null) DapRealtime.rebindAndReapply()
+                            // 写 A 类后不再动句柄
                             status = when {
                                 err != null -> "保存失败：$err"
                                 dapErr != null -> "音效已保存，A 类参数写入失败：$dapErr"
