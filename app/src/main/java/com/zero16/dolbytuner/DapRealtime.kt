@@ -721,7 +721,23 @@ object DapRealtime {
 
     private fun allProfiles(e: AudioEffect): List<Int> = listOf(currentProfile(e))
 
-    private fun profilesForWrite(e: AudioEffect): List<Int> = allProfiles(e)
+    /**
+     * A 类写入要覆盖哪些 profile。
+     *
+     * 现在的取法跟 GEQ 一样：**全部档都写**。
+     *   · 逆向 APP 的 Il() 就是 for (i = 0; i < 4; i++) 逐档下发
+     *     （说明多档覆盖本来就是官方用法）
+     *   · 之前只写单档，设备/音效模式一换（persist 属性从 4 变 0）就整条失效
+     *
+     * 覆盖范围：0..3（逆向范围）∪ 0..profileCount-1 ∪ persist 属性档。
+     */
+    private fun profilesForWrite(e: AudioEffect): List<Int> {
+        val set = sortedSetOf(0, 1, 2, 3)
+        val n = runCatching { queryInt(e, COMMAND_GET_PROFILE_COUNT) }.getOrDefault(0)
+        if (n in 1..32) for (p in 0 until n) set.add(p)
+        propProfile()?.let { set.add(it) }
+        return set.filter { it in 0..31 }
+    }
 
     /** 读 persist.audio.dolby.profile（普通 App 可用 getprop，不需要权限） */
     private fun propProfile(): Int? = runCatching {

@@ -1109,17 +1109,78 @@ private fun EffectsScreen() {
         }
     }
 
+    /**
+     * 只算「这次变了什么」。
+     *
+     * 拖动滑杆时只写这一个参数（含它依赖的开关），
+     * 不再每次把整套 A 类参数重发一遍 —— 避免打断了 Dolby 的实时状态。
+     */
+    private fun dapDiffItems(prev: DapFx, next: DapFx): List<Pair<String, IntArray>> {
+        val out = ArrayList<Pair<String, IntArray>>(8)
+
+        // A1 限幅
+        if (next.limiterOn != prev.limiterOn || (next.limiterOn && next.dplpDb != prev.dplpDb)) {
+            val lin = if (next.limiterOn) {
+                (Math.pow(10.0, next.dplpDb / 20.0) * 256.0).toInt().coerceIn(1, 256)
+            } else 256
+            out += "dplp" to intArrayOf(lin)
+        }
+        if (next.pregOn != prev.pregOn) out += "preg" to intArrayOf(if (next.pregOn) 1 else 0)
+        if (next.preoDb != prev.preoDb) out += "preo" to intArrayOf((next.preoDb * 16).coerceIn(0, 192))
+        if (next.vmbDb != prev.vmbDb) out += "vmb " to intArrayOf((next.vmbDb * 16).coerceIn(0, 96))
+
+        // A2 虚拟低音
+        if (next.vbOn != prev.vbOn) out += "vbm" to intArrayOf(if (next.vbOn) 1 else 0)
+        if (next.vbStrength != prev.vbStrength || next.vbOn != prev.vbOn) {
+            out += "vbog" to intArrayOf(if (next.vbOn) next.vbStrength.coerceIn(0, 192) else 0)
+        }
+        if (next.vbLowHz != prev.vbLowHz || next.vbHighHz != prev.vbHighHz) {
+            out += "vbsf" to intArrayOf(
+                next.vbLowHz.coerceIn(20, 160),
+                next.vbHighHz.coerceIn(60, 240)
+            )
+        }
+
+        // A4 环绕
+        if (next.surroundOn != prev.surroundOn) out += "dvle" to intArrayOf(if (next.surroundOn) 1 else 0)
+        if (next.surroundBoost != prev.surroundBoost) {
+            out += "dvla" to intArrayOf(next.surroundBoost.coerceIn(0, 192))
+        }
+
+        // A5 IEQ
+        if (next.ieqOn != prev.ieqOn) out += "ieon" to intArrayOf(if (next.ieqOn) 1 else 0)
+        if (next.ieqAmount != prev.ieqAmount) out += "iea" to intArrayOf(next.ieqAmount.coerceIn(0, 16))
+        if (next.ieqPreset != prev.ieqPreset) out += "ieid" to intArrayOf(next.ieqPreset.coerceIn(0, 10))
+
+        // A8 后级增益
+        if (next.postGainOn != prev.postGainOn || next.postGainDb != prev.postGainDb) {
+            val g = if (next.postGainOn) next.postGainDb.coerceIn(-12, 12) else 0
+            out += "pstg" to intArrayOf(g)
+            out += "vol" to intArrayOf(g)
+        }
+        return out
+    }
+
     fun setDap(next: DapFx, live: Boolean) {
+        val prev = dapFx
         dapFx = next
+        val items = dapDiffItems(prev, next)
         if (live) {
-            dapLive.trySend(next)
+            // 拖动中：只写变化的参数，不重建、不整套重发
+            if (items.isNotEmpty()) {
+                scope.launch {
+                    withContext(Dispatchers.IO) { DapRealtime.writeFourCCBatch(items) }
+                }
+            }
         } else {
             DapFxStore.save(ctx, next)
             status = "写入中…"
             scope.launch {
-                val err = pushDapFx(next)
-                // A 类写完，Dolby 可能重建了效果链：丢掉旧句柄，让 GEQ 下次重开
-                // 写 A 类后不再动句柄：重建会把 Dolby 弄成未生效
+                val err = if (items.isEmpty()) {
+                    null
+                } else {
+                    withContext(Dispatchers.IO) { DapRealtime.writeFourCCBatch(items) }
+                }
                 status = if (err == null) "A 类已写入 · 重启后仍生效" else "写入失败：$err"
             }
         }
