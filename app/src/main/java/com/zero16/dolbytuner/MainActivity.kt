@@ -1285,7 +1285,7 @@ private fun saveRev(prefs: android.content.SharedPreferences, a: IntArray) {
 }
 
 private fun defaultMbcInts(): List<IntArray> =
-    List(4) { intArrayOf(-200, 30, 10, 80, 60, -900, 10, 0, 0, 1) }
+    List(4) { intArrayOf(-200, 30, 10, 80, 60, -900, 10, 0, 0, 0) }
 
 private fun loadMbc(prefs: android.content.SharedPreferences): List<IntArray> {
     val s = prefs.getString("mbc_data", "").orEmpty()
@@ -1297,7 +1297,7 @@ private fun loadMbc(prefs: android.content.SharedPreferences): List<IntArray> {
         when {
             a.size >= 10 -> a.take(10).toIntArray()
             a.size == 9 -> (a + 1).toIntArray()
-            else -> intArrayOf(-200, 30, 10, 80, 60, -900, 10, 0, 0, 1)
+            else -> intArrayOf(-200, 30, 10, 80, 60, -900, 10, 0, 0, 0)
         }
     }
 }
@@ -1937,7 +1937,11 @@ private fun FxSlider(
                 onDone(local.toInt().coerceIn(range.first, range.last))
             },
             valueRange = range.first.toFloat()..range.last.toFloat(),
-            steps = (range.last - range.first - 1).coerceAtLeast(0),
+            // 范围大时不要生成成千上万个刻度（那会让拖动直接卡死）
+            steps = run {
+                val span = range.last - range.first
+                if (span in 1..120) span - 1 else 0
+            },
             enabled = enabled
         )
     }
