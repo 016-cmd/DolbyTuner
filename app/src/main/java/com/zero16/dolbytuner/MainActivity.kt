@@ -1794,6 +1794,7 @@ private fun EffectsScreen() {
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 14.dp).padding(top = 18.dp).padding(bottom = 180.dp)
     ) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalDpOn provides dpOn) {
         Text("DynamicsProcessing音效", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
         Text(
@@ -1855,14 +1856,14 @@ private fun EffectsScreen() {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("EQ 调节", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(8.dp))
-                    EqTab("GEQ", eqTab == 0, cEq) {
+                    EqTab("GEQ", eqTab == 0, cEq, dpOn) {
                         eqTab = 0
                         prefs.edit().putInt("eq_tab", 0).apply()
                         eqCurve = EqMath.geq20To127(geqQ4, geqQ / 10f, geqMaster / 10f)
                         scheduleEq()
                     }
                     Spacer(Modifier.width(6.dp))
-                    EqTab("PEQ", eqTab == 1, cEq) {
+                    EqTab("PEQ", eqTab == 1, cEq, dpOn) {
                         eqTab = 1
                         prefs.edit().putInt("eq_tab", 1).apply()
                         eqCurve = EqMath.peqTo127(peqData)
@@ -1871,14 +1872,9 @@ private fun EffectsScreen() {
                     Spacer(Modifier.weight(1f))
                     androidx.compose.material3.Switch(
                         checked = debugOn,
-                        onCheckedChange = { showDebugDlg = true },
-                        modifier = Modifier.height(28.dp),
-                        colors = androidx.compose.material3.SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = Color(0xFF10B981),
-                            uncheckedThumbColor = cs.onSurfaceVariant,
-                            uncheckedTrackColor = cs.surfaceVariant
-                        )
+                        onCheckedChange = { if (dpOn) showDebugDlg = true },
+                        enabled = dpOn,
+                        modifier = Modifier.height(28.dp)
                     )
                 }
                 Spacer(Modifier.height(4.dp))
@@ -1934,6 +1930,7 @@ private fun EffectsScreen() {
                             val sel = peqSel == i
                             Column(
                                 Modifier.width(80.dp)
+                                    .height(78.dp)
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(
                                         if (sel) cEq.copy(alpha = 0.22f)
@@ -1941,12 +1938,13 @@ private fun EffectsScreen() {
                                     )
                                     .pointerInput(i, peqData.size) {
                                         detectTapGestures(
-                                            onTap = { selectPeq(i) },
-                                            onLongPress = { if (peqData.size > 1) delPeqIdx = i }
+                                            onTap = { if (dpOn) selectPeq(i) },
+                                            onLongPress = { if (dpOn && peqData.size > 1) delPeqIdx = i }
                                         )
                                     }
                                     .padding(horizontal = 6.dp, vertical = 8.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
                             ) {
                                 Text(
                                     fmtFreq(b.freqHz.toInt()),
@@ -1969,11 +1967,11 @@ private fun EffectsScreen() {
                         }
                         item {
                             Box(
-                                Modifier.width(58.dp)
-                                    .height(62.dp)
+                                Modifier.width(80.dp)
+                                    .height(78.dp)
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(cEq.copy(alpha = 0.10f))
-                                    .clickable { addPeq() },
+                                    .clickable(enabled = dpOn) { addPeq() },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text("+", fontSize = 22.sp, color = cEq)
@@ -2043,7 +2041,7 @@ private fun EffectsScreen() {
                 presets.forEach { pr ->
                     Surface(
                         Modifier.weight(1f)
-                            .clickable(enabled = limOn) {
+                            .clickable(enabled = limOn && dpOn) {
                                 thr = pr.second[0]; atk = pr.second[1]; rel = pr.second[2]
                                 rat = pr.second[3]; post = pr.second[4]
                                 applyLim(true)
@@ -2150,7 +2148,7 @@ private fun EffectsScreen() {
                 mbcPresets.forEach { pr ->
                     Surface(
                         Modifier.weight(1f)
-                            .clickable(enabled = mbcOn) {
+                            .clickable(enabled = mbcOn && dpOn) {
                                 val l = List(4) { pr.second.copyOf() }
                                 mbcStore = l
                                 pr.second.copyInto(pendMbc)
@@ -2230,7 +2228,7 @@ private fun EffectsScreen() {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     row.forEach { pr ->
                         Surface(
-                            Modifier.weight(1f).clickable(enabled = revOn) {
+                            Modifier.weight(1f).clickable(enabled = revOn && dpOn) {
                                 revData = pr.second.copyOf()
                                 revData.copyInto(pendRev)
                                 saveRev(prefs, revData)
@@ -2325,6 +2323,7 @@ private fun EffectsScreen() {
                 fontSize = 10.sp, color = cs.onSurfaceVariant
             )
         }
+        }
     }
 
     if (showDebugDlg) {
@@ -2377,9 +2376,15 @@ private fun EffectsScreen() {
 }
 
 @Composable
-private fun EqTab(label: String, active: Boolean, accent: Color, onClick: () -> Unit) {
+private fun EqTab(
+    label: String,
+    active: Boolean,
+    accent: Color,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
     Surface(
-        Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick),
+        Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = enabled, onClick = onClick),
         shape = RoundedCornerShape(8.dp),
         color = accent.copy(alpha = if (active) 0.28f else 0.06f),
         border = BorderStroke(1.dp, accent.copy(alpha = if (active) 0.7f else 0.2f))
@@ -2409,6 +2414,7 @@ private fun FxSlider(
     enabled: Boolean, onLive: (Int) -> Unit = {}, onDone: (Int) -> Unit
 ) {
     // 与 GEQ 滑杆同一套做法：拖动期间以本地值为准，不被外部 state 回灌打断
+    val en = enabled && LocalDpOn.current
     var local by remember { mutableStateOf(value.toFloat()) }
     var dragging by remember { mutableStateOf(false) }
     LaunchedEffect(value) {
@@ -2416,7 +2422,7 @@ private fun FxSlider(
     }
     Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(title, fontSize = 12.sp, color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+            Text(title, fontSize = 12.sp, color = if (en) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
             Text(
                 if (dragging) local.toInt().coerceIn(range.first, range.last).toString() else valueText,
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -2440,7 +2446,7 @@ private fun FxSlider(
                 val span = range.last - range.first
                 if (span in 1..120) span - 1 else 0
             },
-            enabled = enabled
+            enabled = en
         )
     }
 }

@@ -30,12 +30,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
+
+/** 音效页总开关状态：关闭时整页参数区全部只读 */
+internal val LocalDpOn = androidx.compose.runtime.compositionLocalOf { true }
 
 /**
  * 统一效果大卡片（参考 V4A 页交互，代码自己写）：
@@ -59,6 +63,8 @@ internal fun EffectCard(
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
     var expanded by rememberSaveable { mutableStateOf(initiallyExpanded) }
+    val dpOn = LocalDpOn.current
+    val effEnabled = enabled && dpOn
     val cs = MaterialTheme.colorScheme
     val dark = androidx.compose.foundation.isSystemInDarkTheme()
 
@@ -67,16 +73,16 @@ internal fun EffectCard(
     // （浅色 / 深色模式用两档透明度，避免在壁纸上发白或发灰）
     val container = accent.copy(
         alpha = when {
-            enabled && dark -> 0.26f
-            enabled -> 0.19f
+            effEnabled && dark -> 0.26f
+            effEnabled -> 0.19f
             dark -> 0.12f
             else -> 0.11f
         }
     )
     val borderColor = accent.copy(
         alpha = when {
-            enabled && dark -> 0.72f
-            enabled -> 0.58f
+            effEnabled && dark -> 0.72f
+            effEnabled -> 0.58f
             dark -> 0.34f
             else -> 0.28f
         }
@@ -102,7 +108,7 @@ internal fun EffectCard(
                 Icon(
                     icon, null,
                     Modifier.size(20.dp),
-                    tint = if (enabled) accent else cs.onSurfaceVariant
+                    tint = if (effEnabled) accent else cs.onSurfaceVariant
                 )
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
@@ -115,7 +121,7 @@ internal fun EffectCard(
                     }
                 }
                 if (showSwitch) {
-                    Switch(checked = enabled, onCheckedChange = onEnabledChange)
+                    Switch(checked = enabled, onCheckedChange = onEnabledChange, enabled = dpOn)
                 }
             }
 
@@ -127,6 +133,7 @@ internal fun EffectCard(
                 ) {
                     Column(
                         Modifier.fillMaxWidth()
+                            .alpha(if (dpOn) 1f else 0.45f)
                             .padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
                         content = content
                     )
