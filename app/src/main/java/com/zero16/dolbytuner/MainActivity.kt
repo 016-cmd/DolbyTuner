@@ -1395,6 +1395,34 @@ private fun EffectsScreen() {
     var peqData by remember { mutableStateOf(loadPeq(prefs)) }
     var peqSel by remember { mutableIntStateOf(0) }
     var eqCurve by remember { mutableStateOf(FloatArray(127)) }
+    var eqRaw by remember { mutableStateOf(FloatArray(127)) }
+
+    // ===== 等响补偿 =====
+    var elOn by remember { mutableStateOf(prefs.getBoolean("el_on", false)) }
+    var elBase by remember { mutableIntStateOf(prefs.getInt("el_base", -1)) }
+    var elStrength by remember { mutableIntStateOf(prefs.getInt("el_strength", 10)) }
+    var elMaxDb by remember { mutableIntStateOf(prefs.getInt("el_maxdb", 80)) }
+    val amVol = remember {
+        ctx.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+    }
+    val volMaxV = remember {
+        amVol.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+    }
+    var curVolPct by remember {
+        mutableIntStateOf(
+            amVol.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) * 100 / volMaxV
+        )
+    }
+
+    fun finalEq(raw: FloatArray): FloatArray =
+        if (elOn && elBase > 0) {
+            EqMath.applyEqualLoudness(
+                raw, EqMath.FREQ127, curVolPct, elBase,
+                elStrength / 10f, elMaxDb / 10f
+            )
+        } else raw
+
+
     var sel by remember { mutableIntStateOf(prefs.getInt("mbc_sel", 0)) }
     var mbcStore by remember { mutableStateOf(loadMbc(prefs)) }
     var status by remember { mutableStateOf(DynProc.status) }
@@ -1608,15 +1636,45 @@ private fun EffectsScreen() {
     }
 
     fun pushEq() {
-        val curve = if (eqTab == 0) {
+        val raw = if (eqTab == 0) {
             EqMath.geq20To127(geqQ4, geqQ / 10f, geqMaster / 10f)
         } else {
             EqMath.peqTo127(peqLive())
         }
+        eqRaw = raw
+        val curve = finalEq(raw)
+        eqCurve = curve
         scope.launch {
             withContext(Dispatchers.IO) { DynProc.setPreEq(curve) }
             status = DynProc.status
         }
+    }
+
+    DisposableEffect(Unit) {
+        val obs = object : android.database.ContentObserver(
+            android.os.Handler(android.os.Looper.getMainLooper())
+        ) {
+            override fun onChange(selfChange: Boolean) {
+                val v = amVol.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+                val pct = v * 100 / volMaxV
+                if (pct == curVolPct) return
+                curVolPct = pct
+                if (elOn) pushEq()
+            }
+        }
+        val cr = ctx.contentResolver
+        runCatching {
+            cr.registerContentObserver(
+                android.provider.Settings.System.getUriFor("volume_music_speaker"), false, obs
+            )
+            cr.registerContentObserver(
+                android.provider.Settings.System.getUriFor("volume_music_headphone"), false, obs
+            )
+            cr.registerContentObserver(
+                android.provider.Settings.System.getUriFor("volume_music_headset"), false, obs
+            )
+        }
+        onDispose { runCatching { cr.unregisterContentObserver(obs) } }
     }
 
     val eqTick = remember { Runnable { pushEq() } }
@@ -1631,7 +1689,8 @@ private fun EffectsScreen() {
         val n = geqQ4.copyOf()
         n[i] = q4
         geqQ4 = n
-        eqCurve = EqMath.geq20To127(n, geqQ / 10f, geqMaster / 10f)
+        eqRaw = EqMath.geq20To127(n, geqQ / 10f, geqMaster / 10f)
+        eqCurve = finalEq(eqRaw)
         saveDpGeq(prefs, n)
         scheduleEq()
     }
@@ -1639,14 +1698,16 @@ private fun EffectsScreen() {
     fun updGeqQ(v: Int) {
         geqQ = v
         prefs.edit().putInt("geq_q", v).apply()
-        eqCurve = EqMath.geq20To127(geqQ4, v / 10f, geqMaster / 10f)
+        eqRaw = EqMath.geq20To127(geqQ4, v / 10f, geqMaster / 10f)
+        eqCurve = finalEq(eqRaw)
         scheduleEq()
     }
 
     fun updGeqMaster(v: Int) {
         geqMaster = v
         prefs.edit().putInt("geq_master", v).apply()
-        eqCurve = EqMath.geq20To127(geqQ4, geqQ / 10f, v / 10f)
+        eqRaw = EqMath.geq20To127(geqQ4, geqQ / 10f, v / 10f)
+        eqCurve = finalEq(eqRaw)
         scheduleEq()
     }
 
@@ -1666,7 +1727,8 @@ private fun EffectsScreen() {
         val l = peqLive()
         peqData = l
         savePeq(prefs, l)
-        eqCurve = EqMath.peqTo127(l)
+        eqRaw = EqMath.peqTo127(l)
+        eqCurve = finalEq(eqRaw)
         scheduleEq()
     }
 
@@ -1686,7 +1748,8 @@ private fun EffectsScreen() {
         peqData = l
         savePeq(prefs, l)
         selectPeq((peqSel - 1).coerceAtLeast(0))
-        eqCurve = EqMath.peqTo127(l)
+        eqRaw = EqMath.peqTo127(l)
+        eqCurve = finalEq(eqRaw)
         scheduleEq()
     }
 
@@ -1709,11 +1772,6 @@ private fun EffectsScreen() {
             debugOn = on
             prefs.edit().putBoolean("dp_debug", on).apply()
             if (on) {
-                eqCurve = if (eqTab == 0) {
-                    EqMath.geq20To127(geqQ4, geqQ / 10f, geqMaster / 10f)
-                } else {
-                    EqMath.peqTo127(peqData)
-                }
                 pushEq()
             } else {
                 eqCurve = FloatArray(127)
@@ -1859,14 +1917,16 @@ private fun EffectsScreen() {
                     EqTab("GEQ", eqTab == 0, cEq, dpOn) {
                         eqTab = 0
                         prefs.edit().putInt("eq_tab", 0).apply()
-                        eqCurve = EqMath.geq20To127(geqQ4, geqQ / 10f, geqMaster / 10f)
+                        eqRaw = EqMath.geq20To127(geqQ4, geqQ / 10f, geqMaster / 10f)
+                        eqCurve = finalEq(eqRaw)
                         scheduleEq()
                     }
                     Spacer(Modifier.width(6.dp))
                     EqTab("PEQ", eqTab == 1, cEq, dpOn) {
                         eqTab = 1
                         prefs.edit().putInt("eq_tab", 1).apply()
-                        eqCurve = EqMath.peqTo127(peqData)
+                        eqRaw = EqMath.peqTo127(peqData)
+                        eqCurve = finalEq(eqRaw)
                         scheduleEq()
                     }
                     Spacer(Modifier.weight(1f))
@@ -1996,6 +2056,111 @@ private fun EffectsScreen() {
                             onLive = { livePeq(2, it) }, onDone = { commitPeq(2, it) }
                         )
                     }
+                }
+            }
+        }
+
+        // ===== 等响补偿 =====
+        val cEl = Color(0xFF8B5CF6)
+        Card(
+            Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, cEl.copy(alpha = if (elOn) 0.7f else 0.3f)),
+            colors = CardDefaults.cardColors(
+                containerColor = cEl.copy(alpha = if (elOn) 0.16f else 0.07f)
+            )
+        ) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("等响补偿", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.weight(1f))
+                    androidx.compose.material3.Switch(
+                        checked = elOn,
+                        enabled = dpOn && elBase > 0,
+                        onCheckedChange = {
+                            elOn = it
+                            prefs.edit().putBoolean("el_on", it).apply()
+                            if (it) pushEq() else {
+                                eqRaw = if (eqTab == 0) {
+                                    EqMath.geq20To127(geqQ4, geqQ / 10f, geqMaster / 10f)
+                                } else EqMath.peqTo127(peqData)
+                                eqCurve = eqRaw
+                                scope.launch {
+                                    withContext(Dispatchers.IO) { DynProc.setPreEq(eqRaw) }
+                                    status = DynProc.status
+                                }
+                            }
+                        }
+                    )
+                }
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    if (elBase < 0) "请先设定基准音量"
+                    else "低于基准音量时自动增强低频与高频",
+                    fontSize = 9.sp, color = cs.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("当前音量", fontSize = 9.sp, color = cs.onSurfaceVariant)
+                        Text("$curVolPct%", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("基准音量", fontSize = 9.sp, color = cs.onSurfaceVariant)
+                        Text(
+                            if (elBase > 0) "$elBase%" else "--",
+                            fontSize = 14.sp, fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("补偿幅度", fontSize = 9.sp, color = cs.onSurfaceVariant)
+                        Text(
+                            if (elBase > 0) String.format("%.1f dB", elMaxDb / 10f) else "--",
+                            fontSize = 14.sp, fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = {
+                        elBase = curVolPct
+                        prefs.edit().putInt("el_base", elBase).apply()
+                        if (elOn) pushEq()
+                    },
+                    modifier = Modifier.fillMaxWidth().height(38.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    enabled = dpOn,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = cEl)
+                ) {
+                    Text("设定当前系统音量为基准（$curVolPct%）", fontSize = 11.sp)
+                }
+                if (elBase > 0) {
+                    Spacer(Modifier.height(4.dp))
+                    FxSlider(
+                        "补偿强度", String.format("%.1f", elStrength / 10f), elStrength, 1..30,
+                        dpOn && elBase > 0,
+                        onLive = { elStrength = it },
+                        onDone = {
+                            elStrength = it
+                            prefs.edit().putInt("el_strength", it).apply()
+                            if (elOn) pushEq()
+                        }
+                    )
+                    FxSlider(
+                        "最大补偿幅度", String.format("%.1f dB", elMaxDb / 10f), elMaxDb, 10..200,
+                        dpOn && elBase > 0,
+                        onLive = { elMaxDb = it },
+                        onDone = {
+                            elMaxDb = it
+                            prefs.edit().putInt("el_maxdb", it).apply()
+                            if (elOn) pushEq()
+                        }
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "音量越低补偿越多（ISO 226 等响曲线）",
+                        fontSize = 9.sp, color = cs.onSurfaceVariant
+                    )
                 }
             }
         }

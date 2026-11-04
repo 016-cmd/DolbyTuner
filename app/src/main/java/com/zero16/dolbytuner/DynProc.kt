@@ -238,6 +238,16 @@ object DynProc {
         }
     }
 
+    /** 单点写 PreEq（拖动某个频点时只发这一条） */
+    @Synchronized
+    fun setPreEqBand(bandIndex: Int, freq: Float, gainDb: Float) {
+        val d = dp ?: return
+        if (!runCatching { d.hasControl() }.getOrDefault(false)) return
+        val band = DynamicsProcessing.EqBand(true, freq, gainDb.coerceIn(-30f, 30f))
+        runCatching { d.setPreEqBandByChannelIndex(0, bandIndex, band) }
+        runCatching { d.setPreEqBandByChannelIndex(1, bandIndex, band) }
+    }
+
     /** 写入 PreEq 曲线（127 点 dB），自动重采样到实际可用段数 */
     @Synchronized
     fun setPreEq(curve127: FloatArray) {
@@ -251,7 +261,7 @@ object DynProc {
         val eqR = DynamicsProcessing.Eq(true, true, n)
         for (i in 0 until n) {
             val fi = if (n == 127) i else (i.toFloat() * 126f / (n - 1)).toInt().coerceIn(0, 126)
-            val g = sampleCurve(curve127, i, n).coerceIn(-20f, 20f)
+            val g = sampleCurve(curve127, i, n).coerceIn(-30f, 30f)
             val band = DynamicsProcessing.EqBand(true, EqMath.FREQ127[fi], g)
             eqL.setBand(i, band)
             eqR.setBand(i, band)
@@ -316,16 +326,32 @@ object DynProc {
 
     /** 运行时改输入增益（实例不在就只记下来） */
     @Synchronized
-    fun setInputGain(gainDb: Float) {
+    fun setInputGain(gainDb: Float) = setInputGain(gainDb, false, false)
+
+    /**
+     * 输入增益：走 Channel 对象回写（Flowmix 的写法），
+     * 可左右独立静音（-100 dB）。
+     */
+    @Synchronized
+    fun setInputGain(gainDb: Float, muteLeft: Boolean, muteRight: Boolean) {
         lastGain = gainDb
         val d = dp ?: return
-        runCatching { d.setInputGainAllChannelsTo(gainDb) }
-            .onFailure {
-                runCatching {
-                    d.setInputGainbyChannel(0, gainDb)
-                    d.setInputGainbyChannel(1, gainDb)
-                }.onFailure { Log.w(TAG, "setInputGain failed") }
+        var ok = false
+        for (ch in 0..1) {
+            val r = runCatching {
+                val c = d.getChannelByChannelIndex(ch)
+                c.setInputGain(
+                    if ((ch == 0 && muteLeft) || (ch == 1 && muteRight)) -100f
+                    else gainDb.coerceIn(-40f, 40f)
+                )
+                d.setChannelTo(ch, c)
             }
+            if (r.isSuccess) ok = true
+        }
+        if (!ok) {
+            runCatching { d.setInputGainAllChannelsTo(gainDb) }
+                .onFailure { Log.w(TAG, "setInputGain failed") }
+        }
     }
 
     /** 运行时改 Limiter */

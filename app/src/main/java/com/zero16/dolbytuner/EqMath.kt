@@ -79,6 +79,39 @@ object EqMath {
         return 10.0 * log10(num / den)
     }
 
+    /**
+     * 等响补偿（ISO 226:2003），与 Flowmix 的实现一致：
+     *   x = 80 + 20*log10(cur/base)  → phon
+     *   d = (spl(f,x)-spl(1k,x)) - (spl(f,80)-spl(1k,80))
+     *   delta = clamp(strength*4*d, ±maxDb)
+     *   new = clamp(old + delta, ±30dB)
+     */
+    fun applyEqualLoudness(
+        curve: FloatArray,
+        freqs: FloatArray,
+        curVol: Int,
+        baseVol: Int,
+        strength: Float = 1f,
+        maxDb: Float = 8f
+    ): FloatArray {
+        if (baseVol <= 0 || curVol >= baseVol) return curve
+        val cur = (curVol / 100f).coerceIn(0.001f, 1f)
+        val base = (baseVol / 100f).coerceIn(0.001f, 1f)
+        val x = (80f + 20f * log10((cur / base).toDouble()).toFloat()).coerceIn(0f, 120f)
+        val s = strength.coerceIn(0f, 3f)
+        val mx = maxDb.coerceIn(1f, 20f)
+        val ref80 = Iso226.splDb(1000f, 80f)
+        val refX = Iso226.splDb(1000f, x)
+        val out = FloatArray(curve.size)
+        for (i in curve.indices) {
+            val f = freqs.getOrElse(i) { 1000f }
+            val d = (Iso226.splDb(f, x) - refX) - (Iso226.splDb(f, 80f) - ref80)
+            val delta = (s * 4f * d).coerceIn(-mx, mx)
+            out[i] = (curve[i] + delta).coerceIn(-30f, 30f)
+        }
+        return out
+    }
+
     private fun resample(freqs: IntArray, db: FloatArray): FloatArray {
         val out = FloatArray(127)
         val lf = DoubleArray(freqs.size) { ln(freqs[it].toDouble()) }
