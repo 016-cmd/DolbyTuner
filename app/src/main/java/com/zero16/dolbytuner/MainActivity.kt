@@ -1329,7 +1329,7 @@ private fun EffectsScreen() {
     }
 
     fun applyMbc() {
-        val d = toDynMbc(mbcStore.value)
+        val d = toDynMbc(mbcStore)
         scope.launch {
             withContext(Dispatchers.IO) { DynProc.setMbc(d) }
             status = DynProc.status
@@ -1337,7 +1337,7 @@ private fun EffectsScreen() {
     }
 
     fun updMbc(idx: Int, v: Int) {
-        val l = mbcStore.value.toMutableList()
+        val l = mbcStore.toMutableList()
         val a = l[sel].copyOf()
         a[idx] = v
         l[sel] = a
@@ -1377,7 +1377,7 @@ private fun EffectsScreen() {
         scope.launch {
             busy = true
             withContext(Dispatchers.IO) {
-                if (on) DynProc.start(gain.toFloat(), cfg(), toDynMbc(mbcStore.value)) else DynProc.stop()
+                if (on) DynProc.start(gain.toFloat(), cfg(), toDynMbc(mbcStore)) else DynProc.stop()
             }
             status = DynProc.status
             busy = false
@@ -1395,7 +1395,7 @@ private fun EffectsScreen() {
 
     LaunchedEffect(Unit) {
         if (dpOn && !DynProc.running) {
-            withContext(Dispatchers.IO) { DynProc.start(gain.toFloat(), cfg(), toDynMbc(mbcStore.value)) }
+            withContext(Dispatchers.IO) { DynProc.start(gain.toFloat(), cfg(), toDynMbc(mbcStore)) }
             status = DynProc.status
         }
     }
@@ -1603,7 +1603,7 @@ private fun EffectsScreen() {
             }
             Spacer(Modifier.height(4.dp))
 
-            val b = mbcStore.value[sel]
+            val b = mbcStore[sel]
             FxSlider(
                 "阈值 · Threshold", String.format("%.1f dB", b[0] / 10f), b[0], -800..0, mbcOn,
                 onLive = { updMbc(0, it) }, onDone = { updMbc(0, it) }
