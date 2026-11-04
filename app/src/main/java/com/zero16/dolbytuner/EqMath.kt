@@ -23,10 +23,32 @@ object EqMath {
         (20.0 * 1000.0.pow(i / 126.0)).toFloat()
     }
 
-    /** 杜比 GEQ 的 20 段（Q4，1dB=16）→ 127 点 dB */
-    fun geq20To127(q4: IntArray): FloatArray {
+    /**
+     * 杜比 GEQ 的 20 段（Q4，1dB=16）→ 127 点 dB
+     * @param q         段间过渡宽度（Q 越大越窄、越贴折线；越小越平滑）
+     * @param masterDb  整体增益（叠加到全部频点）
+     */
+    fun geq20To127(
+        q4: IntArray,
+        q: Float = 1f,
+        masterDb: Float = 0f
+    ): FloatArray {
         val db = FloatArray(DapRealtime.BANDS) { (q4.getOrNull(it) ?: 0) / DapRealtime.Q4_PER_DB.toFloat() }
-        return resample(DapRealtime.FREQS, db)
+        val sigma = (0.35f / q.coerceIn(0.1f, 10f)).toDouble()
+        val out = FloatArray(127)
+        for (i in 0..126) {
+            val lf = ln(FREQ127[i].toDouble())
+            var acc = 0.0
+            var wsum = 0.0
+            for (k in db.indices) {
+                val d = ln(DapRealtime.FREQS[k].toDouble()) - lf
+                val wgt = Math.exp(-(d * d) / (2.0 * sigma * sigma))
+                acc += db[k] * wgt
+                wsum += wgt
+            }
+            out[i] = (if (wsum > 1e-9) (acc / wsum).toFloat() else 0f) + masterDb
+        }
+        return out
     }
 
     /** PEQ 若干段 → 127 点 dB（叠加） */

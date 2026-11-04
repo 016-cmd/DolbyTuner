@@ -1284,23 +1284,29 @@ private fun saveDpGeq(prefs: android.content.SharedPreferences, a: IntArray) {
     prefs.edit().putString("dp_geq", a.joinToString(",")).apply()
 }
 
-private fun defaultPeq(): List<PeqBand> {
-    val f = intArrayOf(31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000)
-    return f.map { PeqBand(it.toFloat(), 0f, 1f) }
-}
+private fun defaultPeq(): List<PeqBand> = listOf(
+    PeqBand(100f, 0f, 1f),
+    PeqBand(1000f, 0f, 1f),
+    PeqBand(8000f, 0f, 1f)
+)
 
 private fun loadPeq(prefs: android.content.SharedPreferences): List<PeqBand> {
     val s = prefs.getString("dp_peq", "").orEmpty()
     if (s.isBlank()) return defaultPeq()
-    val a = s.split(",").mapNotNull { it.trim().toFloatOrNull() }
-    if (a.size != 30) return defaultPeq()
-    return (0 until 10).map { i ->
-        PeqBand(a[i * 3], a[i * 3 + 1], a[i * 3 + 2])
+    if (s.contains(";")) {
+        val l = s.split(";").filter { it.isNotBlank() }.mapNotNull { seg ->
+            val a = seg.split(",").mapNotNull { it.trim().toFloatOrNull() }
+            if (a.size == 3) PeqBand(a[0], a[1], a[2]) else null
+        }
+        return if (l.isNotEmpty()) l else defaultPeq()
     }
+    val a = s.split(",").mapNotNull { it.trim().toFloatOrNull() }
+    if (a.size == 30) return (0 until 10).map { i -> PeqBand(a[i * 3], a[i * 3 + 1], a[i * 3 + 2]) }
+    return defaultPeq()
 }
 
 private fun savePeq(prefs: android.content.SharedPreferences, l: List<PeqBand>) {
-    val s = l.joinToString(",") { "${it.freqHz},${it.gainDb},${it.q}" }
+    val s = l.joinToString(";") { "${it.freqHz},${it.gainDb},${it.q}" }
     prefs.edit().putString("dp_peq", s).apply()
 }
 
@@ -1570,27 +1576,41 @@ private fun EffectsScreen() {
         throttle.post(postTick)
     }
 
-    val pendFreq = remember { IntArray(10) { i ->
-        ((Math.log(peqData[i].freqHz / 20.0) / Math.log(1000.0)) * 1000.0).toInt().coerceIn(0, 1000)
-    } }
-    val pendGain = remember { IntArray(10) { i -> (peqData[i].gainDb * 10).toInt() } }
-    val pendQ = remember { IntArray(10) { i -> (peqData[i].q * 100).toInt() } }
+    var geqQ by remember { mutableIntStateOf(prefs.getInt("geq_q", 10)) }
+    var geqMaster by remember { mutableIntStateOf(prefs.getInt("geq_master", 0)) }
 
-    fun posToFreq(v: Int): Float {
-        return (20.0 * Math.pow(1000.0, v / 1000.0)).toFloat()
+    var pendFreq by remember { mutableIntStateOf(500) }
+    var pendGain by remember { mutableIntStateOf(0) }
+    var pendQ by remember { mutableIntStateOf(100) }
+
+    fun posToFreq(v: Int): Float = (20.0 * Math.pow(1000.0, v / 1000.0)).toFloat()
+
+    fun freqToPos(f: Float): Int =
+        ((Math.log(f / 20.0) / Math.log(1000.0)) * 1000.0).toInt().coerceIn(0, 1000)
+
+    fun selectPeq(i: Int) {
+        if (i !in peqData.indices) return
+        peqSel = i
+        val b = peqData[i]
+        pendFreq = freqToPos(b.freqHz)
+        pendGain = (b.gainDb * 10).toInt()
+        pendQ = (b.q * 100).toInt()
     }
 
-    fun freqToPos(f: Float): Int {
-        val v = (Math.log(f / 20.0) / Math.log(1000.0) * 1000.0)
-        return v.toInt().coerceIn(0, 1000)
-    }
-
-    fun peqFromPend(): List<PeqBand> = (0 until 10).map { i ->
-        PeqBand(posToFreq(pendFreq[i]), pendGain[i] / 10f, pendQ[i] / 100f)
+    fun peqLive(): List<PeqBand> {
+        val l = peqData.toMutableList()
+        if (peqSel in l.indices) {
+            l[peqSel] = PeqBand(posToFreq(pendFreq), pendGain / 10f, pendQ / 100f)
+        }
+        return l
     }
 
     fun pushEq() {
-        val curve = if (eqTab == 0) EqMath.geq20To127(geqQ4) else EqMath.peqTo127(peqFromPend())
+        val curve = if (eqTab == 0) {
+            EqMath.geq20To127(geqQ4, geqQ / 10f, geqMaster / 10f)
+        } else {
+            EqMath.peqTo127(peqLive())
+        }
         scope.launch {
             withContext(Dispatchers.IO) { DynProc.setPreEq(curve) }
             status = DynProc.status
@@ -1609,17 +1629,31 @@ private fun EffectsScreen() {
         val n = geqQ4.copyOf()
         n[i] = q4
         geqQ4 = n
-        eqCurve = EqMath.geq20To127(n)
+        eqCurve = EqMath.geq20To127(n, geqQ / 10f, geqMaster / 10f)
         saveDpGeq(prefs, n)
+        scheduleEq()
+    }
+
+    fun updGeqQ(v: Int) {
+        geqQ = v
+        prefs.edit().putInt("geq_q", v).apply()
+        eqCurve = EqMath.geq20To127(geqQ4, v / 10f, geqMaster / 10f)
+        scheduleEq()
+    }
+
+    fun updGeqMaster(v: Int) {
+        geqMaster = v
+        prefs.edit().putInt("geq_master", v).apply()
+        eqCurve = EqMath.geq20To127(geqQ4, geqQ / 10f, v / 10f)
         scheduleEq()
     }
 
     fun livePeq(which: Int, v: Int) {
         if (!debugOn) return
         when (which) {
-            0 -> pendFreq[peqSel] = v
-            1 -> pendGain[peqSel] = v
-            else -> pendQ[peqSel] = v
+            0 -> pendFreq = v
+            1 -> pendGain = v
+            else -> pendQ = v
         }
         scheduleEq()
     }
@@ -1627,10 +1661,29 @@ private fun EffectsScreen() {
     fun commitPeq(which: Int, v: Int) {
         if (!debugOn) return
         livePeq(which, v)
-        val l = peqData.toMutableList()
-        l[peqSel] = PeqBand(posToFreq(pendFreq[peqSel]), pendGain[peqSel] / 10f, pendQ[peqSel] / 100f)
+        val l = peqLive()
         peqData = l
         savePeq(prefs, l)
+        eqCurve = EqMath.peqTo127(l)
+        scheduleEq()
+    }
+
+    fun addPeq() {
+        if (peqData.size >= 12) return
+        val nf = posToFreq(freqToPos(1000f) + peqData.size * 40)
+        val l = peqData + PeqBand(nf, 0f, 1f)
+        peqData = l
+        savePeq(prefs, l)
+        selectPeq(l.size - 1)
+    }
+
+    fun delPeq() {
+        if (peqData.size <= 1) return
+        val l = peqData.toMutableList()
+        l.removeAt(peqSel)
+        peqData = l
+        savePeq(prefs, l)
+        selectPeq((peqSel - 1).coerceAtLeast(0))
         eqCurve = EqMath.peqTo127(l)
         scheduleEq()
     }
@@ -1647,16 +1700,25 @@ private fun EffectsScreen() {
                 } else {
                     val b = loadDolbyGeqBackup(prefs)
                     if (b != null) runCatching { DapRealtime.writeLive(b) }
+                    // 关闭调试：DP 侧自动平直
+                    runCatching { DynProc.setPreEq(FloatArray(127)) }
                 }
             }
             debugOn = on
             prefs.edit().putBoolean("dp_debug", on).apply()
             if (on) {
-                eqCurve = if (eqTab == 0) EqMath.geq20To127(geqQ4) else EqMath.peqTo127(peqData)
+                eqCurve = if (eqTab == 0) {
+                    EqMath.geq20To127(geqQ4, geqQ / 10f, geqMaster / 10f)
+                } else {
+                    EqMath.peqTo127(peqData)
+                }
                 pushEq()
+            } else {
+                eqCurve = FloatArray(127)
             }
         }
     }
+
 
     fun cfg() = DynProc.LimiterCfg(
         enabled = limOn,
@@ -1794,7 +1856,7 @@ private fun EffectsScreen() {
                     EqTab("GEQ", eqTab == 0, cEq) {
                         eqTab = 0
                         prefs.edit().putInt("eq_tab", 0).apply()
-                        eqCurve = EqMath.geq20To127(geqQ4)
+                        eqCurve = EqMath.geq20To127(geqQ4, geqQ / 10f, geqMaster / 10f)
                         scheduleEq()
                     }
                     Spacer(Modifier.width(6.dp))
@@ -1813,21 +1875,23 @@ private fun EffectsScreen() {
                             contentColor = if (debugOn) Color(0xFF10B981) else cs.onSurfaceVariant
                         )
                     ) {
-                        Text(if (debugOn) "调试中" else "调试", fontSize = 10.sp)
+                        Text(if (debugOn) "已开启" else "开启", fontSize = 10.sp)
                     }
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
                     if (debugOn) "杜比 GEQ 已切平直 · 当前 EQ 由 DP 接管"
-                    else "开启调试后可调节（会把杜比 GEQ 临时切平直）",
+                    else "点「开启」后杜比 GEQ 临时平直，改由 DP 调节",
                     fontSize = 9.sp,
                     color = if (debugOn) Color(0xFF10B981) else cs.onSurfaceVariant
                 )
                 Spacer(Modifier.height(6.dp))
-                BandCurveCanvas(
-                    points = (0..126).map { i -> EqMath.FREQ127[i].toInt() to (eqCurve[i] * 16).toInt() },
-                    lineColor = cEq,
-                    showDelta = false
+
+                DpEqCanvas(
+                    curve = eqCurve,
+                    fMin = if (eqTab == 0) 47f else 20f,
+                    fMax = if (eqTab == 0) 19700f else 20000f,
+                    accent = cEq
                 )
                 Spacer(Modifier.height(6.dp))
 
@@ -1848,48 +1912,66 @@ private fun EffectsScreen() {
                             )
                         }
                     }
+                    FxSlider(
+                        "段间过渡 · Q", String.format("%.1f", geqQ / 10f), geqQ, 10..100, debugOn,
+                        onLive = { updGeqQ(it) }, onDone = { updGeqQ(it) }
+                    )
+                    FxSlider(
+                        "总增益 · Master", String.format("%+.1f dB", geqMaster / 10f), geqMaster, -120..120, debugOn,
+                        onLive = { updGeqMaster(it) }, onDone = { updGeqMaster(it) }
+                    )
                 } else {
-                    Column(Modifier.fillMaxWidth()) {
-                        for (row in 0..1) {
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                for (k in 0..4) {
-                                    val i = row * 5 + k
-                                    Surface(
-                                        Modifier.weight(1f).clickable { peqSel = i },
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = cEq.copy(alpha = if (peqSel == i) 0.28f else 0.07f),
-                                        border = BorderStroke(
-                                            1.dp,
-                                            cEq.copy(alpha = if (peqSel == i) 0.7f else 0.22f)
-                                        )
-                                    ) {
-                                        Box(Modifier.padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
-                                            Text(fmtFreq(peqData[i].freqHz.toInt()), fontSize = 8.sp)
-                                        }
-                                    }
+                    peqData.forEachIndexed { i, b ->
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (peqSel == i) cEq.copy(alpha = 0.14f) else Color.Transparent)
+                                .clickable { selectPeq(i) }
+                                .padding(horizontal = 6.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("${i + 1}", fontSize = 9.sp, color = cs.onSurfaceVariant, modifier = Modifier.width(16.dp))
+                            Text(fmtFreq(b.freqHz.toInt()), fontSize = 11.sp, modifier = Modifier.weight(1f))
+                            Text(String.format("%+.1f dB", b.gainDb), fontSize = 10.sp, color = cs.onSurfaceVariant)
+                            Spacer(Modifier.width(8.dp))
+                            Text(String.format("Q %.2f", b.q), fontSize = 9.sp, color = cs.onSurfaceVariant)
+                            if (peqData.size > 1) {
+                                IconButton(
+                                    onClick = { if (peqSel != i) selectPeq(i); delPeq() },
+                                    modifier = Modifier.size(26.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, null, Modifier.size(13.dp), tint = cs.onSurfaceVariant)
                                 }
                             }
-                            Spacer(Modifier.height(4.dp))
                         }
                     }
-                    FxSlider(
-                        "中心频率", fmtFreq(posToFreq(pendFreq[peqSel]).toInt()),
-                        pendFreq[peqSel], 0..1000, debugOn,
-                        onLive = { livePeq(0, it) }, onDone = { commitPeq(0, it) }
-                    )
-                    FxSlider(
-                        "增益", String.format("%+.1f dB", pendGain[peqSel] / 10f),
-                        pendGain[peqSel], -150..150, debugOn,
-                        onLive = { livePeq(1, it) }, onDone = { commitPeq(1, it) }
-                    )
-                    FxSlider(
-                        "Q 值", String.format("%.2f", pendQ[peqSel] / 100f),
-                        pendQ[peqSel], 10..1000, debugOn,
-                        onLive = { livePeq(2, it) }, onDone = { commitPeq(2, it) }
-                    )
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedButton(
+                        onClick = { addPeq() },
+                        modifier = Modifier.height(32.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = cEq)
+                    ) {
+                        Text("+ 添加频段", fontSize = 10.sp)
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    if (peqSel in peqData.indices) {
+                        FxSlider(
+                            "中心频率", fmtFreq(posToFreq(pendFreq).toInt()),
+                            pendFreq, 0..1000, debugOn,
+                            onLive = { livePeq(0, it) }, onDone = { commitPeq(0, it) }
+                        )
+                        FxSlider(
+                            "增益", String.format("%+.1f dB", pendGain / 10f),
+                            pendGain, -150..150, debugOn,
+                            onLive = { livePeq(1, it) }, onDone = { commitPeq(1, it) }
+                        )
+                        FxSlider(
+                            "Q 值", String.format("%.2f", pendQ / 100f),
+                            pendQ, 10..1000, debugOn,
+                            onLive = { livePeq(2, it) }, onDone = { commitPeq(2, it) }
+                        )
+                    }
                 }
             }
         }
