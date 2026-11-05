@@ -155,7 +155,7 @@ internal fun ConfigScreen() {
                 Text("备份与恢复", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 Text(
                     "导出位置：内部存储 / Download / DolbyTuner",
-                    fontSize = 9.sp, color = cs.onSurfaceVariant
+                    fontSize = 9.sp, color = subInk()
                 )
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -169,7 +169,7 @@ internal fun ConfigScreen() {
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                Text("当前共 ${presets.size} 个预设", fontSize = 9.sp, color = cs.onSurfaceVariant)
+                Text("当前共 ${presets.size} 个预设", fontSize = 9.sp, color = subInk())
             }
         }
 
@@ -195,7 +195,7 @@ internal fun ConfigScreen() {
                 Spacer(Modifier.width(8.dp))
                 Column {
                     Text("保存当前为预设", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Accent)
-                    Text("GEQ 20 段 + 全部音效参数", fontSize = 9.sp, color = cs.onSurfaceVariant)
+                    Text("GEQ 20 段 + 全部音效参数", fontSize = 9.sp, color = subInk())
                 }
             }
         }
@@ -206,7 +206,7 @@ internal fun ConfigScreen() {
         if (presets.isEmpty()) {
             Text(
                 "还没有预设，点上面的加号保存一个",
-                fontSize = 10.sp, color = cs.onSurfaceVariant
+                fontSize = 10.sp, color = subInk()
             )
         } else {
             presets.forEach { p ->
@@ -221,7 +221,7 @@ internal fun ConfigScreen() {
         }
 
         Spacer(Modifier.height(6.dp))
-        Text(status, fontSize = 10.sp, color = cs.onSurfaceVariant)
+        Text(status, fontSize = 10.sp, color = subInk())
     }
 
     // 点击预设卡片：详细参数
@@ -238,7 +238,7 @@ internal fun ConfigScreen() {
                 Column {
                     Text(
                         "选择要保存的范围",
-                        fontSize = 10.sp, color = cs.onSurfaceVariant
+                        fontSize = 10.sp, color = subInk()
                     )
                     Spacer(Modifier.height(6.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -329,10 +329,10 @@ internal fun ConfigScreen() {
                         }
                     }
                     Spacer(Modifier.height(8.dp))
-                    Text("保存位置", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = cs.onSurfaceVariant)
+                    Text("保存位置", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = subInk())
                     Text("内部存储 / Download / DolbyTuner /", fontSize = 10.sp, color = Accent)
                     Spacer(Modifier.height(6.dp))
-                    Text("文件名", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = cs.onSurfaceVariant)
+                    Text("文件名", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = subInk())
                     Text(
                         if (exportSel < 0) exportName
                         else exportName.replace(".json", "_${presets.getOrNull(exportSel)?.name ?: ""}.json"),
@@ -373,13 +373,13 @@ internal fun ConfigScreen() {
                 Column {
                     Text("将应用「${p.name}」：", fontSize = 11.sp)
                     if (p.scope == SCOPE_DOLBY || p.scope == SCOPE_BOTH) {
-                        Text("· 杜比：GEQ 20 段 + 音效页参数", fontSize = 10.sp, color = cs.onSurfaceVariant)
+                        Text("· 杜比：GEQ 20 段 + 音效页参数", fontSize = 10.sp, color = subInk())
                     }
                     if (p.scope == SCOPE_DP || p.scope == SCOPE_BOTH) {
-                        Text("· 音效页（DP）：EQ / 限幅 / MBC / 等响", fontSize = 10.sp, color = cs.onSurfaceVariant)
+                        Text("· 音效页（DP）：EQ / 限幅 / MBC / 等响", fontSize = 10.sp, color = subInk())
                     }
                     Spacer(Modifier.height(8.dp))
-                    Text("当前正在输出的声音会立刻变化。", fontSize = 9.sp, color = cs.onSurfaceVariant)
+                    Text("当前正在输出的声音会立刻变化。", fontSize = 9.sp, color = subInk())
                 }
             },
             confirmButton = {
@@ -416,7 +416,7 @@ internal fun ConfigScreen() {
                 Column {
                     Text("确定删除「${p.name}」？", fontSize = 12.sp)
                     Spacer(Modifier.height(6.dp))
-                    Text("删除后无法恢复，已应用到 DSP 的参数不受影响。", fontSize = 9.sp, color = cs.onSurfaceVariant)
+                    Text("删除后无法恢复，已应用到 DSP 的参数不受影响。", fontSize = 9.sp, color = subInk())
                 }
             },
             confirmButton = {
@@ -455,7 +455,7 @@ internal fun ConfigScreen() {
                             Spacer(Modifier.height(6.dp))
                             Text(
                                 "它存在 APP 的本地偏好里，不需要额外「保存」：只要音效页总开关是开的，重启后打开 APP 会自动按这份参数重新下发。",
-                                fontSize = 10.sp, lineHeight = 15.sp, color = cs.onSurfaceVariant
+                                fontSize = 10.sp, lineHeight = 15.sp, color = subInk()
                             )
                         }
                         SCOPE_DOLBY -> {
@@ -484,7 +484,7 @@ internal fun ConfigScreen() {
                             Spacer(Modifier.height(6.dp))
                             Text(
                                 "音效页部分不需要保存，重启后打开 APP 会自动重新下发。",
-                                fontSize = 10.sp, lineHeight = 15.sp, color = cs.onSurfaceVariant
+                                fontSize = 10.sp, lineHeight = 15.sp, color = subInk()
                             )
                         }
                     }
@@ -629,7 +629,7 @@ private fun PresetDetailDialog(p: Preset, onClose: () -> Unit) {
                     Text(
                         DapRealtime.FREQS.mapIndexed { i, f -> "${f.toInt()}Hz ${p.geq[i]}" }
                             .chunked(3).joinToString("\n") { it.joinToString("   ") },
-                        fontSize = 10.sp, lineHeight = 15.sp, color = cs.onSurfaceVariant
+                        fontSize = 10.sp, lineHeight = 15.sp, color = subInk()
                     )
                 }
 
@@ -660,14 +660,14 @@ private fun PresetDetailDialog(p: Preset, onClose: () -> Unit) {
                                 val a = seg.split(",").mapNotNull { it.toFloatOrNull() }
                                 if (a.size < 3) seg else "${a[0].toInt()}Hz ${String.format("%+.1f", a[1])}dB Q${String.format("%.1f", a[2])}"
                             }.chunked(2).joinToString("\n") { it.joinToString("   ") },
-                            fontSize = 10.sp, lineHeight = 15.sp, color = cs.onSurfaceVariant
+                            fontSize = 10.sp, lineHeight = 15.sp, color = subInk()
                         )
                     }
                     if (d.eqTab == 0) {
                         Text(
                             DapRealtime.FREQS.map { hz -> "${hz}Hz ${String.format("%+.1f", atFreq(d.curve, hz))}" }
                                 .chunked(2).joinToString("\n") { it.joinToString("   ") },
-                            fontSize = 10.sp, lineHeight = 15.sp, color = cs.onSurfaceVariant
+                            fontSize = 10.sp, lineHeight = 15.sp, color = subInk()
                         )
                     }
 
@@ -687,7 +687,7 @@ private fun PresetDetailDialog(p: Preset, onClose: () -> Unit) {
                                 " 膝${b.getOrElse(4) { 60 }} 门${fmtDb(b.getOrElse(5) { -900 })}" +
                                 " 扩${String.format("%.1f", b.getOrElse(6) { 10 } / 10f)}" +
                                 " 前${fmtDb(b.getOrElse(7) { 0 })} 后${fmtDb(b.getOrElse(8) { 0 })}",
-                            fontSize = 9.sp, lineHeight = 13.sp, color = cs.onSurfaceVariant
+                            fontSize = 9.sp, lineHeight = 13.sp, color = subInk()
                         )
                     }
 
@@ -704,7 +704,7 @@ private fun PresetDetailDialog(p: Preset, onClose: () -> Unit) {
                         listOf("31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k")
                             .mapIndexed { i, f -> "$f ${String.format("%+.1f", d.post.getOrElse(i) { 0 } / 10f)}" }
                             .chunked(5).joinToString("\n") { it.joinToString("  ") },
-                        fontSize = 10.sp, lineHeight = 15.sp, color = cs.onSurfaceVariant
+                        fontSize = 10.sp, lineHeight = 15.sp, color = subInk()
                     )
                     DetailRow("左右平衡", String.format("%+.1f dB", d.post.getOrElse(10) { 0 } / 10f), cs)
                     DetailRow("等响补偿", mark(d.elOn), cs)
@@ -741,7 +741,7 @@ private fun DetailTitle(text: String, cs: androidx.compose.material3.ColorScheme
 @Composable
 private fun DetailRow(label: String, value: String, cs: androidx.compose.material3.ColorScheme) {
     Row(Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
-        Text(label, fontSize = 10.sp, color = cs.onSurfaceVariant, modifier = Modifier.weight(1f))
+        Text(label, fontSize = 10.sp, color = subInk(), modifier = Modifier.weight(1f))
         Text(value, fontSize = 10.sp, color = cs.onSurface, fontWeight = FontWeight.Medium)
     }
 }

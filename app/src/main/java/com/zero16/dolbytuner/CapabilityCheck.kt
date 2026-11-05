@@ -233,7 +233,7 @@ internal fun CapabilitySection() {
                 Text("音效能力检测", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 Text(
                     "枚举本机全部音效实现，导出一份完整报告",
-                    fontSize = 9.sp, lineHeight = 11.sp, color = cs.onSurfaceVariant
+                    fontSize = 9.sp, lineHeight = 11.sp, color = subInk()
                 )
             }
             Button(
@@ -273,7 +273,7 @@ internal fun CapabilitySection() {
                     if (r.file.isBlank()) {
                         Text("文件写入失败：请检查存储权限。", fontSize = 11.sp)
                     } else {
-                        Text("文件已导出到：", fontSize = 11.sp, color = cs.onSurfaceVariant)
+                        Text("文件已导出到：", fontSize = 11.sp, color = subInk())
                         Text("内部存储 / Download / DolbyTuner /", fontSize = 10.sp)
                         Text(r.file, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }

@@ -203,28 +203,34 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    override fun onDestroy() {
-        // 正常退出（返回键/结束）→ 清掉会话标记，保留卡片真折射
+    override fun onPause() {
+        // 只要正常进入过后台/退出，就清掉「会话未收尾」标记，
+        // 避免用户「退出再进」时被误判成崩溃而关掉卡片真折射
         runCatching {
-            if (isFinishing) {
-                getSharedPreferences("appearance", MODE_PRIVATE).edit()
-                    .putBoolean("liquid_session", false)
-                    .apply()
-            }
+            getSharedPreferences("appearance", MODE_PRIVATE).edit()
+                .putBoolean("liquid_session", false)
+                .putInt("liquid_strikes", 0)
+                .apply()
         }
-        super.onDestroy()
+        super.onPause()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 液态玻璃崩溃保险：若上次会话没正常结束，自动关掉卡片真折射，避免一进页面就崩
+        // 液态玻璃崩溃保险：
+        //   正常切后台会走 onPause → 清标记，所以「退出再进」不会被误关；
+        //   只有连续两次启动都发现上次会话没收尾（真崩了），才自动关掉卡片真折射。
         runCatching {
             val ap = getSharedPreferences("appearance", MODE_PRIVATE)
-            if (ap.getBoolean("liquid_session", false)) {
+            val strikes = if (ap.getBoolean("liquid_session", false))
+                ap.getInt("liquid_strikes", 0) + 1 else 0
+            if (strikes >= 2) {
                 ap.edit()
                     .putBoolean("card_liquid", false)
-                    .putBoolean("liquid_session", false)
+                    .putInt("liquid_strikes", 0)
                     .apply()
+            } else {
+                ap.edit().putInt("liquid_strikes", strikes).apply()
             }
             ap.edit().putBoolean("liquid_session", true).apply()
         }
@@ -279,10 +285,10 @@ private fun GateDialog(reasons: List<String>, onExit: () -> Unit) {
             Column(Modifier.padding(22.dp)) {
                 Text("无法运行", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(10.dp))
-                Text("当前设备不满足运行条件", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("当前设备不满足运行条件", fontSize = 14.sp, color = subInk())
                 Spacer(Modifier.height(14.dp))
                 reasons.forEach {
-                    Text("· $it", fontSize = 13.sp, lineHeight = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("· $it", fontSize = 13.sp, lineHeight = 20.sp, color = subInk())
                     Spacer(Modifier.height(6.dp))
                 }
                 Spacer(Modifier.height(18.dp))
@@ -678,7 +684,7 @@ private fun GeqScreen(deviceLine: String) {
     ) {
         Spacer(Modifier.height(14.dp))
         Text("Dolby Tuner", fontSize = 25.sp, fontWeight = FontWeight.Bold)
-        Text(deviceLine, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(deviceLine, fontSize = 11.sp, color = subInk())
         Spacer(Modifier.height(10.dp))
 
         GlassSurface(
@@ -730,7 +736,7 @@ private fun GeqScreen(deviceLine: String) {
                         Text("20 段图形均衡器", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         Text(
                             "47 Hz ~ 19.7 kHz · 实时写入 Dolby DSP",
-                            fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                            fontSize = 10.sp, color = subInk()
                         )
                     }
                     DolbyBadge(on = dolbyOn)
@@ -747,7 +753,7 @@ private fun GeqScreen(deviceLine: String) {
                             Spacer(Modifier.width(6.dp))
                             Text(
                                 "已被音效页接管：杜比 GEQ 已切平直，这一栏只读。下方的音效参数仍可正常调节。",
-                                fontSize = 9.sp, lineHeight = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                                fontSize = 9.sp, lineHeight = 13.sp, color = subInk()
                             )
                         }
                     }
@@ -3487,7 +3493,7 @@ private fun FxSwitch(title: String, code: String, checked: Boolean, onChange: (B
     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = 13.sp)
-            Text(code, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(code, fontSize = 9.sp, color = subInk())
         }
         androidx.compose.material3.Switch(checked = checked, onCheckedChange = onChange)
     }
@@ -3512,7 +3518,7 @@ private fun FxSlider(
             Text(title, fontSize = 12.sp, color = if (en) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
             Text(
                 if (dragging) fmt(local.toInt().coerceIn(range.first, range.last)) else valueText,
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                fontSize = 12.sp, color = subInk()
             )
         }
         androidx.compose.material3.Slider(
@@ -3645,7 +3651,7 @@ private fun SettingsScreen(activity: Activity) {
                     Text(
                         if (bootWrite) "已开启 · 开机写回杜比参数与音效页"
                         else "关闭时开机不写入任何参数",
-                        fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                        fontSize = 10.sp, color = subInk()
                     )
                 }
                 androidx.compose.material3.Switch(
@@ -3674,7 +3680,7 @@ private fun SettingsScreen(activity: Activity) {
                     Text("后台设备监听", fontSize = 13.sp)
                     Text(
                         if (deviceService) "息屏时也会按绑定预设自动切换" else "只在 APP 打开时检测设备",
-                        fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                        fontSize = 10.sp, color = subInk()
                     )
                 }
                 androidx.compose.material3.Switch(
@@ -3705,7 +3711,7 @@ private fun SettingsScreen(activity: Activity) {
                     Text("重新下发监听通知", fontSize = 12.sp)
                     Text(
                         "按当前设备刷新一次常驻通知",
-                        fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                        fontSize = 9.sp, color = subInk()
                     )
                 }
                 TextButton(
@@ -3748,7 +3754,7 @@ private fun SettingsScreen(activity: Activity) {
                     Text("后台保活", fontSize = 12.sp)
                     Text(
                         "被系统清掉后由系统定时把服务拉回来",
-                        fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                        fontSize = 9.sp, color = subInk()
                     )
                 }
                 androidx.compose.material3.Switch(
@@ -3778,7 +3784,7 @@ private fun SettingsScreen(activity: Activity) {
                     Text("通话时暂停音效", fontSize = 12.sp)
                     Text(
                         "来电或通话中自动关掉音效页，挂断后按记录恢复",
-                        fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                        fontSize = 9.sp, color = subInk()
                     )
                 }
                 androidx.compose.material3.Switch(
@@ -3809,7 +3815,7 @@ private fun SettingsScreen(activity: Activity) {
                     Text(
                         if (hideRecents) "最近任务里看不到本 APP · 服务照常运行"
                         else "最近任务里会显示本 APP",
-                        fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                        fontSize = 9.sp, color = subInk()
                     )
                 }
                 androidx.compose.material3.Switch(
@@ -3829,7 +3835,7 @@ private fun SettingsScreen(activity: Activity) {
             Text(
                 if (baseReady) "重置基准：已按本机检测（音效参数）"
                 else "重置基准：内置默认值（尚未检测本机）",
-                fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                fontSize = 10.sp, color = subInk()
             )
             Spacer(Modifier.height(6.dp))
             SettingRow(
@@ -3857,7 +3863,7 @@ private fun SettingsScreen(activity: Activity) {
             }
             Text(
                 "检测会读取当前 Dolby DSP 里的音效参数作为基准；GEQ 出厂即平直，不需要检测。",
-                fontSize = 9.sp, lineHeight = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                fontSize = 9.sp, lineHeight = 14.sp, color = subInk()
             )
             Spacer(Modifier.height(8.dp))
         }
@@ -3901,7 +3907,7 @@ private fun SettingsScreen(activity: Activity) {
         Spacer(Modifier.height(12.dp))
         Text(
             "Dolby Tuner · 无 root 方案\nGEQ 通过 Dolby DAP 参数 110 实时写入",
-            fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+            fontSize = 10.sp, color = subInk()
         )
     }
 
@@ -3917,7 +3923,7 @@ private fun SettingsScreen(activity: Activity) {
                     }
                     Text("已开启。请允许 Dolby Tuner 自启动，否则重启后系统不会唤醒 APP 写回参数。", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.height(6.dp))
-                    Text("路径：设置 → 应用设置 → 授权管理 → 自启动 → 允许 Dolby Tuner", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("路径：设置 → 应用设置 → 授权管理 → 自启动 → 允许 Dolby Tuner", fontSize = 10.sp, color = subInk())
                 }
             },
             confirmButton = {
@@ -3979,7 +3985,7 @@ private fun LicenseDialogContent(
                 Spacer(Modifier.height(12.dp))
                 Text(
                     "许可证原文", fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = subInk()
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -4007,7 +4013,7 @@ private fun AboutRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
         Text(
             label, fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = subInk(),
             modifier = Modifier.width(72.dp)
         )
         Text(value, fontSize = 12.sp)
@@ -4033,7 +4039,7 @@ private fun SettingRow(
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
             if (subtitle != null) {
-                Text(subtitle, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(subtitle, fontSize = 10.sp, color = subInk())
             }
         }
         if (selected) {

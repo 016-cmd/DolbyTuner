@@ -86,6 +86,13 @@ private val DarkColorScheme = darkColorScheme(
  * 自适应提示色：背景亮时用深色，背景暗时自动换亮色。
  * 深色模式下固定的深棕/深红几乎看不见，所有提示文字都走这里。
  */
+/** 卡片里的小字：浅色模式用黑，深色模式用白（不再用灰） */
+@Composable
+fun subInk(alpha: Float = 0.78f): Color =
+    if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
+        Color.Black.copy(alpha = alpha)
+    else Color.White.copy(alpha = alpha.coerceAtLeast(0.82f))
+
 @Composable
 fun hintInk(light: Color, dark: Color): Color =
     if (MaterialTheme.colorScheme.background.luminance() > 0.5f) light else dark

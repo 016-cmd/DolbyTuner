@@ -78,7 +78,7 @@ internal fun EffectCard(
     val container = Appearance.glassFill(dark)
     val borderColor = if (dark) Color.White.copy(alpha = 0.10f)
     else Color.Black.copy(alpha = 0.06f)
-    val subColor = if (dark) Color.White.copy(alpha = 0.72f) else Color(0xFF2E2E2E).copy(alpha = 0.66f)
+    val subColor = subInk()
 
     GlassSurface(
         Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -195,7 +195,7 @@ internal fun ParamToggle(
         Column(Modifier.weight(1f)) {
             Text(label, fontSize = 12.sp)
             if (hint.isNotBlank()) {
-                Text(hint, fontSize = 9.sp, color = cs.onSurfaceVariant)
+                Text(hint, fontSize = 9.sp, color = subInk())
             }
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)

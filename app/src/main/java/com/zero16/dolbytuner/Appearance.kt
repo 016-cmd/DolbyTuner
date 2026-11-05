@@ -135,6 +135,52 @@ object Appearance {
         if (cached != Int.MIN_VALUE) accent.value = Color(cached)
     }
 
+    /**
+     * 玻璃风格预设（一次写入一组参数）
+     * 0 清透 / 1 标准 / 2 浓郁 / 3 柔和 / 4 省电
+     */
+    fun applyPreset(ctx: Context, i: Int) {
+        when (i) {
+            0 -> { // 清透：模糊很小、折射大、色散明显
+                setRefraction(ctx, 85); setEdgeWidth(ctx, 1); setBlurRadius(ctx, 6)
+                setVibrancy(ctx, 70); setDispersion(ctx, 55); setLightAngle(ctx, 315)
+                setVolumeLight(ctx, 2); setRadius(ctx, 26); setThickness(ctx, 1)
+            }
+            1 -> { // 标准：当前默认
+                setRefraction(ctx, 60); setEdgeWidth(ctx, 1); setBlurRadius(ctx, 16)
+                setVibrancy(ctx, 55); setDispersion(ctx, 35); setLightAngle(ctx, 315)
+                setVolumeLight(ctx, 2); setRadius(ctx, 26); setThickness(ctx, 1)
+            }
+            2 -> { // 浓郁：最强折射 + 色散 + 厚玻璃
+                setRefraction(ctx, 100); setEdgeWidth(ctx, 2); setBlurRadius(ctx, 4)
+                setVibrancy(ctx, 85); setDispersion(ctx, 80); setLightAngle(ctx, 300)
+                setVolumeLight(ctx, 3); setRadius(ctx, 30); setThickness(ctx, 2)
+            }
+            3 -> { // 柔和：低折射、轻色散
+                setRefraction(ctx, 45); setEdgeWidth(ctx, 0); setBlurRadius(ctx, 10)
+                setVibrancy(ctx, 50); setDispersion(ctx, 20); setLightAngle(ctx, 315)
+                setVolumeLight(ctx, 1); setRadius(ctx, 26); setThickness(ctx, 0)
+            }
+            else -> { // 省电：几乎不折射
+                setRefraction(ctx, 20); setEdgeWidth(ctx, 0); setBlurRadius(ctx, 0)
+                setVibrancy(ctx, 30); setDispersion(ctx, 0); setLightAngle(ctx, 315)
+                setVolumeLight(ctx, 0); setRadius(ctx, 22); setThickness(ctx, 0)
+            }
+        }
+    }
+
+    /** 当前参数最接近哪个预设（给按钮高亮用） */
+    fun presetIndex(): Int {
+        val r = refraction.value
+        return when {
+            r >= 95 -> 2
+            r >= 75 -> 0
+            r <= 30 -> 4
+            r <= 50 -> 3
+            else -> 1
+        }
+    }
+
     // ── 派生值 ──
     /** 描边宽度（dp 倍数） */
     fun strokeDp(): Float = when (edgeWidth.value) {

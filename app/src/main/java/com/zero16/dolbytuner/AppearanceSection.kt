@@ -1,10 +1,8 @@
 package com.zero16.dolbytuner
 
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.foundation.Image
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -23,14 +21,12 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -38,14 +34,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-
 /**
- * 设置页里的「外观与个性化」——展开/闭合式，不是跳页面。
- * 全部参数实时生效（写 prefs + 触发重组）。
+ * 设置页里的「外观与个性化」——展开/闭合，不跳页面。
+ * 参数全部用预设按钮，没有滑条。
  */
 @Composable
 fun AppearanceSection(
@@ -54,7 +52,7 @@ fun AppearanceSection(
     hasLocalWallpaper: Boolean,
     onWallpaperKind: (Int) -> Unit
 ) {
-    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val ctx = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
     val arrow by animateFloatAsState(if (expanded) 180f else 0f, label = "arrow")
     val accent = Appearance.accent.value
@@ -68,14 +66,11 @@ fun AppearanceSection(
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text("外观与个性化", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                Text(
-                    summary(),
-                    fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text(summary(), fontSize = 10.sp, color = subInk())
             }
             Icon(
                 Icons.Default.KeyboardArrowDown, null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = subInk(),
                 modifier = Modifier.size(20.dp).rotate(arrow)
             )
         }
@@ -84,70 +79,78 @@ fun AppearanceSection(
             Column(Modifier.fillMaxWidth()) {
                 Spacer(Modifier.height(10.dp))
 
-                ToggleRow("液态玻璃", "关闭后卡片退化为纯色块", Appearance.enabled.value) {
-                    Appearance.setEnabled(ctx, it)
-                }
-
-                GroupLabel("玻璃")
-                SliderRow("折射强度", "", Appearance.refraction.value, 0f..100f) {
-                    Appearance.setRefraction(ctx, it)
-                }
-                SegRow("折射边缘", listOf("窄", "标准", "宽"), Appearance.edgeWidth.value) {
-                    Appearance.setEdgeWidth(ctx, it)
-                }
-                SliderRow("模糊", "dp", Appearance.blurRadius.value, 0f..40f) {
-                    Appearance.setBlurRadius(ctx, it)
-                }
-                SliderRow("提亮", "", Appearance.vibrancy.value, 0f..100f) {
-                    Appearance.setVibrancy(ctx, it)
-                }
-
-                GroupLabel("颜色")
-                SliderRow("色散", "", Appearance.dispersion.value, 0f..100f) {
-                    Appearance.setDispersion(ctx, it)
-                }
-                SliderRow("光源角度", "°", Appearance.lightAngle.value, 0f..360f) {
-                    Appearance.setLightAngle(ctx, it)
-                }
-                SegRow("体积光", listOf("关", "弱", "标准", "强"), Appearance.volumeLight.value) {
-                    Appearance.setVolumeLight(ctx, it)
-                }
-                SegRow("卡片底色", listOf("自动", "纯白", "纯黑"), Appearance.tintMode.value) {
-                    Appearance.setTintMode(ctx, it)
-                }
-
-                GroupLabel("形状")
-                SliderRow("圆角", "dp", Appearance.radius.value, 12f..32f) {
-                    Appearance.setRadius(ctx, it)
-                }
-                SegRow("玻璃厚度", listOf("薄", "标准", "厚"), Appearance.thickness.value) {
-                    Appearance.setThickness(ctx, it)
-                }
-
-                GroupLabel("动效")
-                SliderRow("果冻按压", "", Appearance.jelly.value, 0f..100f) {
-                    Appearance.setJelly(ctx, it)
-                }
-                SegRow("弹簧", listOf("软", "标准", "硬"), Appearance.spring.value) {
-                    Appearance.setSpring(ctx, it)
-                }
-                ToggleRow("光照互通", "按压时照亮邻近玻璃", Appearance.crossLight.value) {
-                    Appearance.setCrossLight(ctx, it)
-                }
+                // ── 最上面：性能 + 卡片真折射 ──
+                ToggleRow(
+                    "卡片真折射",
+                    "关掉后用纯色玻璃（省 GPU，最稳）",
+                    Appearance.cardLiquid.value
+                ) { Appearance.setCardLiquid(ctx, it) }
                 SegRow("性能", listOf("自动", "高画质", "省电"), Appearance.perfMode.value) {
                     Appearance.setPerfMode(ctx, it)
                 }
-                ToggleRow(
-                    "卡片真折射",
-                    "实验性：卡片直接折射壁纸（更玻璃，但更吃 GPU）",
-                    Appearance.cardLiquid.value
-                ) {
-                    Appearance.setCardLiquid(ctx, it)
+
+                // ── 玻璃 ──
+                GroupLabel("玻璃")
+                SegRow(
+                    "玻璃风格",
+                    listOf("清透", "标准", "浓郁", "柔和", "省电"),
+                    Appearance.presetIndex()
+                ) { Appearance.applyPreset(ctx, it) }
+                SegRow(
+                    "折射强度",
+                    listOf("低", "中", "高"),
+                    nearest(Appearance.refraction.value, intArrayOf(40, 70, 100))
+                ) { Appearance.setRefraction(ctx, intArrayOf(40, 70, 100)[it]) }
+                SegRow(
+                    "玻璃厚度",
+                    listOf("薄", "标准", "厚"),
+                    Appearance.thickness.value
+                ) { Appearance.setThickness(ctx, it) }
+
+                // ── 颜色 ──
+                GroupLabel("颜色")
+                SegRow(
+                    "色散",
+                    listOf("关", "轻", "标准", "强"),
+                    nearest(Appearance.dispersion.value, intArrayOf(0, 25, 50, 80))
+                ) { Appearance.setDispersion(ctx, intArrayOf(0, 25, 50, 80)[it]) }
+                SegRow(
+                    "体积光",
+                    listOf("关", "弱", "标准", "强"),
+                    Appearance.volumeLight.value.coerceIn(0, 3)
+                ) { Appearance.setVolumeLight(ctx, it) }
+                SegRow(
+                    "卡片底色",
+                    listOf("自动", "纯白", "纯黑"),
+                    Appearance.tintMode.value
+                ) { Appearance.setTintMode(ctx, it) }
+
+                // ── 形状 ──
+                GroupLabel("形状")
+                SegRow(
+                    "圆角",
+                    listOf("小", "标准", "大"),
+                    nearest(Appearance.radius.value, intArrayOf(16, 26, 32))
+                ) { Appearance.setRadius(ctx, intArrayOf(16, 26, 32)[it]) }
+
+                // ── 动效 ──
+                GroupLabel("动效")
+                SegRow(
+                    "果冻按压",
+                    listOf("关", "轻", "标准", "强"),
+                    nearest(Appearance.jelly.value, intArrayOf(0, 40, 70, 100))
+                ) { Appearance.setJelly(ctx, intArrayOf(0, 40, 70, 100)[it]) }
+                SegRow(
+                    "弹簧",
+                    listOf("软", "标准", "硬"),
+                    Appearance.spring.value
+                ) { Appearance.setSpring(ctx, it) }
+                ToggleRow("光照互通", "按压时照亮邻近玻璃", Appearance.crossLight.value) {
+                    Appearance.setCrossLight(ctx, it)
                 }
 
+                // ── 壁纸 ──
                 GroupLabel("壁纸")
-
-                // 当前壁纸预览
                 val wp = WallpaperState.original
                 if (wp != null) {
                     Image(
@@ -164,28 +167,25 @@ fun AppearanceSection(
                 Text(
                     "当前：${WallpaperState.builtinName(Appearance.wallpaperKind.value)}",
                     fontSize = 9.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = subInk()
                 )
-
                 SegRow(
                     "来源",
                     listOf("本地", "极光", "晨雾", "暖砂"),
                     Appearance.wallpaperKind.value
                 ) { onWallpaperKind(it) }
-                SliderRow("压暗", "", Appearance.wallpaperDim.value, 0f..60f) {
-                    Appearance.setWallpaperDim(ctx, it)
-                }
+                SegRow(
+                    "压暗",
+                    listOf("无", "轻", "中", "深"),
+                    nearest(Appearance.wallpaperDim.value, intArrayOf(0, 20, 40, 60))
+                ) { Appearance.setWallpaperDim(ctx, intArrayOf(0, 20, 40, 60)[it]) }
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
                     if (hasLocalWallpaper) {
                         TextButton(onClick = onClearWallpaper) {
-                            Text(
-                                "清除本地壁纸",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Text("清除本地壁纸", fontSize = 11.sp, color = subInk())
                         }
                     }
                     TextButton(onClick = onPickWallpaper) {
@@ -193,6 +193,7 @@ fun AppearanceSection(
                     }
                 }
 
+                // ── 页面 ──
                 GroupLabel("页面")
                 ToggleRow("页面切换动画", null, Appearance.animPage.value) {
                     Appearance.setAnimPage(ctx, it)
@@ -209,9 +210,20 @@ fun AppearanceSection(
     }
 }
 
+private fun nearest(v: Int, arr: IntArray): Int {
+    var best = 0
+    var bd = Int.MAX_VALUE
+    arr.forEachIndexed { i, x ->
+        val d = kotlin.math.abs(x - v)
+        if (d < bd) { bd = d; best = i }
+    }
+    return best
+}
+
 private fun summary(): String {
     val tint = when (Appearance.tintMode.value) { 1 -> "纯白"; 2 -> "纯黑"; else -> "自动" }
-    return "液态玻璃 · ${tint} · 圆角 ${Appearance.radius.value}dp · ${WallpaperState.builtinName(Appearance.wallpaperKind.value)}"
+    val preset = listOf("清透", "标准", "浓郁", "柔和", "省电")[Appearance.presetIndex()]
+    return "液态玻璃 · $preset · $tint · 圆角 ${Appearance.radius.value}dp"
 }
 
 @Composable
@@ -221,7 +233,7 @@ private fun GroupLabel(text: String) {
         text,
         fontSize = 10.sp,
         fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+        color = subInk(0.62f)
     )
     Spacer(Modifier.height(4.dp))
 }
@@ -240,10 +252,7 @@ private fun ToggleRow(
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = 12.sp)
             if (subtitle != null) {
-                Text(
-                    subtitle, fontSize = 9.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text(subtitle, fontSize = 9.sp, color = subInk())
             }
         }
         Switch(
@@ -256,42 +265,13 @@ private fun ToggleRow(
 }
 
 @Composable
-private fun SliderRow(
-    title: String,
-    unit: String,
-    value: Int,
-    range: ClosedFloatingPointRange<Float>,
-    onChange: (Int) -> Unit
-) {
-    var local by remember(value) { mutableFloatStateOf(value.toFloat()) }
-    Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, fontSize = 12.sp)
-        Spacer(Modifier.weight(1f))
-        Text(
-            "${local.toInt()}$unit",
-            fontSize = 10.sp, color = Appearance.accent.value
-        )
-    }
-    Slider(
-        value = local,
-        onValueChange = {
-            local = it
-            onChange(it.toInt())
-        },
-        valueRange = range,
-        steps = 0,
-        modifier = Modifier.height(24.dp)
-    )
-}
-
-@Composable
 private fun SegRow(
     title: String,
     options: List<String>,
     selected: Int,
     onSelect: (Int) -> Unit
 ) {
-    Spacer(Modifier.height(6.dp))
+    Spacer(Modifier.height(8.dp))
     Text(title, fontSize = 12.sp)
     Spacer(Modifier.height(4.dp))
     Row(
@@ -316,7 +296,7 @@ private fun SegRow(
                 Text(
                     s,
                     fontSize = 10.sp,
-                    color = if (on) Appearance.accent.value else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (on) Appearance.accent.value else subInk(0.72f),
                     fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal
                 )
             }
