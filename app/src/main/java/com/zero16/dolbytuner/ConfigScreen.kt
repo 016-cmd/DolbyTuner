@@ -222,7 +222,7 @@ internal fun ConfigScreen() {
 
         Spacer(Modifier.height(6.dp))
         Text(status, fontSize = 10.sp, color = subInk())
-        Spacer(Modifier.height(78.dp))
+        Spacer(Modifier.height(96.dp))
     }
 
     // 点击预设卡片：详细参数

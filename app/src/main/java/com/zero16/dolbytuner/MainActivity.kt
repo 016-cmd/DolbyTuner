@@ -911,7 +911,7 @@ private fun GeqScreen(deviceLine: String) {
             }
         }
         Spacer(Modifier.height(10.dp))
-        Spacer(Modifier.height(78.dp))
+        Spacer(Modifier.height(96.dp))
     }
 
     if (showBindDialog) {
@@ -2673,7 +2673,7 @@ private fun EffectsScreen() {
     LazyColumn(
         Modifier.fillMaxSize().statusBarsPadding()
             .padding(horizontal = 14.dp).padding(top = 18.dp),
-        contentPadding = PaddingValues(bottom = 78.dp),
+        contentPadding = PaddingValues(bottom = 96.dp),
     ) {
         item {
         Text("DynamicsProcessing音效", fontSize = 22.sp, fontWeight = FontWeight.Bold)
@@ -3654,7 +3654,7 @@ private fun SettingsScreen(activity: Activity) {
 
     LazyColumn(
         Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 14.dp),
-        contentPadding = PaddingValues(bottom = 78.dp),
+        contentPadding = PaddingValues(bottom = 96.dp),
     ) {
         item {
         Spacer(Modifier.height(14.dp))
