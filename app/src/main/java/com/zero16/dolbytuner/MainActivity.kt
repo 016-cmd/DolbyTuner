@@ -2034,6 +2034,8 @@ private fun EffectsScreen() {
         gain = 0
         limOn = true; thr = -20; atk = 10; rel = 60; rat = 100; post = 0; link = 0
         mbcOn = false; mbcStore = defaultMbcInts()
+        bbOn = false; bbAmt = 60
+        dsOn = false; dsAmt = 40
         postOn = false; postData = IntArray(11)
         eqTab = 0; geqQ4 = IntArray(DapRealtime.BANDS); geqQ = 10; geqMaster = 0
         peqData = defaultPeq()
@@ -2045,8 +2047,9 @@ private fun EffectsScreen() {
             .putInt("gain", 0).putBoolean("lim_on", true)
             .putInt("lim_thr", -20).putInt("lim_atk", 10).putInt("lim_rel", 60)
             .putInt("lim_rat", 100).putInt("lim_post", 0).putInt("lim_link", 0)
-            .putBoolean("mbc_on", false).putBoolean("rev_on", false)
-            .putInt("rev_mode", 0).putInt("rev_preset", 3)
+            .putBoolean("mbc_on", false)
+            .putBoolean("bb_on", false).putInt("bb_amt", 60)
+            .putBoolean("ds_on", false).putInt("ds_amt", 40)
             .putBoolean("post_on", false).putInt("eq_tab", 0)
             .putInt("geq_q", 10).putInt("geq_master", 0)
             .putInt("eq_intensity", 100).putString("aeq", "")

@@ -92,6 +92,7 @@ internal fun ConfigScreen() {
     var deleteTarget by remember { mutableStateOf<Preset?>(null) }
     var detailTarget by remember { mutableStateOf<Preset?>(null) }
     var appliedName by remember { mutableStateOf("") }
+    var appliedScope by remember { mutableStateOf(SCOPE_DOLBY) }
     var showAppliedTip by remember { mutableStateOf(false) }
 
     fun reload() { presets = loadPresets(ctx) }
@@ -383,6 +384,7 @@ internal fun ConfigScreen() {
                         if (err == null) {
                             reload()
                             appliedName = target.name
+                            appliedScope = target.scope
                             status = "已应用：${target.name}"
                             showAppliedTip = true
                         } else {
@@ -431,12 +433,50 @@ internal fun ConfigScreen() {
             title = { Text("已应用", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
             text = {
                 Column {
-                    Text("「$appliedName」已写入杜比实时层，现在就能听到。", fontSize = 11.sp)
+                    Text("「$appliedName」已生效，当前设备马上能听到。", fontSize = 11.sp)
                     Spacer(Modifier.height(10.dp))
-                    Text(
-                        "注意：这只是实时生效。要让重启手机后继续沿用，请到「音效」页点『保存到 Dolby（GEQ + 音效）』按钮。",
-                        fontSize = 10.sp, color = hintInk(Color(0xFFB45309), Color(0xFFFBBF24))
-                    )
+                    when (appliedScope) {
+                        SCOPE_DP -> {
+                            Text(
+                                "这份预设只含音效页参数，已写进 DynamicsProcessing。",
+                                fontSize = 10.sp, lineHeight = 15.sp
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "它存在 APP 的本地偏好里，不需要额外「保存」：只要音效页总开关是开的，重启后打开 APP 会自动按这份参数重新下发。",
+                                fontSize = 10.sp, lineHeight = 15.sp, color = cs.onSurfaceVariant
+                            )
+                        }
+                        SCOPE_DOLBY -> {
+                            Text(
+                                "这份预设只含杜比参数，已写入杜比的实时层。",
+                                fontSize = 10.sp, lineHeight = 15.sp
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "实时层只在这次开机内有效：想让它重启手机后仍然沿用，请到「音效」页点『保存到 Dolby（GEQ + 音效）』。",
+                                fontSize = 10.sp, lineHeight = 15.sp,
+                                color = hintInk(Color(0xFFB45309), Color(0xFFFBBF24))
+                            )
+                        }
+                        else -> {
+                            Text(
+                                "这份预设同时含杜比与音效页两部分，都已写入。",
+                                fontSize = 10.sp, lineHeight = 15.sp
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "杜比部分只在这次开机内有效：想让它重启后仍然沿用，请到「音效」页点『保存到 Dolby（GEQ + 音效）』。",
+                                fontSize = 10.sp, lineHeight = 15.sp,
+                                color = hintInk(Color(0xFFB45309), Color(0xFFFBBF24))
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "音效页部分不需要保存，重启后打开 APP 会自动重新下发。",
+                                fontSize = 10.sp, lineHeight = 15.sp, color = cs.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             },
             confirmButton = {
