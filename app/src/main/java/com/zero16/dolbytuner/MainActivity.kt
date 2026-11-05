@@ -1479,7 +1479,6 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
                 onLive = { fx = fx.copy(bassWidth = it); liveFx.trySend(235 to it) }
             ) { apply(fx.copy(bassWidth = it)) }
         }
-        Spacer(Modifier.height(8.dp))
         EffectCard(
             title = "人声增强",
             subtitle = "deon 105 · 只提升人声频段",
@@ -1495,7 +1494,6 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
             Text("不压低背景（ded 未使用）", fontSize = 9.sp, color = cs.onSurfaceVariant)
         }
 
-        Spacer(Modifier.height(8.dp))
         EffectCard(
             title = "耳机虚拟环绕",
             subtitle = "vdhe 101 · 耳机下的声场扩展",
@@ -1505,7 +1503,6 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
             accent = Color(0xFF3B82F6),
             toggleOnly = true
         )
-        Spacer(Modifier.height(8.dp))
         EffectCard(
             title = "扬声器虚拟环绕",
             subtitle = "vspe 102 · 外放下的声场扩展",
