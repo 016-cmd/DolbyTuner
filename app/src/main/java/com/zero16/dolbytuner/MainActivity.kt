@@ -2665,6 +2665,8 @@ private fun EffectsScreen() {
 
     val accent = Appearance.secondary.value
     val cLim = Appearance.colorLimit.value
+    val cEq = Appearance.tertiary.value
+    val cEl = Appearance.colorDyn.value
 
     androidx.compose.runtime.CompositionLocalProvider(LocalDpOn provides dpOn) {
     LazyColumn(
@@ -2717,11 +2719,9 @@ private fun EffectsScreen() {
         }
 
         }
-        Spacer(Modifier.height(8.dp))
 
         item {
         // ===== DP EQ（GEQ / PEQ） =====
-        val cEq = Appearance.tertiary.value
         GlassSurface(
             Modifier.fillMaxWidth().padding(vertical = 4.dp),
             radius = Appearance.radius.value
@@ -2980,7 +2980,6 @@ private fun EffectsScreen() {
 
         item {
         // ===== 等响补偿 =====
-        val cEl = Appearance.colorDyn.value
         EffectCard(
             title = "等响补偿",
             subtitle = if (elBase < 0) "请先设定基准音量"
