@@ -263,6 +263,11 @@ object Appearance {
                 ), dark
             ))
         }
+        // 壁纸是纯黑/纯白/低饱和时，采样会被全部过滤掉 → 这里必须先兜一个底色，
+        // 否则 out[0] 直接 IndexOutOfBounds（启动即闪退）
+        if (out.isEmpty()) {
+            out.add(if (dark) Color(0xFF4ADE80) else Color(0xFF16A34A))
+        }
         while (out.size < 3) out.add(shiftHue(out[0], 40f * (out.size + 1)))
         // 让第 2/3 色跟第 1 色拉开
         if (hueDiff(out[0], out[1]) < 40f) out[1] = shiftHue(out[0], 45f)
