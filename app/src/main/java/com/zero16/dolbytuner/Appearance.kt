@@ -58,6 +58,9 @@ object Appearance {
     /** 性能：0 自动 / 1 高画质 / 2 省电 */
     val perfMode = mutableStateOf(0)
 
+    /** 卡片真折射（Backdrop 采样壁纸层；实验性） */
+    val cardLiquid = mutableStateOf(true)
+
     // ── 页面 ──
     val animPage = mutableStateOf(true)
     val animCard = mutableStateOf(true)
@@ -98,6 +101,7 @@ object Appearance {
     fun setSpring(ctx: Context, v: Int) = putI(ctx, "spring", spring, v)
     fun setCrossLight(ctx: Context, v: Boolean) = putB(ctx, "cross_light", crossLight, v)
     fun setPerfMode(ctx: Context, v: Int) = putI(ctx, "perf_mode", perfMode, v)
+    fun setCardLiquid(ctx: Context, v: Boolean) = putB(ctx, "card_liquid", cardLiquid, v)
     fun setAnimPage(ctx: Context, v: Boolean) = putB(ctx, "anim_page", animPage, v)
     fun setAnimCard(ctx: Context, v: Boolean) = putB(ctx, "anim_card", animCard, v)
     fun setAnimLaunch(ctx: Context, v: Boolean) = putB(ctx, "anim_launch", animLaunch, v)
@@ -121,6 +125,7 @@ object Appearance {
         spring.value = s.getInt("spring", 1).coerceIn(0, 2)
         crossLight.value = s.getBoolean("cross_light", true)
         perfMode.value = s.getInt("perf_mode", 0).coerceIn(0, 2)
+        cardLiquid.value = s.getBoolean("card_liquid", true)
         animPage.value = s.getBoolean("anim_page", true)
         animCard.value = s.getBoolean("anim_card", true)
         animLaunch.value = s.getBoolean("anim_launch", true)

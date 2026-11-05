@@ -17,6 +17,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import android.graphics.BitmapFactory
 
 // ── 品牌色 ──
@@ -197,6 +199,8 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
 
     // 读取 wallpaperVersion 确保 Compose 追踪变化
     val version = wallpaperVersion
+    // 壁纸层 backdrop：卡片（drawBackdrop）从这一层采样
+    val glassBackdrop = com.kyant.backdrop.backdrops.rememberLayerBackdrop { drawContent() }
 
     MaterialTheme(colorScheme = colorScheme, typography = Typography()) {
         // Material3 的 LocalContentColor 默认值是「黑色」，而我们整个页面是直接铺在
@@ -217,22 +221,30 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
             version // 读取触发重组
             // 壁纸永远清晰；模糊只发生在「卡片自己那块区域」内
             val wallpaperBitmap = WallpaperState.original
-            if (wallpaperBitmap != null) {
-                Image(
-                    bitmap = wallpaperBitmap.asImageBitmap(),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
+            // 壁纸层单独放进 backdrop；卡片是这层之上的内容，不会递归采样自己
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .layerBackdrop(glassBackdrop)
+            ) {
+                if (wallpaperBitmap != null) {
+                    Image(
+                        bitmap = wallpaperBitmap.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+                // 壁纸压暗（给玻璃提供更稳的对比度）
+                if (wpDim > 0) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = wpDim / 100f))
+                    )
+                }
             }
-            // 壁纸压暗（给玻璃提供更稳的对比度）
-            if (wpDim > 0) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = wpDim / 100f))
-                )
-            }
+            GlassBackdrop.instance = glassBackdrop
             // 内容层直接叠加在壁纸（或纯色背景）上
             content()
         }

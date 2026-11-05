@@ -137,6 +137,13 @@ fun AppearanceSection(
                 SegRow("性能", listOf("自动", "高画质", "省电"), Appearance.perfMode.value) {
                     Appearance.setPerfMode(ctx, it)
                 }
+                ToggleRow(
+                    "卡片真折射",
+                    "实验性：卡片直接折射壁纸（更玻璃，但更吃 GPU）",
+                    Appearance.cardLiquid.value
+                ) {
+                    Appearance.setCardLiquid(ctx, it)
+                }
 
                 GroupLabel("壁纸")
 

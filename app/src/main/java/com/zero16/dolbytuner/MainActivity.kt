@@ -428,6 +428,9 @@ private fun MainApp(activity: Activity, deviceLine: String) {
     Box(Modifier.fillMaxSize()) {
         // 无极拖动：长按 dock 后把横向位移直接喂给 Pager，
         // 页面 1:1 跟手，松手吸附到最近的一页。
+        androidx.compose.runtime.CompositionLocalProvider(
+            LocalCardEpoch provides pagerState.currentPage
+        ) {
         HorizontalPager(
             state = pagerState,
             userScrollEnabled = false,
@@ -446,6 +449,7 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                 2 -> ConfigScreen()
                 else -> SettingsScreen(activity)
             }
+        }
         }
 
         Box(

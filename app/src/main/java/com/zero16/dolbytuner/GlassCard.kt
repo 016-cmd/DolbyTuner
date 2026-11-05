@@ -1,5 +1,12 @@
 package com.zero16.dolbytuner
 
+/** 切页计数：每次换页 +1，用来让卡片入场动画每次都重播 */
+val LocalCardEpoch = androidx.compose.runtime.compositionLocalOf { 0 }
+
+import com.kyant.backdrop.effects.vibrancy
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.drawBackdrop
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -173,8 +180,10 @@ fun Modifier.jellyPress(enabled: Boolean): Modifier {
 fun Modifier.cardEnter(): Modifier {
     if (!Appearance.animCard.value) return this
     val anim = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        // 弹簧入场：比 tween 柔和，不会「啪」一下结束
+    // 用切页计数当 key：每次切到这个页面都会重新播放，不再「时有时无」
+    val epoch = LocalCardEpoch.current
+    LaunchedEffect(epoch) {
+        anim.snapTo(0f)
         anim.animateTo(
             1f,
             spring(dampingRatio = 0.78f, stiffness = 240f, visibilityThreshold = 0.001f)
@@ -213,6 +222,61 @@ fun Modifier.glassSurface(radius: Float, cardPos: Offset, cardSize: IntSize): Mo
     val density = LocalDensity.current
     val strokePx = with(density) { strokeDp.dp.toPx() }
     val rPx = with(density) { radius.dp.toPx() }
+
+    // ── 真折射：Backdrop 采样「壁纸层」──────────────────────────
+    val bd = GlassBackdrop.instance
+    val useBackdrop = on && bd != null &&
+            Appearance.cardLiquid.value &&
+            Appearance.perfMode.value != 2 &&
+            android.os.Build.VERSION.SDK_INT >= 33
+
+    if (useBackdrop) {
+        val shape = RoundedCornerShape(radius.dp)
+        return this
+            .drawBackdrop(
+                backdrop = bd!!,
+                shape = { shape },
+                effects = {
+                    val blurPx = Appearance.blurRadius.value.dp.toPx()
+                    if (blurPx > 0f) blur(blurPx * 0.55f)
+                    vibrancy()
+                    val refr = Appearance.refraction.value / 100f
+                    if (refr > 0f) {
+                        lens(
+                            (4f + 8f * refr).dp.toPx(),
+                            (6f + 14f * refr).dp.toPx()
+                        )
+                    }
+                },
+                onDrawSurface = {
+                    drawRoundRect(
+                        color = tintColor.copy(alpha = tintAlpha),
+                        cornerRadius = CornerRadius(rPx, rPx)
+                    )
+                }
+            )
+            .drawWithCache {
+                onDrawBehind {
+                    val w2 = size.width
+                    val h2 = size.height
+                    val corner2 = CornerRadius(rPx, rPx)
+                    // 顶部亮线 + 外框（折射本身交给 Backdrop）
+                    drawRoundRect(
+                        brush = Brush.verticalGradient(
+                            0f to Color.White.copy(alpha = if (isDark) 0.16f else 0.42f),
+                            0.18f to Color.Transparent
+                        ),
+                        cornerRadius = corner2
+                    )
+                    drawRoundRect(
+                        color = if (isDark) Color.White.copy(alpha = 0.13f)
+                        else Color.White.copy(alpha = 0.55f),
+                        cornerRadius = corner2,
+                        style = Stroke(strokePx)
+                    )
+                }
+            }
+    }
 
     return this.drawWithCache {
         onDrawBehind {
