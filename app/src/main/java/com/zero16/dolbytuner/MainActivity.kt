@@ -2449,6 +2449,45 @@ private fun EffectsScreen() {
         throttle.postDelayed(gainTick, 50L)
     }
 
+    // ── 磁贴 / 后台服务改了偏好时，页面立刻跟着变（不用切页面再回来） ──
+    val uiHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
+    DisposableEffect(prefs) {
+        val l = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            uiHandler.post {
+                when (key) {
+                    "on" -> {
+                        val v = prefs.getBoolean("on", false)
+                        if (v != dpOn) {
+                            dpOn = v
+                            if (v) pushAllDp()
+                        }
+                    }
+                    "gain" -> gain = prefs.getInt("gain", 0)
+                    "auto_gain" -> autoGain = prefs.getBoolean("auto_gain", false)
+                }
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(l)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(l) }
+    }
+    // 兜底：从控制中心回到 APP 时再对一次
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                val v = prefs.getBoolean("on", false)
+                if (v != dpOn) {
+                    dpOn = v
+                    if (v) pushAllDp()
+                }
+                gain = prefs.getInt("gain", 0)
+                autoGain = prefs.getBoolean("auto_gain", false)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+
     LaunchedEffect(Unit) {
         // 先把曲线按本地记录算出来：总开关关着也要和滑杆一致，不能显示成平线
         runCatching {
