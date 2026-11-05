@@ -92,6 +92,7 @@ import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ArrowBack
@@ -3616,6 +3617,7 @@ private fun SettingsScreen(activity: Activity) {
     var bootWrite by remember { mutableStateOf(prefs.getBoolean("boot_writeback", false)) }
     var showBootDialog by remember { mutableStateOf(false) }
     var showKeepAliveGuide by remember { mutableStateOf(false) }
+    var showSponsor by remember { mutableStateOf(false) }
     var deviceService by remember { mutableStateOf(prefs.getBoolean("device_service", false)) }
     var hideRecents by remember { mutableStateOf(prefs.getBoolean("hide_recents", false)) }
     var keepAlive by remember { mutableStateOf(prefs.getBoolean("keepalive_job", false)) }
@@ -4015,6 +4017,17 @@ private fun SettingsScreen(activity: Activity) {
         Spacer(Modifier.height(12.dp))
         }
         item {
+        GlassCard(Modifier.fillMaxWidth()) {
+            SettingRow(
+                icon = Icons.Default.Favorite, title = "赞助作者",
+                subtitle = "谢谢你请 Aoi 吃米饭", selected = false
+            ) { showSponsor = true }
+        }
+        }
+        item {
+        Spacer(Modifier.height(12.dp))
+        }
+        item {
         Text(
             "Dolby Tuner · 无 root 方案\nGEQ 通过 Dolby DAP 参数 110 实时写入",
             fontSize = 10.sp, color = subInk()
@@ -4046,6 +4059,10 @@ private fun SettingsScreen(activity: Activity) {
                 TextButton(onClick = { showBootDialog = false }) { Text("稍后", fontSize = 12.sp) }
             }
         )
+    }
+
+    if (showSponsor) {
+        SponsorDialog(ctx = ctx, accent = Accent) { showSponsor = false }
     }
 
     if (showKeepAliveGuide) {
