@@ -21,7 +21,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.DeleteAlternate
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -185,7 +185,7 @@ fun AppearanceSection(
                 ) { Appearance.setWallpaperDim(ctx, intArrayOf(0, 20, 40, 60)[it]) }
                 Spacer(Modifier.height(4.dp))
                 if (hasLocalWallpaper) {
-                    WallButton("清除本地壁纸", Icons.Default.DeleteAlternate) { onClearWallpaper() }
+                    WallButton("清除本地壁纸", Icons.Default.Delete) { onClearWallpaper() }
                     Spacer(Modifier.height(8.dp))
                 }
                 WallButton("从本地选择图片", Icons.Default.PhotoLibrary) { onPickWallpaper() }
