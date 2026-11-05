@@ -1818,6 +1818,8 @@ private fun EffectsScreen() {
 
     var dpOn by remember { mutableStateOf(prefs.getBoolean("on", false)) }
     var gain by remember { mutableIntStateOf(prefs.getInt("gain", 0)) }
+    // 等比增益：按当前 EQ 的整体提升自动反向补偿，让音量保持不变
+    var autoGain by remember { mutableStateOf(prefs.getBoolean("auto_gain", false)) }
     var limOn by remember { mutableStateOf(prefs.getBoolean("lim_on", true)) }
     var thr by remember { mutableIntStateOf(prefs.getInt("lim_thr", -20)) }
     var atk by remember { mutableIntStateOf(prefs.getInt("lim_atk", 10)) }
@@ -2088,6 +2090,16 @@ private fun EffectsScreen() {
         return l
     }
 
+    /** 等比增益要补的 dB：取最终曲线的能量平均，反向抵消 */
+    fun autoGainDb(): Float {
+        val c = eqCurve
+        if (c.isEmpty()) return 0f
+        var s = 0.0
+        for (v in c) s += Math.pow(10.0, v / 10.0)
+        val avg = 10.0 * Math.log10(s / c.size)
+        return (-avg).toFloat().coerceIn(-24f, 24f)
+    }
+
     fun pushEq() {
         val raw = rawCurve(peqLive())
         eqRaw = raw
@@ -2097,11 +2109,20 @@ private fun EffectsScreen() {
             withContext(Dispatchers.IO) { DynProc.setPreEq(curve) }
             status = DynProc.status
         }
+        if (autoGain) {
+            val ag = autoGainDb()
+            gain = (ag * 10).toInt()
+            scope.launch {
+                withContext(Dispatchers.IO) { DynProc.setOutGain(ag) }
+                status = DynProc.status
+            }
+        }
     }
 
     /** 音效页一键重置（总开关不动） */
     fun resetDpAll() {
         gain = 0
+        autoGain = false
         limOn = true; thr = -20; atk = 10; rel = 60; rat = 100; post = 0; link = 0
         mbcOn = false; mbcStore = defaultMbcInts()
         bbOn = false; bbAmt = 60
@@ -2114,7 +2135,7 @@ private fun EffectsScreen() {
         geqInt = IntArray(DapRealtime.BANDS) { 100 }
         elOn = false; elBase = -1; elStrength = 10; elMaxDb = 80
         prefs.edit()
-            .putInt("gain", 0).putBoolean("lim_on", true)
+            .putInt("gain", 0).putBoolean("auto_gain", false).putBoolean("lim_on", true)
             .putInt("lim_thr", -20).putInt("lim_atk", 10).putInt("lim_rel", 60)
             .putInt("lim_rat", 100).putInt("lim_post", 0).putInt("lim_link", 0)
             .putBoolean("mbc_on", false)
@@ -2793,8 +2814,37 @@ private fun EffectsScreen() {
                 "整体增益", (if (gain > 0) "+${gain / 10f}" else "${gain / 10f}") + " dB",
                 gain, -200..200, dpOn,
                 fmt = { String.format("%+.1f dB", it / 10f) },
-                onLive = { gain = it; applyGain() },
-                onDone = { gain = it; applyGain() }
+                onLive = {
+                    if (autoGain) {
+                        autoGain = false
+                        prefs.edit().putBoolean("auto_gain", false).apply()
+                    }
+                    gain = it; applyGain()
+                },
+                onDone = {
+                    if (autoGain) {
+                        autoGain = false
+                        prefs.edit().putBoolean("auto_gain", false).apply()
+                    }
+                    gain = it; applyGain()
+                }
+            )
+            ParamToggle(
+                label = "等比增益",
+                hint = "按 EQ 的整体提升自动反向补偿，音量听感保持不变；一拖上面的滑杆就会自动关闭",
+                checked = autoGain,
+                enabled = dpOn,
+                onCheckedChange = { on ->
+                    autoGain = on
+                    prefs.edit().putBoolean("auto_gain", on).apply()
+                    if (on) {
+                        val ag = autoGainDb()
+                        gain = (ag * 10).toInt()
+                        applyGain()
+                    } else {
+                        applyGain()
+                    }
+                }
             )
             Text(
                 "作用在限幅之后，提升和衰减都听得出；拖动时自动忽略等响补偿的叠加",
