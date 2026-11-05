@@ -490,7 +490,7 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                     dockSize = it.size
                 }
                 .clip(RoundedCornerShape(28.dp))
-                .glassSurface(28f, dockPos, dockSize)
+                .dockSurface()
                 .pointerInput(tabW, pageW) {
                     detectDragGestures(
                         onDrag = { change, amount ->

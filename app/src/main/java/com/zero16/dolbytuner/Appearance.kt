@@ -148,7 +148,7 @@ object Appearance {
         val base = when (tintMode.value) {
             1 -> if (isDark) 0.34f else 0.62f      // 纯白
             2 -> if (isDark) 0.62f else 0.34f      // 纯黑
-            else -> if (isDark) 0.30f else 0.42f   // 自动
+            else -> if (isDark) 0.20f else 0.30f   // 自动
         }
         val thick = when (thickness.value) { 0 -> 0.88f; 2 -> 1.12f; else -> 1f }
         return (base * thick).coerceIn(0.12f, 0.80f)
