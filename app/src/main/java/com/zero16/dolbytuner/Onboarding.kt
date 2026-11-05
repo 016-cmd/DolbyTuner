@@ -1,6 +1,12 @@
 package com.zero16.dolbytuner
 
 import android.content.Context
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -43,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -118,6 +125,20 @@ fun OnboardingScreen(
     val scope = rememberCoroutineScope()
     val cs = MaterialTheme.colorScheme
     val accent = Appearance.accent.value
+    val inf = rememberInfiniteTransition(label = "ob")
+    val pulse by inf.animateFloat(
+        initialValue = 0.97f, targetValue = 1.05f,
+        animationSpec = infiniteRepeatable(
+            tween(1900, easing = FastOutSlowInEasing), RepeatMode.Reverse
+        ), label = "pulse"
+    )
+    val halo by inf.animateFloat(
+        initialValue = 0.12f, targetValue = 0.24f,
+        animationSpec = infiniteRepeatable(
+            tween(1900, easing = FastOutSlowInEasing), RepeatMode.Reverse
+        ), label = "halo"
+    )
+
     val total = if (passed) INTRO_PAGES.size + 2 else 1
     val pager = rememberPagerState { total }
     val fix = remember { ctx.getSharedPreferences("dolby_tuner", Context.MODE_PRIVATE) }
@@ -169,8 +190,16 @@ fun OnboardingScreen(
             }
 
             HorizontalPager(state = pager, modifier = Modifier.weight(1f)) { idx ->
+                val off = (pager.currentPage - idx) + pager.currentPageOffsetFraction
                 Column(
-                    Modifier.fillMaxSize().padding(vertical = 6.dp),
+                    Modifier.fillMaxSize().padding(vertical = 6.dp).graphicsLayer {
+                        val d = kotlin.math.abs(off).coerceIn(0f, 1f)
+                        alpha = 1f - d * 0.55f
+                        val s = 1f - d * 0.07f
+                        scaleX = s
+                        scaleY = s
+                        translationY = d * 30.dp.toPx()
+                    },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
@@ -180,13 +209,15 @@ fun OnboardingScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             when {
-                                idx < INTRO_PAGES.size -> IntroBody(INTRO_PAGES[idx], accent, cs)
+                                idx < INTRO_PAGES.size -> IntroBody(INTRO_PAGES[idx], accent, cs, pulse, halo)
                                 idx == INTRO_PAGES.size -> CheckBody(
                                     deviceLine = deviceLine, passed = passed,
-                                    reasons = reasons, accent = accent, cs = cs
+                                    reasons = reasons, accent = accent, cs = cs,
+                                    pulse = pulse, halo = halo
                                 )
                                 else -> DspBody(
-                                    accent = accent, cs = cs, busy = busy, errMsg = errMsg
+                                    accent = accent, cs = cs, busy = busy, errMsg = errMsg,
+                                    pulse = pulse, halo = halo
                                 )
                             }
                         }
@@ -232,8 +263,8 @@ fun OnboardingScreen(
                         contentColor = if (accent.luminance() > 0.55f) Color(0xFF101014) else Color.White
                     )
                 ) { Text(if (busy) "检测中…" else "检测并保存默认值", fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
-                TextButton(onClick = { finish() }, modifier = Modifier.fillMaxWidth()) {
-                    Text("稍后再说", fontSize = 12.sp, color = subInk())
+                TextButton(onClick = { onExit() }, modifier = Modifier.fillMaxWidth()) {
+                    Text("不执行检测 · 退出APP", fontSize = 12.sp, color = subInk())
                 }
             } else {
                 Button(
@@ -254,9 +285,11 @@ fun OnboardingScreen(
 }
 
 @Composable
-private fun IntroBody(p: ObPage, accent: Color, cs: androidx.compose.material3.ColorScheme) {
+private fun IntroBody(p: ObPage, accent: Color, cs: androidx.compose.material3.ColorScheme, pulse: Float, halo: Float) {
     Box(
-        Modifier.size(76.dp).clip(CircleShape).background(accent.copy(alpha = 0.16f)),
+        Modifier.size(76.dp)
+            .graphicsLayer { scaleX = pulse; scaleY = pulse }
+            .clip(CircleShape).background(accent.copy(alpha = halo)),
         contentAlignment = Alignment.Center
     ) { Icon(p.icon, null, tint = accent, modifier = Modifier.size(38.dp)) }
     Spacer(Modifier.height(18.dp))
@@ -276,11 +309,14 @@ private fun IntroBody(p: ObPage, accent: Color, cs: androidx.compose.material3.C
 @Composable
 private fun CheckBody(
     deviceLine: String, passed: Boolean, reasons: List<String>,
-    accent: Color, cs: androidx.compose.material3.ColorScheme
+    accent: Color, cs: androidx.compose.material3.ColorScheme,
+    pulse: Float, halo: Float
 ) {
     Box(
-        Modifier.size(76.dp).clip(CircleShape)
-            .background((if (passed) accent else Color(0xFFEF4444)).copy(alpha = 0.16f)),
+        Modifier.size(76.dp)
+            .graphicsLayer { scaleX = pulse; scaleY = pulse }
+            .clip(CircleShape)
+            .background((if (passed) accent else Color(0xFFEF4444)).copy(alpha = halo)),
         contentAlignment = Alignment.Center
     ) {
         Icon(
@@ -312,9 +348,11 @@ private fun CheckBody(
 }
 
 @Composable
-private fun DspBody(accent: Color, cs: androidx.compose.material3.ColorScheme, busy: Boolean, errMsg: String?) {
+private fun DspBody(accent: Color, cs: androidx.compose.material3.ColorScheme, busy: Boolean, errMsg: String?, pulse: Float, halo: Float) {
     Box(
-        Modifier.size(76.dp).clip(CircleShape).background(accent.copy(alpha = 0.16f)),
+        Modifier.size(76.dp)
+            .graphicsLayer { scaleX = pulse; scaleY = pulse }
+            .clip(CircleShape).background(accent.copy(alpha = halo)),
         contentAlignment = Alignment.Center
     ) { Icon(Icons.Default.Tune, null, tint = accent, modifier = Modifier.size(38.dp)) }
     Spacer(Modifier.height(18.dp))
