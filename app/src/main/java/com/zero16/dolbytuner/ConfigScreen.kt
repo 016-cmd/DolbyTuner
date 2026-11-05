@@ -145,7 +145,7 @@ internal fun ConfigScreen() {
         // ── 顶部：导入 / 导出 ──────────────────────────────
         Card(
             Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = cs.surfaceVariant.copy(alpha = 0.85f))
+            colors = CardDefaults.cardColors(containerColor = Appearance.glassFill(androidx.compose.foundation.isSystemInDarkTheme()))
         ) {
             Column(Modifier.padding(14.dp)) {
                 Text("备份与恢复", fontSize = 13.sp, fontWeight = FontWeight.Bold)

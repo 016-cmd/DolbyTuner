@@ -1,5 +1,12 @@
 package com.zero16.dolbytuner
 
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import android.app.Activity
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.foundation.layout.heightIn
@@ -381,7 +388,10 @@ private fun MainApp(activity: Activity, deviceLine: String) {
             }
         )
     }
-    val backdrop = rememberLayerBackdrop { drawContent() }
+    var dockPos by remember { mutableStateOf(Offset.Zero) }
+    var dockSize by remember { mutableStateOf(IntSize.Zero) }
+    var dragX by remember { mutableFloatStateOf(0f) }
+    var dragging by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
         AnimatedContent(
@@ -395,7 +405,9 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                         (slideOutHorizontally(tween(300)) { -it * dir } + fadeOut(tween(300)))
                 }
             },
-            modifier = Modifier.fillMaxSize().layerBackdrop(backdrop)
+            modifier = Modifier.fillMaxSize().graphicsLayer {
+                translationX = dragX * 0.35f
+            }
         ) { tab ->
             when (tab) {
                 0 -> GeqScreen(deviceLine)
@@ -410,36 +422,38 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                 .navigationBarsPadding()
                 .padding(horizontal = 32.dp, vertical = 16.dp)
                 .height(62.dp)
-                .pointerInput(Unit) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            val e = awaitPointerEvent(PointerEventPass.Final)
-                            e.changes.forEach { if (!it.isConsumed) it.consume() }
-                        }
-                    }
+                .onGloballyPositioned {
+                    dockPos = it.positionInRoot()
+                    dockSize = it.size
                 }
-                .drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { RoundedCornerShape(28.dp) },
-                    effects = {
-                        if (Appearance.enabled.value && Appearance.mode.value == GlassMode.LIQUID) {
-                            // 液态玻璃：折射 + 提亮
-                            vibrancy()
-                            blur(6.dp.toPx())
-                            lens(10.dp.toPx(), 18.dp.toPx())
-                        } else {
-                            // 毛玻璃：只做模糊，不加折射
-                            blur(Appearance.blur.value.blur.coerceIn(6f, 24f).dp.toPx())
+                .clip(RoundedCornerShape(28.dp))
+                .glassSurface(28f, dockPos, dockSize)
+                .pointerInput(Unit) {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = {
+                            dragging = true
+                            dragX = 0f
+                        },
+                        onDrag = { change, amount ->
+                            change.consume()
+                            dragX += amount.x
+                        },
+                        onDragEnd = {
+                            val threshold = size.width * 0.18f
+                            if (dragX <= -threshold) {
+                                currentTab = (currentTab + 1).coerceAtMost(3)
+                            } else if (dragX >= threshold) {
+                                currentTab = (currentTab - 1).coerceAtLeast(0)
+                            }
+                            dragX = 0f
+                            dragging = false
+                        },
+                        onDragCancel = {
+                            dragX = 0f
+                            dragging = false
                         }
-                    },
-                    onDrawSurface = {
-                        val a = if (Appearance.mode.value == GlassMode.LIQUID) 0.15f else 0.26f
-                        drawRect(
-                            if (isDark) Color.Black.copy(alpha = a)
-                            else Color.White.copy(alpha = a + 0.06f)
-                        )
-                    }
-                )
+                    )
+                }
         ) {
             Row(
                 Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 2.dp),
@@ -570,8 +584,9 @@ private fun GeqScreen(deviceLine: String) {
                     Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.06f)
             ),
             colors = CardDefaults.cardColors(
-                containerColor = if (androidx.compose.foundation.isSystemInDarkTheme())
-                    Color.Black.copy(alpha = 0.58f) else Color.White.copy(alpha = 0.80f)
+                containerColor = Appearance.glassFill(
+                    androidx.compose.foundation.isSystemInDarkTheme()
+                )
             )
         ) {
             Column(Modifier.padding(14.dp)) {
@@ -610,7 +625,7 @@ private fun GeqScreen(deviceLine: String) {
         Card(
             Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
+            colors = CardDefaults.cardColors(containerColor = Appearance.glassFill(androidx.compose.foundation.isSystemInDarkTheme()))
         ) {
             Column(Modifier.padding(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2552,8 +2567,9 @@ private fun EffectsScreen() {
                     Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.06f)
             ),
             colors = CardDefaults.cardColors(
-                containerColor = if (androidx.compose.foundation.isSystemInDarkTheme())
-                    Color.Black.copy(alpha = 0.58f) else Color.White.copy(alpha = 0.80f)
+                containerColor = Appearance.glassFill(
+                    androidx.compose.foundation.isSystemInDarkTheme()
+                )
             )
         ) {
             Row(
@@ -2598,8 +2614,9 @@ private fun EffectsScreen() {
                     Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.06f)
             ),
             colors = CardDefaults.cardColors(
-                containerColor = if (androidx.compose.foundation.isSystemInDarkTheme())
-                    Color.Black.copy(alpha = 0.58f) else Color.White.copy(alpha = 0.80f)
+                containerColor = Appearance.glassFill(
+                    androidx.compose.foundation.isSystemInDarkTheme()
+                )
             )
         ) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
@@ -3459,11 +3476,6 @@ private fun SettingsScreen(activity: Activity) {
     var hideRecents by remember { mutableStateOf(prefs.getBoolean("hide_recents", false)) }
     var keepAlive by remember { mutableStateOf(prefs.getBoolean("keepalive_job", false)) }
     var callMute by remember { mutableStateOf(prefs.getBoolean("call_mute_dp", false)) }
-    var showAppearance by remember { mutableStateOf(false) }
-    if (showAppearance) {
-        AppearanceScreen(onBack = { showAppearance = false })
-        return
-    }
     val notifPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     val phonePerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         if (!ok) android.widget.Toast.makeText(ctx, "没有电话状态权限，通话暂停不会生效", android.widget.Toast.LENGTH_LONG).show()
@@ -3777,28 +3789,23 @@ private fun SettingsScreen(activity: Activity) {
         }
 
         Spacer(Modifier.height(12.dp))
-        GlassCard(Modifier.fillMaxWidth()) {
-            Row(
-                Modifier.fillMaxWidth().padding(vertical = 2.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable { showAppearance = true },
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Default.Palette, null,
-                    tint = Accent, modifier = Modifier.size(18.dp)
+        AppearanceSection(
+            onPickWallpaper = {
+                picker.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                 )
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("外观与个性化", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "${Appearance.mode.value.label} · 模糊${Appearance.blur.value.label} · 壁纸与动效",
-                        fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            onWallpaperKind = { k ->
+                Appearance.setWallpaperKind(ctx, k)
+                if (k == 0 && ThemePrefs.getWallpaperUri(ctx) == null) {
+                    picker.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                     )
+                } else {
+                    activity.recreate()
                 }
-                Text("›", fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-        }
+        )
         Spacer(Modifier.height(12.dp))
         GlassCard(Modifier.fillMaxWidth()) {
             Text("关于", fontSize = 13.sp, fontWeight = FontWeight.Bold)
@@ -3867,7 +3874,7 @@ private fun LicenseDialogContent(
     Card(
         modifier = Modifier.fillMaxHeight(0.9f).fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(containerColor = Appearance.glassFill(androidx.compose.foundation.isSystemInDarkTheme()))
     ) {
         Column(Modifier.fillMaxSize()) {
             Row(

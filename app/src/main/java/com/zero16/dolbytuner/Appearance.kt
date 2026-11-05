@@ -2,183 +2,165 @@ package com.zero16.dolbytuner
 
 import android.content.Context
 import android.graphics.Bitmap
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 
 /**
- * 外观参数（档位数值取自 Flowmix 的真实参数，表现自己调）
+ * 液态玻璃参数（自研，不依赖任何第三方玻璃库）。
+ *
+ * 设计原则：
+ *  - 参数全部落在 SharedPreferences，Compose 里读 mutableStateOf 直接重组
+ *  - 数值型尽量用 Int（0~100 / 角度 / 档位），减少枚举带来的兼容坑
+ *  - 卡片、dock、设置卡共用同一套参数 → 视觉统一
  */
-enum class GlassMode(val label: String) {
-    FROSTED("毛玻璃"),
-    LIQUID("液态玻璃")
-}
-
-/** 玻璃模糊三档：blur 主模糊 / edge 边缘光 / depth 纵深 / noise 颗粒 */
-enum class GlassBlur(
-    val label: String,
-    val blur: Float,
-    val edge: Float,
-    val depth: Float,
-    val noise: Float
-) {
-    TRANSPARENT("通透", 5f, 0f, 3f, 3f),
-    DEFAULT("默认", 25f, 5f, 10f, 7f),
-    HAZY("朦胧", 50f, 15f, 25f, 20f)
-}
-
-/** 边缘折射 / 可读性增强用的三档 */
-enum class Level3(val label: String, val factor: Float) {
-    OFF("关闭", 0f),
-    DEFAULT("默认", 1f),
-    ENHANCED("增强", 2f)
-}
-
-/** 对比度 / 饱和度三档（它的「默认」是 1.1，不是 1.0） */
-enum class LevelTune(val label: String, val value: Float) {
-    LOW("较低", 0.9f),
-    DEFAULT("默认", 1.1f),
-    HIGH("较高", 1.3f)
-}
-
-enum class BoolLevel(val label: String, val on: Boolean) {
-    OFF("关闭", false),
-    ON("开启", true)
-}
-
-enum class Readability(val label: String, val amount: Float) {
-    OFF("关闭", 0f),
-    DEFAULT("默认", 0.5f),
-    ENHANCED("增强", 0.8f)
-}
-
 object Appearance {
 
     private const val P = "appearance"
-    private const val K_ENABLED = "enabled"
-    private const val K_MODE = "glass_mode"
-    private const val K_BLUR = "glass_blur"
-    private const val K_REFRACT = "refract"
-    private const val K_DISPERSION = "dispersion"
-    private const val K_DEPTH = "depth"
-    private const val K_READ = "readability"
-    private const val K_CONTRAST = "contrast"
-    private const val K_SAT = "saturation"
-    private const val K_ANIM_PAGE = "anim_page"
-    private const val K_ANIM_CARD = "anim_card"
-    private const val K_ANIM_LAUNCH = "anim_launch"
-    private const val K_ACCENT = "accent_cache"
-
     private fun p(ctx: Context) = ctx.getSharedPreferences(P, Context.MODE_PRIVATE)
 
-    // ── 全局可观察状态（Compose 直接读，改了立刻重组） ──
+    // ── 总开关 ──
     val enabled = mutableStateOf(true)
-    val mode = mutableStateOf(GlassMode.FROSTED)
-    val blur = mutableStateOf(GlassBlur.DEFAULT)
-    val refract = mutableStateOf(Level3.DEFAULT)
-    val dispersion = mutableStateOf(BoolLevel.OFF)
-    val depth = mutableStateOf(BoolLevel.ON)
-    val readability = mutableStateOf(Readability.OFF)
-    val contrast = mutableStateOf(LevelTune.DEFAULT)
-    val saturation = mutableStateOf(LevelTune.DEFAULT)
+
+    // ── 玻璃 ──
+    /** 折射强度 0~100（边缘向内弯折的强度） */
+    val refraction = mutableStateOf(60)
+    /** 折射边缘宽度：0 窄 / 1 标准 / 2 宽 */
+    val edgeWidth = mutableStateOf(1)
+    /** 模糊 0~40 dp（内置壁纸预模糊用；卡片采样这张预模糊图） */
+    val blurRadius = mutableStateOf(16)
+    /** 提亮 0~100 */
+    val vibrancy = mutableStateOf(55)
+
+    // ── 颜色 ──
+    /** 色散 0~100（0 = 关） */
+    val dispersion = mutableStateOf(35)
+    /** 光源角度 0~360 */
+    val lightAngle = mutableStateOf(315)
+    /** 体积光：0 关 / 1 弱 / 2 标准 / 3 强 */
+    val volumeLight = mutableStateOf(2)
+    /** 卡片底色：0 自动（跟随深浅色）/ 1 纯白 / 2 纯黑 */
+    val tintMode = mutableStateOf(0)
+
+    // ── 形状 ──
+    /** 圆角 12~32 dp */
+    val radius = mutableStateOf(22)
+    /** 玻璃厚度：0 薄 / 1 标准 / 2 厚 */
+    val thickness = mutableStateOf(1)
+
+    // ── 动效 ──
+    /** 果冻按压 0~100（0 = 关） */
+    val jelly = mutableStateOf(70)
+    /** 弹簧：0 软 / 1 标准 / 2 硬 */
+    val spring = mutableStateOf(1)
+    val crossLight = mutableStateOf(true)
+    /** 性能：0 自动 / 1 高画质 / 2 省电 */
+    val perfMode = mutableStateOf(0)
+
+    // ── 页面 ──
     val animPage = mutableStateOf(true)
     val animCard = mutableStateOf(true)
     val animLaunch = mutableStateOf(true)
 
-    /** 壁纸取色结果：卡片图标、拉条用它 */
+    // ── 壁纸 ──
+    /** 壁纸来源：0 本地图 / 1 极光 / 2 晨雾 / 3 暖砂 */
+    val wallpaperKind = mutableStateOf(0)
+    /** 壁纸压暗 0~60 */
+    val wallpaperDim = mutableStateOf(0)
+
+    /** 壁纸取色结果：图标、滑条、选中胶囊用它 */
     val accent = mutableStateOf(Color(0xFF22C55E))
+
+    // ── 存取 ──
+    private fun putI(ctx: Context, key: String, st: MutableState<Int>, v: Int) {
+        st.value = v
+        p(ctx).edit().putInt(key, v).apply()
+    }
+
+    private fun putB(ctx: Context, key: String, st: MutableState<Boolean>, v: Boolean) {
+        st.value = v
+        p(ctx).edit().putBoolean(key, v).apply()
+    }
+
+    fun setEnabled(ctx: Context, v: Boolean) = putB(ctx, "enabled", enabled, v)
+    fun setRefraction(ctx: Context, v: Int) = putI(ctx, "refraction", refraction, v)
+    fun setEdgeWidth(ctx: Context, v: Int) = putI(ctx, "edge_width", edgeWidth, v)
+    fun setBlurRadius(ctx: Context, v: Int) = putI(ctx, "blur_radius", blurRadius, v)
+    fun setVibrancy(ctx: Context, v: Int) = putI(ctx, "vibrancy", vibrancy, v)
+    fun setDispersion(ctx: Context, v: Int) = putI(ctx, "dispersion", dispersion, v)
+    fun setLightAngle(ctx: Context, v: Int) = putI(ctx, "light_angle", lightAngle, v)
+    fun setVolumeLight(ctx: Context, v: Int) = putI(ctx, "volume_light", volumeLight, v)
+    fun setTintMode(ctx: Context, v: Int) = putI(ctx, "tint_mode", tintMode, v)
+    fun setRadius(ctx: Context, v: Int) = putI(ctx, "radius", radius, v)
+    fun setThickness(ctx: Context, v: Int) = putI(ctx, "thickness", thickness, v)
+    fun setJelly(ctx: Context, v: Int) = putI(ctx, "jelly", jelly, v)
+    fun setSpring(ctx: Context, v: Int) = putI(ctx, "spring", spring, v)
+    fun setCrossLight(ctx: Context, v: Boolean) = putB(ctx, "cross_light", crossLight, v)
+    fun setPerfMode(ctx: Context, v: Int) = putI(ctx, "perf_mode", perfMode, v)
+    fun setAnimPage(ctx: Context, v: Boolean) = putB(ctx, "anim_page", animPage, v)
+    fun setAnimCard(ctx: Context, v: Boolean) = putB(ctx, "anim_card", animCard, v)
+    fun setAnimLaunch(ctx: Context, v: Boolean) = putB(ctx, "anim_launch", animLaunch, v)
+    fun setWallpaperKind(ctx: Context, v: Int) = putI(ctx, "wp_kind", wallpaperKind, v)
+    fun setWallpaperDim(ctx: Context, v: Int) = putI(ctx, "wp_dim", wallpaperDim, v)
 
     fun load(ctx: Context) {
         val s = p(ctx)
-        enabled.value = s.getBoolean(K_ENABLED, true)
-        mode.value = runCatching { GlassMode.valueOf(s.getString(K_MODE, GlassMode.FROSTED.name)!!) }
-            .getOrDefault(GlassMode.FROSTED)
-        blur.value = runCatching { GlassBlur.valueOf(s.getString(K_BLUR, GlassBlur.DEFAULT.name)!!) }
-            .getOrDefault(GlassBlur.DEFAULT)
-        refract.value = runCatching { Level3.valueOf(s.getString(K_REFRACT, Level3.DEFAULT.name)!!) }
-            .getOrDefault(Level3.DEFAULT)
-        dispersion.value = runCatching { BoolLevel.valueOf(s.getString(K_DISPERSION, BoolLevel.OFF.name)!!) }
-            .getOrDefault(BoolLevel.OFF)
-        depth.value = runCatching { BoolLevel.valueOf(s.getString(K_DEPTH, BoolLevel.ON.name)!!) }
-            .getOrDefault(BoolLevel.ON)
-        readability.value = runCatching { Readability.valueOf(s.getString(K_READ, Readability.OFF.name)!!) }
-            .getOrDefault(Readability.OFF)
-        contrast.value = runCatching { LevelTune.valueOf(s.getString(K_CONTRAST, LevelTune.DEFAULT.name)!!) }
-            .getOrDefault(LevelTune.DEFAULT)
-        saturation.value = runCatching { LevelTune.valueOf(s.getString(K_SAT, LevelTune.DEFAULT.name)!!) }
-            .getOrDefault(LevelTune.DEFAULT)
-        animPage.value = s.getBoolean(K_ANIM_PAGE, true)
-        animCard.value = s.getBoolean(K_ANIM_CARD, true)
-        animLaunch.value = s.getBoolean(K_ANIM_LAUNCH, true)
-        val cached = s.getInt(K_ACCENT, Int.MIN_VALUE)
+        enabled.value = s.getBoolean("enabled", true)
+        refraction.value = s.getInt("refraction", 60).coerceIn(0, 100)
+        edgeWidth.value = s.getInt("edge_width", 1).coerceIn(0, 2)
+        blurRadius.value = s.getInt("blur_radius", 16).coerceIn(0, 40)
+        vibrancy.value = s.getInt("vibrancy", 55).coerceIn(0, 100)
+        dispersion.value = s.getInt("dispersion", 35).coerceIn(0, 100)
+        lightAngle.value = s.getInt("light_angle", 315).coerceIn(0, 360)
+        volumeLight.value = s.getInt("volume_light", 2).coerceIn(0, 3)
+        tintMode.value = s.getInt("tint_mode", 0).coerceIn(0, 2)
+        radius.value = s.getInt("radius", 22).coerceIn(12, 32)
+        thickness.value = s.getInt("thickness", 1).coerceIn(0, 2)
+        jelly.value = s.getInt("jelly", 70).coerceIn(0, 100)
+        spring.value = s.getInt("spring", 1).coerceIn(0, 2)
+        crossLight.value = s.getBoolean("cross_light", true)
+        perfMode.value = s.getInt("perf_mode", 0).coerceIn(0, 2)
+        animPage.value = s.getBoolean("anim_page", true)
+        animCard.value = s.getBoolean("anim_card", true)
+        animLaunch.value = s.getBoolean("anim_launch", true)
+        wallpaperKind.value = s.getInt("wp_kind", 0).coerceIn(0, 3)
+        wallpaperDim.value = s.getInt("wp_dim", 0).coerceIn(0, 60)
+        val cached = s.getInt("accent_cache", Int.MIN_VALUE)
         if (cached != Int.MIN_VALUE) accent.value = Color(cached)
     }
 
-    fun setEnabled(ctx: Context, v: Boolean) {
-        enabled.value = v
-        p(ctx).edit().putBoolean(K_ENABLED, v).apply()
+    // ── 派生值 ──
+    /** 描边宽度（dp 倍数） */
+    fun strokeDp(): Float = when (edgeWidth.value) {
+        0 -> 0.9f
+        2 -> 2.4f
+        else -> 1.5f
     }
 
-    fun setMode(ctx: Context, v: GlassMode) {
-        mode.value = v
-        p(ctx).edit().putString(K_MODE, v.name).apply()
+    /** 卡片底色透明度：越透越像玻璃 */
+    fun tintAlpha(isDark: Boolean): Float {
+        val base = when (tintMode.value) {
+            1 -> if (isDark) 0.34f else 0.62f      // 纯白
+            2 -> if (isDark) 0.62f else 0.34f      // 纯黑
+            else -> if (isDark) 0.30f else 0.42f   // 自动
+        }
+        val thick = when (thickness.value) { 0 -> 0.88f; 2 -> 1.12f; else -> 1f }
+        return (base * thick).coerceIn(0.12f, 0.80f)
     }
 
-    fun setBlur(ctx: Context, v: GlassBlur) {
-        blur.value = v
-        p(ctx).edit().putString(K_BLUR, v.name).apply()
-    }
+    /** 普通 Card 用的玻璃填充色（透壁纸，不染色） */
+    fun glassFill(isDark: Boolean): Color =
+        tintColor(isDark).copy(alpha = tintAlpha(isDark).coerceAtLeast(0.18f))
 
-    fun setRefract(ctx: Context, v: Level3) {
-        refract.value = v
-        p(ctx).edit().putString(K_REFRACT, v.name).apply()
-    }
-
-    fun setDispersion(ctx: Context, v: BoolLevel) {
-        dispersion.value = v
-        p(ctx).edit().putString(K_DISPERSION, v.name).apply()
-    }
-
-    fun setDepth(ctx: Context, v: BoolLevel) {
-        depth.value = v
-        p(ctx).edit().putString(K_DEPTH, v.name).apply()
-    }
-
-    fun setReadability(ctx: Context, v: Readability) {
-        readability.value = v
-        p(ctx).edit().putString(K_READ, v.name).apply()
-    }
-
-    fun setContrast(ctx: Context, v: LevelTune) {
-        contrast.value = v
-        p(ctx).edit().putString(K_CONTRAST, v.name).apply()
-    }
-
-    fun setSaturation(ctx: Context, v: LevelTune) {
-        saturation.value = v
-        p(ctx).edit().putString(K_SAT, v.name).apply()
-    }
-
-    fun setAnimPage(ctx: Context, v: Boolean) {
-        animPage.value = v
-        p(ctx).edit().putBoolean(K_ANIM_PAGE, v).apply()
-    }
-
-    fun setAnimCard(ctx: Context, v: Boolean) {
-        animCard.value = v
-        p(ctx).edit().putBoolean(K_ANIM_CARD, v).apply()
-    }
-
-    fun setAnimLaunch(ctx: Context, v: Boolean) {
-        animLaunch.value = v
-        p(ctx).edit().putBoolean(K_ANIM_LAUNCH, v).apply()
+    fun tintColor(isDark: Boolean): Color = when (tintMode.value) {
+        1 -> Color.White
+        2 -> Color.Black
+        else -> if (isDark) Color.Black else Color.White
     }
 
     // ── 壁纸取色 ──
-    /**
-     * 从壁纸里取一个「能当强调色用」的颜色：
-     * 跳过太黑/太白/太灰的像素，按色相分桶统计，取权重最大的一桶。
-     */
+    /** 跳过太黑/太白/太灰的像素，按色相分桶，取权重最大的一桶 */
     fun computeAccent(src: Bitmap, dark: Boolean): Color {
         val small = runCatching { Bitmap.createScaledBitmap(src, 40, 40, true) }.getOrNull() ?: src
         val buckets = HashMap<Int, FloatArray>()
@@ -193,7 +175,6 @@ object Appearance {
                 val s = hsv[1]
                 val v = hsv[2]
                 if (s < 0.18f || v < 0.16f || v > 0.94f) continue
-                // 中等亮度 + 高饱和的像素权重更高，避免取到一大片浅色天空
                 val weight = (s * 0.7f + 0.3f) * (1f - Math.abs(v - 0.55f))
                 if (weight <= 0f) continue
                 val key = (hsv[0] / 15f).toInt().coerceIn(0, 23)
@@ -210,8 +191,6 @@ object Appearance {
         val r = (best.value[1] / w).toInt().coerceIn(0, 255)
         val g = (best.value[2] / w).toInt().coerceIn(0, 255)
         val b = (best.value[3] / w).toInt().coerceIn(0, 255)
-
-        // 统一拉到「当强调色好看」的区间：足够饱和、亮度适中
         val out = FloatArray(3)
         android.graphics.Color.RGBToHSV(r, g, b, out)
         out[1] = 0.62f
@@ -221,6 +200,10 @@ object Appearance {
 
     fun cacheAccent(ctx: Context, c: Color) {
         accent.value = c
-        p(ctx).edit().putInt(K_ACCENT, c.toArgb()).apply()
+        p(ctx).edit().putInt("accent_cache", c.toArgb()).apply()
     }
+
+    // ── 动效派生 ──
+    fun springDamping(): Float = when (spring.value) { 0 -> 0.72f; 2 -> 0.92f; else -> 0.82f }
+    fun springStiffness(): Float = when (spring.value) { 0 -> 220f; 2 -> 480f; else -> 340f }
 }

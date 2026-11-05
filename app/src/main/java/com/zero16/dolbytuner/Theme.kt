@@ -137,10 +137,25 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
     // 使用 state 计数器触发 Compose 重组（WallpaperState 是非 Compose 对象）
     var wallpaperVersion by remember { mutableIntStateOf(0) }
 
-    // 窗口宽度或壁纸变化时重新计算 scale
-    val glassBlur = Appearance.blur.value
-    LaunchedEffect(wallpaperUri, isDark, windowWidthPx, glassBlur) {
-        if (wallpaperUri != null) {
+    // 窗口宽度或壁纸变化时重新加载 / 生成壁纸
+    val wpKind = Appearance.wallpaperKind.value
+    val wpDim = Appearance.wallpaperDim.value
+    val blurDp = Appearance.blurRadius.value
+    LaunchedEffect(wallpaperUri, isDark, windowWidthPx, windowHeightPx, wpKind, blurDp) {
+        if (wpKind > 0) {
+            // 内置氛围壁纸：代码生成，不联网
+            withContext(Dispatchers.IO) {
+                WallpaperState.setBuiltin(
+                    ctx, wpKind, isDark, windowWidthPx, windowHeightPx, blurDp.toFloat()
+                )
+                val bmp = WallpaperState.original
+                if (bmp != null) {
+                    val acc = Appearance.computeAccent(bmp, isDark)
+                    withContext(Dispatchers.Main) { Appearance.cacheAccent(ctx, acc) }
+                }
+            }
+            wallpaperVersion++
+        } else if (wallpaperUri != null) {
             try {
                 withContext(Dispatchers.IO) {
                     val bitmap = if (wallpaperUri.startsWith("content://")) {
@@ -151,10 +166,9 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
                         BitmapFactory.decodeFile(wallpaperUri)
                     }
                     if (bitmap != null) {
-                        WallpaperState.set(
-                            ctx, bitmap, isDark, windowWidthPx, windowHeightPx, glassBlur.blur
+                        WallpaperState.setLocal(
+                            ctx, bitmap, isDark, windowWidthPx, windowHeightPx, blurDp.toFloat()
                         )
-                        // 壁纸取色：卡片图标、拉条、选中态都跟着走
                         val acc = Appearance.computeAccent(bitmap, isDark)
                         withContext(Dispatchers.Main) { Appearance.cacheAccent(ctx, acc) }
                     }
@@ -162,9 +176,16 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
                 wallpaperVersion++
             } catch (_: Exception) {}
         } else {
-            WallpaperState.clear()
-            withContext(Dispatchers.Main) {
-                Appearance.cacheAccent(ctx, Color(0xFF22C55E))
+            // 没有本地图 → 用「晨雾」兜底，避免黑屏
+            withContext(Dispatchers.IO) {
+                WallpaperState.setBuiltin(
+                    ctx, 2, isDark, windowWidthPx, windowHeightPx, blurDp.toFloat()
+                )
+                val bmp = WallpaperState.original
+                if (bmp != null) {
+                    val acc = Appearance.computeAccent(bmp, isDark)
+                    withContext(Dispatchers.Main) { Appearance.cacheAccent(ctx, acc) }
+                }
             }
             wallpaperVersion++
         }
@@ -202,6 +223,14 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
+                )
+            }
+            // 壁纸压暗（给玻璃提供更稳的对比度）
+            if (wpDim > 0) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = wpDim / 100f))
                 )
             }
             // 内容层直接叠加在壁纸（或纯色背景）上

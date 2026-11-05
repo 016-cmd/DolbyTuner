@@ -229,9 +229,9 @@ internal fun CapabilitySection() {
             else androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.06f)
         ),
         colors = CardDefaults.cardColors(
-            containerColor = if (androidx.compose.foundation.isSystemInDarkTheme())
-                androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.58f)
-            else androidx.compose.ui.graphics.Color.White.copy(alpha = 0.80f)
+            containerColor = Appearance.glassFill(
+                androidx.compose.foundation.isSystemInDarkTheme()
+            )
         )
     ) {
         Row(
