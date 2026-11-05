@@ -12,8 +12,8 @@ android {
         applicationId = "com.zero16.dolbytuner"
         minSdk = 30
         targetSdk = 36
-        versionCode = 224
-        versionName = "2.28.0"
+        versionCode = 225
+        versionName = "2.28.1"
     }
 
     signingConfigs {
