@@ -2758,8 +2758,8 @@ private fun EffectsScreen() {
 
         // ===== 输入增益 =====
         EffectCard(
-            title = "输入增益",
-            subtitle = "Master Gain · 进入 DP 前的总电平",
+            title = "输出增益",
+            subtitle = "全链路总电平 · 加减都作用在最终输出上",
             icon = Icons.Default.VolumeUp,
             enabled = dpOn,
             onEnabledChange = {},
