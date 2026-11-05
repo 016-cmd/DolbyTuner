@@ -701,7 +701,7 @@ private fun PresetDetailDialog(p: Preset, onClose: () -> Unit) {
                     DetailRow("补偿强度 / 上限", String.format("%.1f / %.1f dB", d.elStrength / 10f, d.elMaxDb / 10f), cs)
                     DetailRow("整体强度", "${d.eqIntensity}%", cs)
                     if (d.aeq.isNotBlank()) DetailRow("曲线来源", "AutoEQ 导入（127 点）", cs)
-                    val nz = d.geqInt.mapIndexedNotNull { idx, v ->
+                    val nz = d.geqInt.toList().mapIndexedNotNull { idx, v ->
                         if (v != 100) "${DapRealtime.FREQS[idx]}Hz ${v}%" else null
                     }
                     if (nz.isNotEmpty()) DetailRow("逐段强度", nz.joinToString(" / "), cs)
