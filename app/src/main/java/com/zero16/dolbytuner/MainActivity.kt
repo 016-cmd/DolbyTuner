@@ -544,11 +544,12 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                 Modifier
                     .offset {
                         androidx.compose.ui.unit.IntOffset(
-                            (10.dp.toPx() + progress * tabW +
-                                    (tabW - thumbW) / 2f).roundToInt(),
+                            (10.dp.toPx() + (tabW - thumbW) / 2f).roundToInt(),
                             ((62.dp.toPx() - thumbH) / 2f).roundToInt()
                         )
                     }
+                    // 用绘制位移代替布局位移：拖动时不再每帧重新布局
+                    .graphicsLayer { translationX = progress * tabW }
                     .width(with(dockDensity) { thumbW.toDp() })
                     .height(with(dockDensity) { thumbH.toDp() })
                     .clip(RoundedCornerShape(27.dp))
@@ -767,11 +768,11 @@ private fun GeqScreen(deviceLine: String) {
                     Spacer(Modifier.height(6.dp))
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFF6366F1).copy(alpha = 0.14f),
-                        border = BorderStroke(1.dp, Color(0xFF6366F1).copy(alpha = 0.45f))
+                        color = Appearance.tertiary.value.copy(alpha = 0.14f),
+                        border = BorderStroke(1.dp, Appearance.tertiary.value.copy(alpha = 0.45f))
                     ) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp)) {
-                            Icon(Icons.Default.GraphicEq, null, tint = Color(0xFF6366F1), modifier = Modifier.size(14.dp))
+                            Icon(Icons.Default.GraphicEq, null, tint = Appearance.tertiary.value, modifier = Modifier.size(14.dp))
                             Spacer(Modifier.width(6.dp))
                             Text(
                                 "已被音效页接管：杜比 GEQ 已切平直，这一栏只读。下方的音效参数仍可正常调节。",
@@ -1731,7 +1732,7 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
             icon = Icons.Default.VolumeUp,
             enabled = fx.vbOn,
             onEnabledChange = { pushVb(fx.copy(vbOn = it), false) },
-            accent = Color(0xFF6366F1)
+            accent = Appearance.colorDyn.value
         ) {
             FxSlider(
                 "强度", fx.vbAmt.toString(), fx.vbAmt, 0..192, fx.vbOn,
@@ -1760,7 +1761,7 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
             icon = Icons.Default.GraphicEq,
             enabled = fx.bassOn,
             onEnabledChange = { apply(fx.copy(bassOn = it)) },
-            accent = Color(0xFFF59E0B)
+            accent = Appearance.colorLimit.value
         ) {
             FxSlider(
                 "低音增益", fx.bassGain.toString(), fx.bassGain, 0..192, fx.bassOn,
@@ -1781,7 +1782,7 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
             icon = Icons.Default.RecordVoiceOver,
             enabled = fx.dialogOn,
             onEnabledChange = { apply(fx.copy(dialogOn = it)) },
-            accent = Color(0xFF22C55E)
+            accent = Appearance.accent.value
         ) {
             FxSlider(
                 "增强量", fx.dialogAmt.toString(), fx.dialogAmt, 0..16, fx.dialogOn,
@@ -1796,7 +1797,7 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
             icon = Icons.Default.Headphones,
             enabled = fx.hpVirtual,
             onEnabledChange = { apply(fx.copy(hpVirtual = it)) },
-            accent = Color(0xFF3B82F6),
+            accent = Appearance.secondary.value,
             toggleOnly = true
         )
         EffectCard(
@@ -1805,7 +1806,7 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
             icon = Icons.Default.Speaker,
             enabled = fx.spVirtual,
             onEnabledChange = { apply(fx.copy(spVirtual = it)) },
-            accent = Color(0xFF3B82F6),
+            accent = Appearance.secondary.value,
             toggleOnly = true
         )
         Spacer(Modifier.height(20.dp))
@@ -2662,8 +2663,8 @@ private fun EffectsScreen() {
         if (dpOn) pushAllDp()
     }
 
-    val accent = Color(0xFF38BDF8)
-    val cLim = Color(0xFFF59E0B)
+    val accent = Appearance.secondary.value
+    val cLim = Appearance.colorLimit.value
 
     Column(
         Modifier.fillMaxSize().statusBarsPadding()
@@ -2716,7 +2717,7 @@ private fun EffectsScreen() {
         Spacer(Modifier.height(8.dp))
 
         // ===== DP EQ（GEQ / PEQ） =====
-        val cEq = Color(0xFF6366F1)
+        val cEq = Appearance.tertiary.value
         GlassSurface(
             Modifier.fillMaxWidth().padding(vertical = 4.dp),
             radius = Appearance.radius.value
@@ -2971,7 +2972,7 @@ private fun EffectsScreen() {
         }
 
         // ===== 等响补偿 =====
-        val cEl = Color(0xFF8B5CF6)
+        val cEl = Appearance.colorDyn.value
         EffectCard(
             title = "等响补偿",
             subtitle = if (elBase < 0) "请先设定基准音量"
@@ -3069,7 +3070,7 @@ private fun EffectsScreen() {
             icon = Icons.Default.VolumeUp,
             enabled = dpOn,
             onEnabledChange = {},
-            accent = Color(0xFF22C55E),
+            accent = Appearance.accent.value,
             showSwitch = false,
         ) {
             FxSlider(
@@ -3182,7 +3183,7 @@ private fun EffectsScreen() {
                 prefs.edit().putBoolean("bb_on", it).apply()
                 pushMacros()
             },
-            accent = Color(0xFFF97316)
+            accent = Appearance.colorBass.value
         ) {
             FxSlider(
                 "增强量", String.format("%+.1f dB", bbAmt / 10f), bbAmt, 0..120, bbOn,
@@ -3207,9 +3208,9 @@ private fun EffectsScreen() {
             icon = Icons.Default.Compress,
             enabled = mbcOn,
             onEnabledChange = { mbcOn = it; prefs.edit().putBoolean("mbc_on", it).apply(); applyMbc() },
-            accent = Color(0xFFA855F7)
+            accent = Appearance.colorDyn.value
         ) {
-            val cMbc = Color(0xFFA855F7)
+            val cMbc = Appearance.colorDyn.value
             val segNames = listOf("Low 250", "Mid 2k", "High 8k", "Air 20k")
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 segNames.forEachIndexed { i, n ->
@@ -3324,7 +3325,7 @@ private fun EffectsScreen() {
                 prefs.edit().putBoolean("ds_on", it).apply()
                 pushMacros()
             },
-            accent = Color(0xFF06B6D4)
+            accent = Appearance.colorVocal.value
         ) {
             FxSlider(
                 "抑制量", "${dsAmt}%", dsAmt, 0..100, dsOn,
@@ -3354,7 +3355,7 @@ private fun EffectsScreen() {
                 throttle.removeCallbacks(postTick)
                 throttle.post(postTick)
             },
-            accent = Color(0xFF14B8A6)
+            accent = Appearance.secondary.value
         ) {
             val freqs = listOf("31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k")
             freqs.forEachIndexed { i, f ->
@@ -3431,7 +3432,7 @@ private fun EffectsScreen() {
                         status = "已导入 AutoEQ 曲线（127 点）"
                         showAeqDlg = false
                     }
-                }) { Text("导入", color = Color(0xFF6366F1), fontSize = 12.sp) }
+                }) { Text("导入", color = Appearance.tertiary.value, fontSize = 12.sp) }
             },
             dismissButton = {
                 TextButton(onClick = { showAeqDlg = false }) { Text("取消", fontSize = 12.sp) }

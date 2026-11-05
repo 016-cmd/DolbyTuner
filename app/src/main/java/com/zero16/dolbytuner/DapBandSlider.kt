@@ -162,7 +162,7 @@ fun DapBandSlider(
                     val isUp = valueQ4 > 0
                     val fillTop = minOf(zeroY, thumbY)
                     val fillH = abs(zeroY - thumbY).coerceAtLeast(1f)
-                    val base = if (isUp) accent else Color(0xFFF59E0B)
+                    val base = if (isUp) accent else Appearance.colorLimit.value
                     val brush = if (isUp) {
                         Brush.verticalGradient(
                             colors = listOf(base.copy(alpha = 0.45f), base),

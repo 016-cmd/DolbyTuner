@@ -38,6 +38,10 @@ object WallpaperState {
     @Volatile var kind: Int = 0
         private set
 
+    /** 壁纸平均亮度 0~1（用于文字自动黑白） */
+    @Volatile var lum: Float = 0.5f
+        private set
+
     fun setLocal(
         ctx: Context,
         bitmap: Bitmap,
@@ -83,6 +87,7 @@ object WallpaperState {
         original = bitmap
         blurred = BlurUtils.blur(ctx, bitmap, radius = blur)
         isDark = dark
+        lum = averageLum(bitmap)
         oldOriginal?.recycle()
         oldBlurred?.recycle()
     }
@@ -94,6 +99,21 @@ object WallpaperState {
         blurred = null
         o?.recycle()
         b?.recycle()
+    }
+
+    private fun averageLum(b: Bitmap): Float {
+        val s = runCatching { Bitmap.createScaledBitmap(b, 24, 24, true) }.getOrNull() ?: b
+        var sum = 0f
+        var n = 0
+        for (y in 0 until s.height) for (x in 0 until s.width) {
+            val px = s.getPixel(x, y)
+            sum += (android.graphics.Color.red(px) * 0.299f +
+                    android.graphics.Color.green(px) * 0.587f +
+                    android.graphics.Color.blue(px) * 0.114f) / 255f
+            n++
+        }
+        if (s !== b) runCatching { s.recycle() }
+        return if (n > 0) sum / n else 0.5f
     }
 
     // ── 内置壁纸生成 ──

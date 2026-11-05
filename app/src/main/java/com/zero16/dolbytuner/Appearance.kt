@@ -74,6 +74,15 @@ object Appearance {
 
     /** 壁纸取色结果：图标、滑条、选中胶囊用它 */
     val accent = mutableStateOf(Color(0xFF22C55E))
+    val secondary = mutableStateOf(Color(0xFF3B82F6))
+    val tertiary = mutableStateOf(Color(0xFFA855F7))
+    /** 语义色：全部从主色派生，保证换壁纸一起变 */
+    val colorBass = mutableStateOf(Color(0xFFF97316))
+    val colorVocal = mutableStateOf(Color(0xFF06B6D4))
+    val colorDyn = mutableStateOf(Color(0xFFA855F7))
+    val colorLimit = mutableStateOf(Color(0xFFF59E0B))
+    /** 可读性：0 关 / 1 自动 / 2 强 */
+    val readLevel = mutableStateOf(1)
 
     // ── 存取 ──
     private fun putI(ctx: Context, key: String, st: MutableState<Int>, v: Int) {
@@ -107,6 +116,7 @@ object Appearance {
     fun setAnimLaunch(ctx: Context, v: Boolean) = putB(ctx, "anim_launch", animLaunch, v)
     fun setWallpaperKind(ctx: Context, v: Int) = putI(ctx, "wp_kind", wallpaperKind, v)
     fun setWallpaperDim(ctx: Context, v: Int) = putI(ctx, "wp_dim", wallpaperDim, v)
+    fun setReadLevel(ctx: Context, v: Int) = putI(ctx, "read_level", readLevel, v.coerceIn(0, 2))
 
     fun load(ctx: Context) {
         val s = p(ctx)
@@ -131,6 +141,15 @@ object Appearance {
         animLaunch.value = s.getBoolean("anim_launch", true)
         wallpaperKind.value = s.getInt("wp_kind", 0).coerceIn(0, 3)
         wallpaperDim.value = s.getInt("wp_dim", 0).coerceIn(0, 60)
+        readLevel.value = s.getInt("read_level", 1).coerceIn(0, 2)
+        if (s.contains("pal_secondary")) {
+            secondary.value = Color(s.getInt("pal_secondary", 0xFF3B82F6.toInt()))
+            tertiary.value = Color(s.getInt("pal_tertiary", 0xFFA855F7.toInt()))
+            colorBass.value = Color(s.getInt("pal_bass", 0xFFF97316.toInt()))
+            colorVocal.value = Color(s.getInt("pal_vocal", 0xFF06B6D4.toInt()))
+            colorDyn.value = Color(s.getInt("pal_dyn", 0xFFA855F7.toInt()))
+            colorLimit.value = Color(s.getInt("pal_limit", 0xFFF59E0B.toInt()))
+        }
         val cached = s.getInt("accent_cache", Int.MIN_VALUE)
         if (cached != Int.MIN_VALUE) accent.value = Color(cached)
     }
@@ -208,6 +227,99 @@ object Appearance {
         1 -> Color.White
         2 -> Color.Black
         else -> if (isDark) Color.Black else Color.White
+    }
+
+    // ── 壁纸取色（三色 + 语义派生） ──
+    /** 从壁纸取 3 个和谐色：主 / 次 / 第三 */
+    fun computePalette(src: Bitmap, dark: Boolean): List<Color> {
+        val small = runCatching { Bitmap.createScaledBitmap(src, 48, 48, true) }.getOrNull() ?: src
+        val buckets = HashMap<Int, FloatArray>()
+        val hsv = FloatArray(3)
+        for (y in 0 until small.height step 2) {
+            for (x in 0 until small.width step 2) {
+                val px = small.getPixel(x, y)
+                val r = android.graphics.Color.red(px)
+                val g = android.graphics.Color.green(px)
+                val b = android.graphics.Color.blue(px)
+                android.graphics.Color.RGBToHSV(r, g, b, hsv)
+                if (hsv[1] < 0.18f || hsv[2] < 0.16f || hsv[2] > 0.94f) continue
+                val w = (hsv[1] * 0.7f + 0.3f) * (1f - Math.abs(hsv[2] - 0.55f))
+                if (w <= 0f) continue
+                val key = (hsv[0] / 15f).toInt().coerceIn(0, 23)
+                val c = buckets.getOrPut(key) { FloatArray(4) }
+                c[0] += w; c[1] += r * w; c[2] += g * w; c[3] += b * w
+            }
+        }
+        if (small !== src) runCatching { small.recycle() }
+        val sorted = buckets.entries.sortedByDescending { it.value[0] }.take(3)
+        val out = ArrayList<Color>()
+        sorted.forEach { e ->
+            val w = e.value[0].coerceAtLeast(0.0001f)
+            out.add(tuneColor(
+                Color(
+                    (e.value[1] / w).toInt().coerceIn(0, 255),
+                    (e.value[2] / w).toInt().coerceIn(0, 255),
+                    (e.value[3] / w).toInt().coerceIn(0, 255)
+                ), dark
+            ))
+        }
+        while (out.size < 3) out.add(shiftHue(out[0], 40f * (out.size + 1)))
+        // 让第 2/3 色跟第 1 色拉开
+        if (hueDiff(out[0], out[1]) < 40f) out[1] = shiftHue(out[0], 45f)
+        if (hueDiff(out[0], out[2]) < 60f) out[2] = shiftHue(out[0], 120f)
+        return out
+    }
+
+    private fun hueOf(c: Color): Float {
+        val hsv = FloatArray(3)
+        android.graphics.Color.RGBToHSV(
+            (c.red * 255).toInt(), (c.green * 255).toInt(), (c.blue * 255).toInt(), hsv
+        )
+        return hsv[0]
+    }
+
+    private fun hueDiff(a: Color, b: Color): Float {
+        val d = Math.abs(hueOf(a) - hueOf(b))
+        return Math.min(d, 360f - d)
+    }
+
+    private fun shiftHue(c: Color, deg: Float): Color {
+        val hsv = FloatArray(3)
+        android.graphics.Color.RGBToHSV(
+            (c.red * 255).toInt(), (c.green * 255).toInt(), (c.blue * 255).toInt(), hsv
+        )
+        hsv[0] = (hsv[0] + deg) % 360f
+        return Color(android.graphics.Color.HSVToColor(hsv))
+    }
+
+    /** 亮度/饱和钳到“当强调色舒服”的区间 */
+    private fun tuneColor(c: Color, dark: Boolean): Color {
+        val hsv = FloatArray(3)
+        android.graphics.Color.RGBToHSV(
+            (c.red * 255).toInt(), (c.green * 255).toInt(), (c.blue * 255).toInt(), hsv
+        )
+        hsv[1] = hsv[1].coerceIn(0.50f, 0.72f)
+        hsv[2] = if (dark) 0.80f else 0.55f
+        return Color(android.graphics.Color.HSVToColor(hsv))
+    }
+
+    fun cachePalette(ctx: Context, pal: List<Color>) {
+        accent.value = pal[0]
+        secondary.value = pal[1]
+        tertiary.value = pal[2]
+        colorBass.value = shiftHue(pal[0], -30f)
+        colorVocal.value = shiftHue(pal[0], 150f)
+        colorDyn.value = shiftHue(pal[0], 80f)
+        colorLimit.value = shiftHue(pal[0], 200f)
+        p(ctx).edit()
+            .putInt("accent_cache", pal[0].toArgb())
+            .putInt("pal_secondary", pal[1].toArgb())
+            .putInt("pal_tertiary", pal[2].toArgb())
+            .putInt("pal_bass", colorBass.value.toArgb())
+            .putInt("pal_vocal", colorVocal.value.toArgb())
+            .putInt("pal_dyn", colorDyn.value.toArgb())
+            .putInt("pal_limit", colorLimit.value.toArgb())
+            .apply()
     }
 
     // ── 壁纸取色 ──

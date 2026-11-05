@@ -537,13 +537,13 @@ private fun PresetBigCard(
                         curve = d.curve,
                         fMin = 20f,
                         fMax = 20000f,
-                        accent = Color(0xFF6366F1),
+                        accent = Appearance.tertiary.value,
                         height = 140.dp
                     )
                 } else {
                     BandCurveCanvas(
                         points = DapRealtime.FREQS.mapIndexed { i, f -> f to p.geq[i] },
-                        lineColor = Color(0xFF16A34A),
+                        lineColor = Appearance.accent.value,
                         showDelta = false
                     )
                 }

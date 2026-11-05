@@ -86,12 +86,24 @@ private val DarkColorScheme = darkColorScheme(
  * 自适应提示色：背景亮时用深色，背景暗时自动换亮色。
  * 深色模式下固定的深棕/深红几乎看不见，所有提示文字都走这里。
  */
-/** 卡片里的小字：浅色模式用黑，深色模式用白（不再用灰） */
+/**
+ * 卡片里的小字：
+ *   可读性=关 → 跟主题（浅黑 / 深白）
+ *   可读性=自动/强 → 跟**壁纸亮度**（壁纸暗→白字，壁纸亮→黑字）
+ */
 @Composable
-fun subInk(alpha: Float = 0.78f): Color =
-    if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
-        Color.Black.copy(alpha = alpha)
-    else Color.White.copy(alpha = alpha.coerceAtLeast(0.82f))
+fun subInk(alpha: Float = 0.78f): Color {
+    val lvl = Appearance.readLevel.value
+    if (lvl == 0) {
+        return if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
+            Color.Black.copy(alpha = alpha)
+        else Color.White.copy(alpha = alpha.coerceAtLeast(0.82f))
+    }
+    val darkWallpaper = WallpaperState.lum < 0.5f
+    val a = if (lvl >= 2) 0.96f else alpha.coerceAtLeast(0.82f)
+    return if (darkWallpaper) Color.White.copy(alpha = a)
+    else Color.Black.copy(alpha = a)
+}
 
 @Composable
 fun hintInk(light: Color, dark: Color): Color =
@@ -159,8 +171,8 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
                 )
                 val bmp = WallpaperState.original
                 if (bmp != null) {
-                    val acc = Appearance.computeAccent(bmp, isDark)
-                    withContext(Dispatchers.Main) { Appearance.cacheAccent(ctx, acc) }
+                    val pal = Appearance.computePalette(bmp, isDark)
+                    withContext(Dispatchers.Main) { Appearance.cachePalette(ctx, pal) }
                 }
             }
             wallpaperVersion++
@@ -178,8 +190,8 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
                         WallpaperState.setLocal(
                             ctx, bitmap, isDark, windowWidthPx, windowHeightPx, blurDp.toFloat()
                         )
-                        val acc = Appearance.computeAccent(bitmap, isDark)
-                        withContext(Dispatchers.Main) { Appearance.cacheAccent(ctx, acc) }
+                        val pal = Appearance.computePalette(bitmap, isDark)
+                        withContext(Dispatchers.Main) { Appearance.cachePalette(ctx, pal) }
                     }
                 }
                 wallpaperVersion++
@@ -192,8 +204,8 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
                 )
                 val bmp = WallpaperState.original
                 if (bmp != null) {
-                    val acc = Appearance.computeAccent(bmp, isDark)
-                    withContext(Dispatchers.Main) { Appearance.cacheAccent(ctx, acc) }
+                    val pal = Appearance.computePalette(bmp, isDark)
+                    withContext(Dispatchers.Main) { Appearance.cachePalette(ctx, pal) }
                 }
             }
             wallpaperVersion++

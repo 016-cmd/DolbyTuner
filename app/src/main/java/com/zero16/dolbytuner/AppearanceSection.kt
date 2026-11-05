@@ -193,6 +193,14 @@ fun AppearanceSection(
                     }
                 }
 
+                // ── 可读性 ──
+                GroupLabel("文字")
+                SegRow(
+                    "可读性",
+                    listOf("关", "自动", "强"),
+                    Appearance.readLevel.value
+                ) { Appearance.setReadLevel(ctx, it) }
+
                 // ── 页面 ──
                 GroupLabel("页面")
                 ToggleRow("页面切换动画", null, Appearance.animPage.value) {
