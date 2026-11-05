@@ -203,8 +203,31 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    override fun onDestroy() {
+        // 正常退出（返回键/结束）→ 清掉会话标记，保留卡片真折射
+        runCatching {
+            if (isFinishing) {
+                getSharedPreferences("appearance", MODE_PRIVATE).edit()
+                    .putBoolean("liquid_session", false)
+                    .apply()
+            }
+        }
+        super.onDestroy()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 液态玻璃崩溃保险：若上次会话没正常结束，自动关掉卡片真折射，避免一进页面就崩
+        runCatching {
+            val ap = getSharedPreferences("appearance", MODE_PRIVATE)
+            if (ap.getBoolean("liquid_session", false)) {
+                ap.edit()
+                    .putBoolean("card_liquid", false)
+                    .putBoolean("liquid_session", false)
+                    .apply()
+            }
+            ap.edit().putBoolean("liquid_session", true).apply()
+        }
         // 诊断：读 103/106/107/112 的当前值（只读，不改任何东西）
         Thread {
             android.util.Log.i("DapDiag", "start")
