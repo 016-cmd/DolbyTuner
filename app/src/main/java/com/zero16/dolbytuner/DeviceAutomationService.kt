@@ -104,10 +104,17 @@ class DeviceAutomationService : Service() {
                     loadPresets(this@DeviceAutomationService).firstOrNull { it.name == b.presetName }
                 }
                 val err = if (preset != null) {
-                    applyPreset(this@DeviceAutomationService, preset)
+                    val r = applyPreset(this@DeviceAutomationService, preset)
+                    // 预设里不含音效页参数时，把 DP 复位，避免沿用上一个设备的声音
+                    if (r == null && preset.scope == SCOPE_DOLBY) {
+                        resetDpOnly(this@DeviceAutomationService)
+                    }
+                    r
                 } else {
-                    // 未绑定设备：恢复平直 + 默认音效
-                    resetToDefault(this@DeviceAutomationService)
+                    // 未绑定设备：恢复平直 + 默认音效（音效页也跟着复位）
+                    val r = resetToDefault(this@DeviceAutomationService)
+                    if (r == null) resetDpOnly(this@DeviceAutomationService)
+                    r
                 }
                 if (err == null) {
                     prefs.edit().putString("device_last_applied", device.key).apply()

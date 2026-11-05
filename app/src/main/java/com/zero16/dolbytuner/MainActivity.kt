@@ -292,6 +292,8 @@ private fun MainApp(activity: Activity, deviceLine: String) {
             // 未绑定设备：自动恢复平直 + 默认音效，避免把上一个设备的调音带到外放
             val err = resetToDefault(ctx)
             if (err == null) {
+                // 设备切换时音效页要跟着复位；单独点「重置」不会走到这里
+                resetDpOnly(ctx)
                 prefs.edit().putString("device_last_applied", d.key).apply()
                 DeviceState.notifyApplied()
             }
@@ -1333,8 +1335,6 @@ internal suspend fun resetToDefault(ctx: Context): String? {
         saveGeq(ctx, flat)
         saveFx(ctx, def)
     }
-    // 没绑定预设的设备：音效页（DP）也要一起回到默认，否则会把上一个设备的调音带过来
-    resetDpOnly(ctx)
     return e
 }
 
