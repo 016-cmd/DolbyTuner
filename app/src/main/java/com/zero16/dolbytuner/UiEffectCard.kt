@@ -80,11 +80,9 @@ internal fun EffectCard(
     else Color.Black.copy(alpha = 0.06f)
     val subColor = if (dark) Color.White.copy(alpha = 0.72f) else Color(0xFF2E2E2E).copy(alpha = 0.66f)
 
-    Card(
+    GlassSurface(
         Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, borderColor),
-        colors = CardDefaults.cardColors(containerColor = container)
+        radius = 16
     ) {
         Column {
             Row(

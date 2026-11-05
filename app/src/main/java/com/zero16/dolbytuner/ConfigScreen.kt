@@ -1,5 +1,9 @@
 package com.zero16.dolbytuner
 
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.geometry.Offset
 import android.content.ContentValues
 import android.content.Context
 import android.os.Environment
@@ -143,9 +147,9 @@ internal fun ConfigScreen() {
         Spacer(Modifier.height(12.dp))
 
         // ── 顶部：导入 / 导出 ──────────────────────────────
-        Card(
-            Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Appearance.glassFill(androidx.compose.foundation.isSystemInDarkTheme()))
+        GlassSurface(
+            Modifier.fillMaxWidth(),
+            radius = 16
         ) {
             Column(Modifier.padding(14.dp)) {
                 Text("备份与恢复", fontSize = 13.sp, fontWeight = FontWeight.Bold)
@@ -508,20 +512,18 @@ private fun PresetBigCard(
     val light = Color(0xFFF0FDF4)
     val mid = Color(0xFFBBF7D0)
     val deep = Color(0xFF22C55E)
-    val ink = Color(0xFF14532D)
+    val ink = cs.onSurface
 
+    var cpos by remember { mutableStateOf(Offset.Zero) }
+    var csz by remember { mutableStateOf(IntSize.Zero) }
     Box(
         Modifier.fillMaxWidth().height(152.dp)
+            .onGloballyPositioned {
+                cpos = it.positionInRoot()
+                csz = it.size
+            }
             .clip(RoundedCornerShape(16.dp))
-            .background(
-                Brush.horizontalGradient(
-                    0.00f to cs.surfaceVariant.copy(alpha = 0.92f),
-                    0.52f to cs.surfaceVariant.copy(alpha = 0.55f),
-                    0.60f to light,
-                    0.80f to mid,
-                    1.00f to deep
-                )
-            )
+            .glassSurface(16f, cpos, csz)
     ) {
         Row(Modifier.fillMaxSize()) {
             // 左 60%：GEQ 曲线（点击看详细参数）
@@ -578,15 +580,18 @@ private fun PresetBigCard(
             ) {
                 Text(
                     p.name,
-                    color = Color.White,
+                    color = cs.onSurface,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 2,
                     textAlign = TextAlign.Center,
                     lineHeight = 13.sp
                 )
-                GreenMiniButton("应用", Color.White.copy(alpha = 0.26f), onApply)
-                GreenMiniButton("删除", Color.Black.copy(alpha = 0.20f), onDelete)
+                GreenMiniButton("应用", Accent.copy(alpha = 0.85f), onApply)
+                GreenMiniButton(
+                    "删除", cs.onSurface.copy(alpha = 0.12f), onDelete,
+                    textColor = cs.onSurface
+                )
             }
         }
     }
@@ -780,7 +785,12 @@ private fun ExportPickRow(name: String, selected: Boolean, cs: androidx.compose.
 }
 
 @Composable
-private fun GreenMiniButton(text: String, bg: Color, onClick: () -> Unit) {
+private fun GreenMiniButton(
+    text: String,
+    bg: Color,
+    onClick: () -> Unit,
+    textColor: Color = Color.White
+) {
     Box(
         Modifier.fillMaxWidth().height(38.dp)
             .clip(RoundedCornerShape(9.dp))
@@ -788,7 +798,7 @@ private fun GreenMiniButton(text: String, bg: Color, onClick: () -> Unit) {
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        Text(text, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        Text(text, color = textColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
     }
 }
 

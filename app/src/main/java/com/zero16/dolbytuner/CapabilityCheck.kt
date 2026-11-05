@@ -219,20 +219,9 @@ internal fun CapabilitySection() {
     var busy by remember { mutableStateOf(false) }
     var res by remember { mutableStateOf<CapResult?>(null) }
 
-    Card(
+    GlassSurface(
         Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(
-            1.dp,
-            if (androidx.compose.foundation.isSystemInDarkTheme())
-                androidx.compose.ui.graphics.Color.White.copy(alpha = 0.10f)
-            else androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.06f)
-        ),
-        colors = CardDefaults.cardColors(
-            containerColor = Appearance.glassFill(
-                androidx.compose.foundation.isSystemInDarkTheme()
-            )
-        )
+        radius = 16
     ) {
         Row(
             Modifier.fillMaxWidth().padding(14.dp),

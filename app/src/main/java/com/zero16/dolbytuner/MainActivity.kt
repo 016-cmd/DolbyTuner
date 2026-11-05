@@ -575,19 +575,9 @@ private fun GeqScreen(deviceLine: String) {
         Text(deviceLine, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(10.dp))
 
-        Card(
+        GlassSurface(
             Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(
-                1.dp,
-                if (androidx.compose.foundation.isSystemInDarkTheme())
-                    Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.06f)
-            ),
-            colors = CardDefaults.cardColors(
-                containerColor = Appearance.glassFill(
-                    androidx.compose.foundation.isSystemInDarkTheme()
-                )
-            )
+            radius = 16
         ) {
             Column(Modifier.padding(14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -622,10 +612,9 @@ private fun GeqScreen(deviceLine: String) {
             }
         }
         Spacer(Modifier.height(10.dp))
-        Card(
+        GlassSurface(
             Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Appearance.glassFill(androidx.compose.foundation.isSystemInDarkTheme()))
+            radius = 16
         ) {
             Column(Modifier.padding(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2557,20 +2546,9 @@ private fun EffectsScreen() {
         Spacer(Modifier.height(14.dp))
 
         // ===== 引擎总开关 =====
-        Card(
+        GlassSurface(
             Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            // 白卡 / 黑卡：底色不染色，类别色只留在图标与状态文字上
-            border = BorderStroke(
-                1.dp,
-                if (androidx.compose.foundation.isSystemInDarkTheme())
-                    Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.06f)
-            ),
-            colors = CardDefaults.cardColors(
-                containerColor = Appearance.glassFill(
-                    androidx.compose.foundation.isSystemInDarkTheme()
-                )
-            )
+            radius = 16
         ) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
@@ -2605,19 +2583,9 @@ private fun EffectsScreen() {
 
         // ===== DP EQ（GEQ / PEQ） =====
         val cEq = Color(0xFF6366F1)
-        Card(
+        GlassSurface(
             Modifier.fillMaxWidth().padding(vertical = 4.dp),
-            shape = RoundedCornerShape(16.dp),
-                        border = BorderStroke(
-                1.dp,
-                if (androidx.compose.foundation.isSystemInDarkTheme())
-                    Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.06f)
-            ),
-            colors = CardDefaults.cardColors(
-                containerColor = Appearance.glassFill(
-                    androidx.compose.foundation.isSystemInDarkTheme()
-                )
-            )
+            radius = 16
         ) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -3871,10 +3839,9 @@ private fun LicenseDialogContent(
     original: String,
     onDismiss: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxHeight(0.9f).fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Appearance.glassFill(androidx.compose.foundation.isSystemInDarkTheme()))
+    GlassSurface(
+        Modifier.fillMaxHeight(0.9f).fillMaxWidth(),
+        radius = 16
     ) {
         Column(Modifier.fillMaxSize()) {
             Row(
