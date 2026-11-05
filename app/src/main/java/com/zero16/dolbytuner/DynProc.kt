@@ -32,6 +32,11 @@ object DynProc {
 
     private var dp: DynamicsProcessing? = null
 
+    /** 输出增益（dB）：叠在 Limiter 的后级增益上，位于限幅之后，提升/衰减都明显 */
+    @Volatile
+    var outGainDb: Float = 0f
+        private set
+
     /** 上一次成功下发的配置（用于重建） */
     private var lastGain: Float = 0f
     private var lastLimiter: LimiterCfg = LimiterCfg()
@@ -141,19 +146,23 @@ object DynProc {
     }
 
     private fun applyLimiterTo(d: DynamicsProcessing, c: LimiterCfg) {
-        if (!c.enabled) {
+        val post = (c.postGainDb + outGainDb).coerceIn(-40f, 40f)
+        val needCarrier = kotlin.math.abs(outGainDb) > 0.05f
+        if (!c.enabled && !needCarrier) {
             runCatching { d.setLimiterAllChannelsTo(flatLimiter()) }
             return
         }
+        // 限幅关闭但输出增益不为 0 时，用一个“透明限幅”承载后级增益：
+        // ratio = 1、threshold = 0 → 不压缩，只提供 postGain
         val lim = DynamicsProcessing.Limiter(
             true,                                   // inUse
             true,                                   // enabled
             c.linkGroup.coerceIn(0, 3),
             c.attackMs.coerceIn(0.1f, 100f),
             c.releaseMs.coerceIn(1f, 5000f),
-            c.ratio.coerceIn(1f, 30f),
-            c.thresholdDb.coerceIn(-60f, 0f),
-            c.postGainDb.coerceIn(-40f, 40f)
+            if (c.enabled) c.ratio.coerceIn(1f, 30f) else 1f,
+            if (c.enabled) c.thresholdDb.coerceIn(-60f, 0f) else 0f,
+            post
         )
         val ok = runCatching { d.setLimiterAllChannelsTo(lim) }.isSuccess
         if (!ok) {
@@ -353,6 +362,15 @@ object DynProc {
         }
         if (!allOk) Log.w(TAG, "setInputGain(AllChannelsTo) failed, channel path only")
         status = String.format("输出增益 %+.1f dB", g)
+    }
+
+    /** 运行时改输出增益（限幅之后的总电平） */
+    @Synchronized
+    fun setOutGain(db: Float) {
+        outGainDb = db.coerceIn(-30f, 30f)
+        status = String.format("输出增益 %+.1f dB", outGainDb)
+        val d = dp ?: return
+        applyLimiterTo(d, lastLimiter)
     }
 
     /** 运行时改 Limiter */

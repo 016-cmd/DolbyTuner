@@ -1145,7 +1145,7 @@ private suspend fun applyDpPreset(
     if (d == null) return "预设里没有音效页参数"
     return withContext(Dispatchers.IO) {
         val ok = DynProc.start(
-            d.gain / 10f,
+            0f,
             DynProc.LimiterCfg(
                 enabled = d.limOn,
                 thresholdDb = d.lim.getOrElse(0) { -20 } / 10f,
@@ -1158,6 +1158,7 @@ private suspend fun applyDpPreset(
             applyDpMacros(dpMbc(d.mbc, d.mbcOn), bbOn, bbAmt, dsOn, dsAmt)
         )
         if (!ok) return@withContext "音效引擎启动失败"
+        DynProc.setOutGain(d.gain / 10f)
         DynProc.setPreEq(d.curve)
         if (d.postOn) DynProc.setPostEq(d.post, true)
         saveDpPrefs(ctx, d)
@@ -1378,6 +1379,7 @@ internal suspend fun resetDpOnly(ctx: Context) {
         runCatching {
             if (DynProc.running) {
                 DynProc.setInputGain(0f)
+                DynProc.setOutGain(0f)
                 DynProc.setPreEq(FloatArray(127))
                 DynProc.setLimiter(DynProc.LimiterCfg())
                 DynProc.setMbc(DynProc.defaultMbc())
@@ -2133,6 +2135,7 @@ private fun EffectsScreen() {
             withContext(Dispatchers.IO) {
                 runCatching {
                     DynProc.setInputGain(0f)
+                    DynProc.setOutGain(0f)
                     DynProc.setPreEq(FloatArray(127))
                     DynProc.setLimiter(
                         DynProc.LimiterCfg(
@@ -2317,10 +2320,11 @@ private fun EffectsScreen() {
             withContext(Dispatchers.IO) {
                 runCatching {
                     if (!DynProc.running) {
-                        DynProc.start(gDb, cfg(), toDynMbc(mbcStore))
+                        DynProc.start(0f, cfg(), toDynMbc(mbcStore))
                     } else {
-                        DynProc.setInputGain(gDb)
+                        DynProc.setInputGain(0f)
                     }
+                    DynProc.setOutGain(gDb)
                     DynProc.setPreEq(curve)
                     DynProc.setMbc(toDynMbc(mbcStore))
                     if (postOn) DynProc.setPostEq(postData.copyOf(), true)
@@ -2354,7 +2358,7 @@ private fun EffectsScreen() {
             val g = gain / 10f
             val v = gain
             scope.launch {
-                withContext(Dispatchers.IO) { DynProc.setInputGain(g) }
+                withContext(Dispatchers.IO) { DynProc.setOutGain(g) }
                 status = DynProc.status
                 prefs.edit().putInt("gain", v).apply()
             }
@@ -2782,10 +2786,15 @@ private fun EffectsScreen() {
             showSwitch = false,
         ) {
             FxSlider(
-                "增益", (if (gain > 0) "+$gain" else "$gain") + " dB",
-                gain, -15..15, dpOn,
+                "整体增益", (if (gain > 0) "+${gain / 10f}" else "${gain / 10f}") + " dB",
+                gain, -200..200, dpOn,
+                fmt = { String.format("%+.1f dB", it / 10f) },
                 onLive = { gain = it; applyGain() },
                 onDone = { gain = it; applyGain() }
+            )
+            Text(
+                "作用在限幅之后，提升和衰减都听得出；拖动时自动忽略等响补偿的叠加",
+                fontSize = 9.sp, lineHeight = 13.sp, color = cs.onSurfaceVariant
             )
         }
 
@@ -3216,7 +3225,9 @@ private fun FxSwitch(title: String, code: String, checked: Boolean, onChange: (B
 @Composable
 private fun FxSlider(
     title: String, valueText: String, value: Int, range: IntRange,
-    enabled: Boolean, onLive: (Int) -> Unit = {}, onDone: (Int) -> Unit
+    enabled: Boolean,
+    fmt: (Int) -> String = { it.toString() },
+    onLive: (Int) -> Unit = {}, onDone: (Int) -> Unit
 ) {
     // 与 GEQ 滑杆同一套做法：拖动期间以本地值为准，不被外部 state 回灌打断
     val en = enabled && LocalDpOn.current
@@ -3229,7 +3240,7 @@ private fun FxSlider(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(title, fontSize = 12.sp, color = if (en) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
             Text(
-                if (dragging) local.toInt().coerceIn(range.first, range.last).toString() else valueText,
+                if (dragging) fmt(local.toInt().coerceIn(range.first, range.last)) else valueText,
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
