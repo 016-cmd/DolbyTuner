@@ -67,8 +67,8 @@ object Appearance {
     val animLaunch = mutableStateOf(true)
 
     // ── 壁纸 ──
-    /** 壁纸来源：0 本地图 / 1 极光 / 2 晨雾 / 3 暖砂 */
-    val wallpaperKind = mutableStateOf(0)
+    /** 壁纸来源：0 本地图 / 1 绝区零 / 2 海风 / 3 微醺 */
+    val wallpaperKind = mutableStateOf(1)
     /** 壁纸压暗 0~60 */
     val wallpaperDim = mutableStateOf(0)
 
@@ -139,7 +139,7 @@ object Appearance {
         animPage.value = s.getBoolean("anim_page", true)
         animCard.value = s.getBoolean("anim_card", true)
         animLaunch.value = s.getBoolean("anim_launch", true)
-        wallpaperKind.value = s.getInt("wp_kind", 0).coerceIn(0, 3)
+        wallpaperKind.value = s.getInt("wp_kind", 1).coerceIn(0, 3)
         wallpaperDim.value = s.getInt("wp_dim", 0).coerceIn(0, 60)
         readLevel.value = s.getInt("read_level", 0).coerceIn(0, 2)
         if (s.contains("pal_secondary")) {

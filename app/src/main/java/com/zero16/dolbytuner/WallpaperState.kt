@@ -2,6 +2,7 @@ package com.zero16.dolbytuner
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
@@ -65,7 +66,7 @@ object WallpaperState {
         // 生成 720 宽即可——反正卡片玻璃是模糊采样，屏幕尺寸的锐度没意义
         val w = 720
         val h = (720f * screenHeightPx / screenWidthPx.coerceAtLeast(1)).toInt().coerceIn(720, 2400)
-        val bmp = generate(kind, w, h)
+        val bmp = generate(ctx, kind, w, h)
         apply(ctx, bmp, kind, dark, screenWidthPx, screenHeightPx, blurRadius)
     }
 
@@ -117,7 +118,38 @@ object WallpaperState {
     }
 
     // ── 内置壁纸生成 ──
-    private fun generate(kind: Int, w: Int, h: Int): Bitmap {
+    /** 内置壁纸对应的 assets 文件 */
+    private fun builtinAsset(kind: Int): String? = when (kind) {
+        1 -> "wp_zzz.jpg"
+        2 -> "wp_sea.jpg"
+        3 -> "wp_buzz.jpg"
+        else -> null
+    }
+
+    private fun generate(ctx: Context, kind: Int, w: Int, h: Int): Bitmap {
+        // 优先用 assets 里的图片（绝区零 / 海风 / 微醺）
+        val name = builtinAsset(kind)
+        if (name != null) {
+            val raw = runCatching {
+                ctx.assets.open(name).use { BitmapFactory.decodeStream(it) }
+            }.getOrNull()
+            if (raw != null) {
+                val scale = maxOf(w.toFloat() / raw.width, h.toFloat() / raw.height)
+                val nw = (raw.width * scale).toInt().coerceAtLeast(w)
+                val nh = (raw.height * scale).toInt().coerceAtLeast(h)
+                val scaled = Bitmap.createScaledBitmap(raw, nw, nh, true)
+                if (scaled !== raw) raw.recycle()
+                val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                val cc = Canvas(out)
+                cc.drawBitmap(
+                    scaled, ((w - nw) / 2f), ((h - nh) / 2f),
+                    Paint(Paint.FILTER_BITMAP_FLAG)
+                )
+                scaled.recycle()
+                return out
+            }
+        }
+        // 兜底：旧的渐变生成
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -181,9 +213,9 @@ object WallpaperState {
 
     /** 内置壁纸名字，给设置页用 */
     fun builtinName(k: Int): String = when (k) {
-        1 -> "极光"
-        2 -> "晨雾"
-        3 -> "暖砂"
+        1 -> "绝区零"
+        2 -> "海风"
+        3 -> "微醺"
         else -> "本地图片"
     }
 }

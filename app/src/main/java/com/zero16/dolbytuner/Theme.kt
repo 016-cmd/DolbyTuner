@@ -200,10 +200,10 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
                 wallpaperVersion++
             } catch (_: Exception) {}
         } else {
-            // 没有本地图 → 用「晨雾」兜底，避免黑屏
+            // 没有本地图 → 用「绝区零」兜底，避免黑屏
             withContext(Dispatchers.IO) {
                 WallpaperState.setBuiltin(
-                    ctx, 2, isDark, windowWidthPx, windowHeightPx, blurDp.toFloat()
+                    ctx, 1, isDark, windowWidthPx, windowHeightPx, blurDp.toFloat()
                 )
                 val bmp = WallpaperState.original
                 if (bmp != null) {

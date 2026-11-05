@@ -175,7 +175,7 @@ fun AppearanceSection(
                 )
                 SegRow(
                     "来源",
-                    listOf("本地", "极光", "晨雾", "暖砂"),
+                    listOf("本地", "绝区零", "海风", "微醺"),
                     Appearance.wallpaperKind.value
                 ) { onWallpaperKind(it) }
                 SegRow(
