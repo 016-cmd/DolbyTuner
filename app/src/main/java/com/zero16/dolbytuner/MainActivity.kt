@@ -585,7 +585,7 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                             label = "iconScale"
                         )
                         val tint = if (selected) colors.primary
-                        else colors.onSurfaceVariant.copy(alpha = if (isDark) 0.5f else 0.6f)
+                        else subInk(0.85f)
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center,
@@ -741,7 +741,7 @@ private fun GeqScreen(deviceLine: String) {
                 Text(
                     "提示：切到未绑定的设备时会自动重置为平直（GEQ 归零 + 音效默认），不想丢调音就把外放也绑上预设。",
                     fontSize = 9.sp, lineHeight = 13.sp,
-                    color = cs.onSurfaceVariant.copy(alpha = 0.8f)
+                    color = subInk(0.88f)
                 )
             }
         }
@@ -818,18 +818,18 @@ private fun GeqScreen(deviceLine: String) {
                 ) {
                     Icon(
                         Icons.Default.Swipe, null,
-                        tint = cs.onSurfaceVariant.copy(alpha = 0.55f), modifier = Modifier.size(12.dp)
+                        tint = subInk(0.75f), modifier = Modifier.size(12.dp)
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
                         "左右滑动查看 20 段 · 上下拖动调节 · 双击某段归零",
-                        color = cs.onSurfaceVariant.copy(alpha = 0.55f), fontSize = 9.sp
+                        color = subInk(0.85f), fontSize = 9.sp
                     )
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "单位：dB（1 段 = 1/16 dB）。合计建议不超过 +24 dB，超过 +10 dB 会标黄提示。",
-                    color = cs.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 9.sp, lineHeight = 13.sp
+                    color = subInk(0.85f), fontSize = 9.sp, lineHeight = 13.sp
                 )
                 Spacer(Modifier.height(10.dp))
                 HorizontalDivider(color = cs.outline)
@@ -889,7 +889,7 @@ private fun GeqScreen(deviceLine: String) {
                 ) {
                     Text(
                         "读不到实时值？点这里诊断", fontSize = 9.sp,
-                        color = cs.onSurfaceVariant.copy(alpha = 0.7f)
+                        color = subInk(0.9f)
                     )
                 }
                 Spacer(Modifier.height(4.dp))
@@ -905,7 +905,7 @@ private fun GeqScreen(deviceLine: String) {
                 Spacer(Modifier.height(12.dp))
                 Text(
                     fxStatus,
-                    fontSize = 9.sp, color = cs.onSurfaceVariant.copy(alpha = 0.75f)
+                    fontSize = 9.sp, color = subInk(0.88f)
                 )
             }
         }
@@ -3537,7 +3537,7 @@ private fun FxSlider(
     }
     Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(title, fontSize = 12.sp, color = if (en) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+            Text(title, fontSize = 12.sp, color = if (en) MaterialTheme.colorScheme.onSurface else subInk(0.8f))
             Text(
                 if (dragging) fmt(local.toInt().coerceIn(range.first, range.last)) else valueText,
                 fontSize = 12.sp, color = subInk()
@@ -4080,7 +4080,7 @@ private fun DolbyBadge(on: Boolean?, modifier: Modifier = Modifier) {
     val color = when (on) {
         true -> Color(0xFF22C55E)
         false -> Color(0xFFEF4444)
-        null -> cs.onSurfaceVariant.copy(alpha = 0.55f)
+        null -> subInk(0.8f)
     }
     val label = when (on) {
         true -> "生效中"

@@ -81,8 +81,8 @@ object Appearance {
     val colorVocal = mutableStateOf(Color(0xFF06B6D4))
     val colorDyn = mutableStateOf(Color(0xFFA855F7))
     val colorLimit = mutableStateOf(Color(0xFFF59E0B))
-    /** 可读性：0 关 / 1 自动 / 2 强 */
-    val readLevel = mutableStateOf(1)
+    /** 可读性：0 默认 / 2 增强（1 为旧「自动」档，仅兼容旧配置） */
+    val readLevel = mutableStateOf(0)
 
     // ── 存取 ──
     private fun putI(ctx: Context, key: String, st: MutableState<Int>, v: Int) {
@@ -141,7 +141,7 @@ object Appearance {
         animLaunch.value = s.getBoolean("anim_launch", true)
         wallpaperKind.value = s.getInt("wp_kind", 0).coerceIn(0, 3)
         wallpaperDim.value = s.getInt("wp_dim", 0).coerceIn(0, 60)
-        readLevel.value = s.getInt("read_level", 1).coerceIn(0, 2)
+        readLevel.value = s.getInt("read_level", 0).coerceIn(0, 2)
         if (s.contains("pal_secondary")) {
             secondary.value = Color(s.getInt("pal_secondary", 0xFF3B82F6.toInt()))
             tertiary.value = Color(s.getInt("pal_tertiary", 0xFFA855F7.toInt()))
@@ -216,7 +216,9 @@ object Appearance {
             else -> if (isDark) 0.20f else 0.30f   // 自动
         }
         val thick = when (thickness.value) { 0 -> 0.88f; 2 -> 1.12f; else -> 1f }
-        return (base * thick).coerceIn(0.12f, 0.80f)
+        // 可读性增强：卡片本身也压得更实一点，小字才有衬底
+        val boost = if (readLevel.value >= 2) 0.16f else 0f
+        return (base * thick + boost).coerceIn(0.12f, 0.92f)
     }
 
     /** 普通 Card 用的玻璃填充色（透壁纸，不染色） */

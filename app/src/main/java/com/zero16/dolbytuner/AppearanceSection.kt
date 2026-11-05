@@ -19,6 +19,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.DeleteAlternate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -34,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -179,27 +183,20 @@ fun AppearanceSection(
                     listOf("无", "轻", "中", "深"),
                     nearest(Appearance.wallpaperDim.value, intArrayOf(0, 20, 40, 60))
                 ) { Appearance.setWallpaperDim(ctx, intArrayOf(0, 20, 40, 60)[it]) }
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    if (hasLocalWallpaper) {
-                        TextButton(onClick = onClearWallpaper) {
-                            Text("清除本地壁纸", fontSize = 11.sp, color = subInk())
-                        }
-                    }
-                    TextButton(onClick = onPickWallpaper) {
-                        Text("从相册选择图片", fontSize = 11.sp, color = accent)
-                    }
+                Spacer(Modifier.height(4.dp))
+                if (hasLocalWallpaper) {
+                    WallButton("清除本地壁纸", Icons.Default.DeleteAlternate) { onClearWallpaper() }
+                    Spacer(Modifier.height(8.dp))
                 }
+                WallButton("从本地选择图片", Icons.Default.PhotoLibrary) { onPickWallpaper() }
 
                 // ── 可读性 ──
                 GroupLabel("文字")
-                SegRow(
-                    "可读性",
-                    listOf("关", "自动", "强"),
-                    Appearance.readLevel.value
-                ) { Appearance.setReadLevel(ctx, it) }
+                ToggleRow(
+                    "增强文字可读性",
+                    "透明卡片上看不清时打开：小字改成纯黑/纯白",
+                    Appearance.readLevel.value >= 2
+                ) { Appearance.setReadLevel(ctx, if (it) 2 else 0) }
 
                 // ── 页面 ──
                 GroupLabel("页面")
@@ -308,5 +305,27 @@ private fun SegRow(
                 )
             }
         }
+    }
+}
+
+
+/** Flowmix 风格的整宽白底按钮：用来放「从本地选择图片 / 清除本地壁纸」 */
+@Composable
+private fun WallButton(text: String, icon: ImageVector, onClick: () -> Unit) {
+    val ink = Color(0xFF1A1A1E)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.White.copy(alpha = 0.92f))
+            .jellyPress(Appearance.jelly.value > 0)
+            .clickable { onClick() },
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, null, tint = ink, modifier = Modifier.size(17.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(text, fontSize = 13.sp, color = ink, fontWeight = FontWeight.Medium)
     }
 }

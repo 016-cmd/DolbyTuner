@@ -30,13 +30,13 @@ private val LightBackground = Color(0xFFF5F5F7)
 private val LightSurface = Color(0xFFFFFFFF)
 private val LightSurfaceVariant = Color(0xFFEBEBF0)
 private val LightTextPrimary = Color(0xFF1A1A1E)
-private val LightTextSecondary = Color(0xFF6B6B78)
+private val LightTextSecondary = Color(0xFF3C3C46)
 
 private val DarkBackground = Color(0xFF0D0D0F)
 private val DarkSurface = Color(0xFF1A1A1E)
 private val DarkSurfaceVariant = Color(0xFF25252B)
 private val DarkTextPrimary = Color(0xFFEBEBF0)
-private val DarkTextSecondary = Color(0xFFB0B0B8)  // 提亮，深色卡片中可读
+private val DarkTextSecondary = Color(0xFFDCDCE4)  // 提亮：透明卡片上也能看清
 
 private val LightColorScheme = lightColorScheme(
     primary = AccentGreen,
@@ -88,21 +88,24 @@ private val DarkColorScheme = darkColorScheme(
  */
 /**
  * 卡片里的小字：
- *   可读性=关 → 跟主题（浅黑 / 深白）
- *   可读性=自动/强 → 跟**壁纸亮度**（壁纸暗→白字，壁纸亮→黑字）
+ *   默认 → 跟主题（纯黑 / 纯白，不再用灰）
+ *   增强 → 跟**壁纸亮度**反着来（壁纸暗→纯白，壁纸亮→纯黑），满不透明
  */
 @Composable
-fun subInk(alpha: Float = 0.78f): Color {
+fun subInk(alpha: Float = 0.82f): Color {
     val lvl = Appearance.readLevel.value
-    if (lvl == 0) {
-        return if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
-            Color.Black.copy(alpha = alpha)
-        else Color.White.copy(alpha = alpha.coerceAtLeast(0.82f))
-    }
     val darkWallpaper = WallpaperState.lum < 0.5f
-    val a = if (lvl >= 2) 0.96f else alpha.coerceAtLeast(0.82f)
-    return if (darkWallpaper) Color.White.copy(alpha = a)
-    else Color.Black.copy(alpha = a)
+    return when {
+        // 增强：纯黑/纯白，满不透明
+        lvl >= 2 -> if (darkWallpaper) Color.White else Color.Black
+        // 自动（旧档，UI 已不暴露，仅兼容旧配置）
+        lvl == 1 -> if (darkWallpaper) Color.White.copy(alpha = alpha.coerceAtLeast(0.92f))
+        else Color.Black.copy(alpha = alpha.coerceAtLeast(0.92f))
+        // 默认：跟主题，但比旧版更实
+        else -> if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
+            Color.Black.copy(alpha = alpha.coerceAtLeast(0.88f))
+        else Color.White.copy(alpha = alpha.coerceAtLeast(0.92f))
+    }
 }
 
 @Composable
