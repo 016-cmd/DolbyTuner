@@ -564,7 +564,15 @@ private fun GeqScreen(deviceLine: String) {
         Card(
             Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Accent.copy(alpha = 0.14f))
+            border = BorderStroke(
+                1.dp,
+                if (androidx.compose.foundation.isSystemInDarkTheme())
+                    Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.06f)
+            ),
+            colors = CardDefaults.cardColors(
+                containerColor = if (androidx.compose.foundation.isSystemInDarkTheme())
+                    Color.Black.copy(alpha = 0.58f) else Color.White.copy(alpha = 0.80f)
+            )
         ) {
             Column(Modifier.padding(14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2584,9 +2592,14 @@ private fun EffectsScreen() {
         Card(
             Modifier.fillMaxWidth().padding(vertical = 4.dp),
             shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, cEq.copy(alpha = if (debugOn) 0.7f else 0.3f)),
+                        border = BorderStroke(
+                1.dp,
+                if (androidx.compose.foundation.isSystemInDarkTheme())
+                    Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.06f)
+            ),
             colors = CardDefaults.cardColors(
-                containerColor = cEq.copy(alpha = if (debugOn) 0.16f else 0.07f)
+                containerColor = if (androidx.compose.foundation.isSystemInDarkTheme())
+                    Color.Black.copy(alpha = 0.58f) else Color.White.copy(alpha = 0.80f)
             )
         ) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {

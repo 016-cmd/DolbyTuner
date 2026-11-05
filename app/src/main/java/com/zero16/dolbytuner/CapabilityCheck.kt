@@ -222,8 +222,17 @@ internal fun CapabilitySection() {
     Card(
         Modifier.fillMaxWidth().padding(vertical = 4.dp),
         shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, Accent.copy(alpha = 0.32f)),
-        colors = CardDefaults.cardColors(containerColor = Accent.copy(alpha = 0.08f))
+        border = BorderStroke(
+            1.dp,
+            if (androidx.compose.foundation.isSystemInDarkTheme())
+                androidx.compose.ui.graphics.Color.White.copy(alpha = 0.10f)
+            else androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.06f)
+        ),
+        colors = CardDefaults.cardColors(
+            containerColor = if (androidx.compose.foundation.isSystemInDarkTheme())
+                androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.58f)
+            else androidx.compose.ui.graphics.Color.White.copy(alpha = 0.80f)
+        )
     ) {
         Row(
             Modifier.fillMaxWidth().padding(14.dp),
