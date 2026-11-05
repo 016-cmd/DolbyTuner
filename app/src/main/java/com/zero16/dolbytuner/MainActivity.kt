@@ -24,6 +24,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -133,7 +135,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 private val ALLOWED_BRANDS = setOf("xiaomi", "redmi", "poco")
-internal val Accent = Color(0xFF22C55E)
+/** 强调色：默认品牌绿，壁纸取色后会换成壁纸主色（图标 / 拉条 / 选中态都跟它走） */
+internal var Accent by androidx.compose.runtime.mutableStateOf(Color(0xFF22C55E))
 
 private fun sysProp(key: String): String = runCatching {
     val c = Class.forName("android.os.SystemProperties")
@@ -383,9 +386,13 @@ private fun MainApp(activity: Activity, deviceLine: String) {
         AnimatedContent(
             targetState = currentTab,
             transitionSpec = {
-                val dir = if (targetState > initialState) 1 else -1
-                (slideInHorizontally(tween(300)) { it * dir } + fadeIn(tween(300))) togetherWith
-                    (slideOutHorizontally(tween(300)) { -it * dir } + fadeOut(tween(300)))
+                if (!Appearance.animPage.value) {
+                    EnterTransition.None togetherWith ExitTransition.None
+                } else {
+                    val dir = if (targetState > initialState) 1 else -1
+                    (slideInHorizontally(tween(300)) { it * dir } + fadeIn(tween(300))) togetherWith
+                        (slideOutHorizontally(tween(300)) { -it * dir } + fadeOut(tween(300)))
+                }
             },
             modifier = Modifier.fillMaxSize().layerBackdrop(backdrop)
         ) { tab ->
@@ -414,12 +421,22 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                     backdrop = backdrop,
                     shape = { RoundedCornerShape(28.dp) },
                     effects = {
-                        vibrancy()
-                        blur(6.dp.toPx())
-                        lens(10.dp.toPx(), 18.dp.toPx())
+                        if (Appearance.enabled.value && Appearance.mode.value == GlassMode.LIQUID) {
+                            // 液态玻璃：折射 + 提亮
+                            vibrancy()
+                            blur(6.dp.toPx())
+                            lens(10.dp.toPx(), 18.dp.toPx())
+                        } else {
+                            // 毛玻璃：只做模糊，不加折射
+                            blur(Appearance.blur.value.blur.coerceIn(6f, 24f).dp.toPx())
+                        }
                     },
                     onDrawSurface = {
-                        drawRect(if (isDark) Color.Black.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.12f))
+                        val a = if (Appearance.mode.value == GlassMode.LIQUID) 0.15f else 0.26f
+                        drawRect(
+                            if (isDark) Color.Black.copy(alpha = a)
+                            else Color.White.copy(alpha = a + 0.06f)
+                        )
                     }
                 )
         ) {
@@ -3422,6 +3439,11 @@ private fun SettingsScreen(activity: Activity) {
     var hideRecents by remember { mutableStateOf(prefs.getBoolean("hide_recents", false)) }
     var keepAlive by remember { mutableStateOf(prefs.getBoolean("keepalive_job", false)) }
     var callMute by remember { mutableStateOf(prefs.getBoolean("call_mute_dp", false)) }
+    var showAppearance by remember { mutableStateOf(false) }
+    if (showAppearance) {
+        AppearanceScreen(onBack = { showAppearance = false })
+        return
+    }
     val notifPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     val phonePerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         if (!ok) android.widget.Toast.makeText(ctx, "没有电话状态权限，通话暂停不会生效", android.widget.Toast.LENGTH_LONG).show()
@@ -3734,6 +3756,29 @@ private fun SettingsScreen(activity: Activity) {
             Spacer(Modifier.height(8.dp))
         }
 
+        Spacer(Modifier.height(12.dp))
+        GlassCard(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { showAppearance = true },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Palette, null,
+                    tint = Accent, modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("外观与个性化", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "${Appearance.mode.value.label} · 模糊${Appearance.blur.value.label} · 壁纸与动效",
+                        fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text("›", fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         Spacer(Modifier.height(12.dp))
         GlassCard(Modifier.fillMaxWidth()) {
             Text("壁纸", fontSize = 13.sp, fontWeight = FontWeight.Bold)

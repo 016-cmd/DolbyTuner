@@ -119,6 +119,9 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
     val mode = ThemePrefs.getMode(ctx)
     val wallpaperUri = ThemePrefs.getWallpaperUri(ctx)
 
+    // 外观参数只加载一次（换了壁纸会重新算强调色）
+    LaunchedEffect(ctx) { Appearance.load(ctx) }
+
     val isDark = when (mode) {
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
@@ -134,7 +137,8 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
     var wallpaperVersion by remember { mutableIntStateOf(0) }
 
     // 窗口宽度或壁纸变化时重新计算 scale
-    LaunchedEffect(wallpaperUri, isDark, windowWidthPx) {
+    val glassBlur = Appearance.blur.value
+    LaunchedEffect(wallpaperUri, isDark, windowWidthPx, glassBlur) {
         if (wallpaperUri != null) {
             try {
                 withContext(Dispatchers.IO) {
@@ -146,16 +150,26 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
                         BitmapFactory.decodeFile(wallpaperUri)
                     }
                     if (bitmap != null) {
-                        WallpaperState.set(ctx, bitmap, isDark, windowWidthPx)
+                        WallpaperState.set(ctx, bitmap, isDark, windowWidthPx, glassBlur.blur)
+                        // 壁纸取色：卡片图标、拉条、选中态都跟着走
+                        val acc = Appearance.computeAccent(bitmap, isDark)
+                        withContext(Dispatchers.Main) { Appearance.cacheAccent(ctx, acc) }
                     }
                 }
-                wallpaperVersion++ // 触发重组
+                wallpaperVersion++
             } catch (_: Exception) {}
         } else {
             WallpaperState.clear()
-            wallpaperVersion++ // 触发重组
+            withContext(Dispatchers.Main) {
+                Appearance.cacheAccent(ctx, Color(0xFF22C55E))
+            }
+            wallpaperVersion++
         }
     }
+
+    // 把取色结果写进全局 Accent（普通 var，但读它的 Composable 会随重组拿到新值）
+    val accentNow = Appearance.accent.value
+    SideEffect { Accent = accentNow }
 
     // 读取 wallpaperVersion 确保 Compose 追踪变化
     val version = wallpaperVersion
@@ -174,7 +188,10 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
             // 全屏壁纸：直接用 WallpaperState 原始 Bitmap，与模糊壁纸同一来源
             @Suppress("UNUSED_EXPRESSION")
             version // 读取触发重组
-            val wallpaperBitmap = WallpaperState.original
+            // 毛玻璃模式：整屏用预模糊版（卡片模糊感来自这里）；液态模式用原图，保证透亮
+            val useBlur = Appearance.enabled.value && Appearance.mode.value == GlassMode.FROSTED
+            val wallpaperBitmap = if (useBlur) (WallpaperState.blurred ?: WallpaperState.original)
+            else WallpaperState.original
             if (wallpaperBitmap != null) {
                 Image(
                     bitmap = wallpaperBitmap.asImageBitmap(),

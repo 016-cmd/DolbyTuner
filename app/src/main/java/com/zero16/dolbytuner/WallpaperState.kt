@@ -25,12 +25,18 @@ object WallpaperState {
     var scale: Float = 1f
         private set
 
-    fun set(ctx: Context, bitmap: Bitmap, dark: Boolean, screenWidthPx: Int) {
+    fun set(
+        ctx: Context,
+        bitmap: Bitmap,
+        dark: Boolean,
+        screenWidthPx: Int,
+        blurRadius: Float = 16f
+    ) {
         val oldOriginal = original
         val oldBlurred = blurred
         // 先设置新图，再回收旧图 — 避免 Compose 读已回收 Bitmap 崩溃
         original = bitmap
-        blurred = BlurUtils.blur(ctx, bitmap, radius = 16f)
+        blurred = BlurUtils.blur(ctx, bitmap, radius = blurRadius)
         isDark = dark
         scale = if (blurred != null && blurred!!.width > 0) {
             screenWidthPx.toFloat() / blurred!!.width.toFloat()
