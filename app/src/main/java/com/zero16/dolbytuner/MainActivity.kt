@@ -39,6 +39,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -2474,7 +2475,8 @@ private fun EffectsScreen() {
                 Column(Modifier.weight(1f)) {
                     Text("DynamicsProcessing 引擎", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     Text(
-                        if (dpOn) status else "音效引擎未运行",
+                        if (CallGuard.muted.value) "通话中已暂停"
+                        else if (dpOn) status else "音效引擎未运行",
                         fontSize = 9.sp, lineHeight = 11.sp,
                         color = if (dpOn) accent else cs.onSurfaceVariant
                     )
@@ -2484,8 +2486,8 @@ private fun EffectsScreen() {
                     )
                 }
                 androidx.compose.material3.Switch(
-                    checked = dpOn, enabled = !busy,
-                    onCheckedChange = { toggleEngine(it) }
+                    checked = dpOn && !CallGuard.muted.value, enabled = !busy && !CallGuard.muted.value,
+                    onCheckedChange = { if (!CallGuard.muted.value) toggleEngine(it) }
                 )
             }
         }
@@ -3507,14 +3509,23 @@ private fun SettingsScreen(activity: Activity) {
             Spacer(Modifier.height(8.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
             Row(
-                Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable {
+                Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("重新下发监听通知", fontSize = 12.sp)
+                    Text(
+                        "按当前设备刷新一次常驻通知",
+                        fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                TextButton(
+                    onClick = {
                         if (!deviceService) {
                             android.widget.Toast.makeText(
                                 ctx, "请先开启「后台设备监听」", android.widget.Toast.LENGTH_SHORT
                             ).show()
-                            return@clickable
+                            return@TextButton
                         }
                         if (Build.VERSION.SDK_INT >= 33) {
                             notifPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -3528,24 +3539,22 @@ private fun SettingsScreen(activity: Activity) {
                         android.widget.Toast.makeText(
                             ctx, "已重新下发监听通知", android.widget.Toast.LENGTH_SHORT
                         ).show()
-                    }
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Default.Refresh, null,
-                    tint = Accent, modifier = Modifier.size(15.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text("重新下发监听通知", fontSize = 11.sp, color = Accent)
-                Spacer(Modifier.weight(1f))
-                Text(
-                    "按当前设备刷新一次常驻通知",
-                    fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                    },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Refresh, null,
+                        tint = Accent, modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text("下发", fontSize = 11.sp, color = Accent)
+                }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Column(Modifier.weight(1f)) {
                     Text("后台保活", fontSize = 12.sp)
                     Text(
@@ -3572,7 +3581,10 @@ private fun SettingsScreen(activity: Activity) {
                 )
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Column(Modifier.weight(1f)) {
                     Text("通话时暂停音效", fontSize = 12.sp)
                     Text(
@@ -3599,7 +3611,10 @@ private fun SettingsScreen(activity: Activity) {
                 )
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Column(Modifier.weight(1f)) {
                     Text("后台隐藏", fontSize = 12.sp)
                     Text(

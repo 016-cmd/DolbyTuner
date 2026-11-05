@@ -31,6 +31,8 @@ class DeviceAutomationService : Service() {
     private var pending: Runnable? = null
     /** 通话期间临时停掉音效页（不写偏好，通话结束照原样恢复） */
     private var phoneListener: PhoneStateListener? = null
+    private var recCallback: AudioManager.AudioRecordingCallback? = null
+    private var telephonyInCall = false
     private var dpMutedByCall = false
 
     private val callback = object : AudioDeviceCallback() {
@@ -76,6 +78,7 @@ class DeviceAutomationService : Service() {
     override fun onDestroy() {
         pending?.let { handler.removeCallbacks(it) }
         unregisterPhoneListener()
+        unregisterRecordingDetector()
         if (registered) {
             val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
             runCatching { am?.unregisterAudioDeviceCallback(callback) }
@@ -144,11 +147,19 @@ class DeviceAutomationService : Service() {
         }
     }
 
-    // ── 通话监听：来电/通话中临时关掉音效页，挂断后按本地记录恢复 ──
+    // ── 通话暂停：普通电话 + 微信/QQ 等 VoIP（靠音频模式判定） ──
     private fun syncPhoneListener() {
         val on = getSharedPreferences("dolby_tuner", Context.MODE_PRIVATE)
             .getBoolean("call_mute_dp", false)
-        if (on) registerPhoneListener() else unregisterPhoneListener()
+        if (on) {
+            registerPhoneListener()
+            registerRecordingDetector()
+        } else {
+            unregisterPhoneListener()
+        unregisterRecordingDetector()
+            unregisterRecordingDetector()
+            applyCallMute(false)
+        }
     }
 
     private fun registerPhoneListener() {
@@ -157,21 +168,9 @@ class DeviceAutomationService : Service() {
         @Suppress("DEPRECATION")
         val l = object : PhoneStateListener() {
             override fun onCallStateChanged(state: Int, phoneNumber: String?) {
-                when (state) {
-                    TelephonyManager.CALL_STATE_RINGING,
-                    TelephonyManager.CALL_STATE_OFFHOOK -> {
-                        if (!dpMutedByCall && DynProc.running) {
-                            dpMutedByCall = true
-                            scope.launch { runCatching { DynProc.stop() } }
-                        }
-                    }
-                    TelephonyManager.CALL_STATE_IDLE -> {
-                        if (dpMutedByCall) {
-                            dpMutedByCall = false
-                            scope.launch { runCatching { DpRestore.apply(this@DeviceAutomationService) } }
-                        }
-                    }
-                }
+                telephonyInCall = state == TelephonyManager.CALL_STATE_RINGING ||
+                        state == TelephonyManager.CALL_STATE_OFFHOOK
+                evaluateCallMute()
             }
         }
         val ok = runCatching {
@@ -188,6 +187,97 @@ class DeviceAutomationService : Service() {
             val tm = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
             @Suppress("DEPRECATION")
             tm?.listen(l, PhoneStateListener.LISTEN_NONE)
+        }
+    }
+
+    /**
+     * 微信/QQ 语音通话走的是 VoIP，TelephonyManager 不会报 OFFHOOK，
+     * 只会把 AudioManager 切到 MODE_IN_COMMUNICATION 并占用麦克风。
+     * 所以监听「录音配置变化」这一事件，再去看音频模式。
+     */
+    private fun registerRecordingDetector() {
+        if (recCallback != null) return
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        val cb = object : AudioManager.AudioRecordingCallback() {
+            override fun onRecordingConfigChanged(
+                configs: MutableList<AudioManager.AudioRecordingConfiguration>
+            ) {
+                handler.removeCallbacks(voipConfirm)
+                if (configs.isEmpty()) {
+                    // 麦克风释放：大概率通话结束
+                    evaluateCallMute()
+                    return
+                }
+                val am2 = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                val mode = am2?.mode ?: AudioManager.MODE_NORMAL
+                if (mode == AudioManager.MODE_IN_CALL ||
+                    mode == AudioManager.MODE_IN_COMMUNICATION
+                ) {
+                    applyCallMute(true)
+                } else {
+                    // 部分机型微信通话不切音频模式，只占麦克风：
+                    // 3 秒后麦克风还在被占用才算通话（避开「按住说话」这类短录音）
+                    handler.postDelayed(voipConfirm, 3000)
+                }
+            }
+        }
+        val ok = runCatching {
+            am.registerAudioRecordingCallback(cb, handler)
+            true
+        }.getOrDefault(false)
+        if (ok) recCallback = cb
+    }
+
+    private fun unregisterRecordingDetector() {
+        val cb = recCallback ?: return
+        recCallback = null
+        runCatching {
+            val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            am?.unregisterAudioRecordingCallback(cb)
+        }
+    }
+
+    /** 兜底确认：麦克风被持续占用也算通话中 */
+    private val voipConfirm = Runnable {
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        val mode = am?.mode ?: AudioManager.MODE_NORMAL
+        val inCall = mode == AudioManager.MODE_IN_CALL ||
+                mode == AudioManager.MODE_IN_COMMUNICATION
+        val recording = runCatching {
+            @Suppress("DEPRECATION")
+            am?.activeRecordingConfigurations?.isNotEmpty() == true
+        }.getOrDefault(false)
+        applyCallMute(telephonyInCall || inCall || recording)
+    }
+
+    /** 电话状态 + 音频模式，任一处于通话态就算在通话里 */
+    private fun evaluateCallMute() {
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        val mode = am?.mode ?: AudioManager.MODE_NORMAL
+        val voip = mode == AudioManager.MODE_IN_CALL ||
+                mode == AudioManager.MODE_IN_COMMUNICATION
+        applyCallMute(telephonyInCall || voip)
+    }
+
+    private fun applyCallMute(inCall: Boolean) {
+        val prefs = getSharedPreferences("dolby_tuner", Context.MODE_PRIVATE)
+        if (!prefs.getBoolean("call_mute_dp", false)) {
+            CallGuard.muted.value = false
+            return
+        }
+        if (inCall) {
+            if (!dpMutedByCall && DynProc.running) {
+                dpMutedByCall = true
+                scope.launch { runCatching { DynProc.stop() } }
+            }
+            // 通话中：记录里开着就在 UI 上显示为关
+            CallGuard.muted.value = DpRestore.isOn(this)
+        } else {
+            if (dpMutedByCall) {
+                dpMutedByCall = false
+                scope.launch { runCatching { DpRestore.apply(this@DeviceAutomationService) } }
+            }
+            CallGuard.muted.value = false
         }
     }
 
