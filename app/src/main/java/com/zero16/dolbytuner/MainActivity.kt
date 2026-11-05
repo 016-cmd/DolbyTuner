@@ -4002,7 +4002,7 @@ private fun SettingsScreen(activity: Activity) {
                 icon = Icons.Default.Refresh, title = "重新查看引导",
                 subtitle = "再看一遍首次使用说明", selected = false
             ) {
-                getSharedPreferences("dolby_tuner", MODE_PRIVATE).edit()
+                ctx.getSharedPreferences("dolby_tuner", Context.MODE_PRIVATE).edit()
                     .putBoolean("onboard_done", false).apply()
                 activity.recreate()
             }
