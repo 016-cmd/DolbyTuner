@@ -1193,7 +1193,19 @@ private suspend fun applyDpPreset(
     autoGain: Boolean = false
 ): String? {
     if (d == null) return "预设里没有音效页参数"
+    val engineOn = ctx.getSharedPreferences("dynproc", Context.MODE_PRIVATE)
+        .getBoolean("on", false)
     return withContext(Dispatchers.IO) {
+        // 总开关关着：只记录参数，等用户自己开开关时再下发
+        if (!engineOn) {
+            saveDpPrefs(ctx, d)
+            ctx.getSharedPreferences("dynproc", Context.MODE_PRIVATE).edit()
+                .putBoolean("bb_on", bbOn).putInt("bb_amt", bbAmt)
+                .putBoolean("ds_on", dsOn).putInt("ds_amt", dsAmt)
+                .putBoolean("auto_gain", autoGain)
+                .apply()
+            return@withContext null
+        }
         val ok = DynProc.start(
             0f,
             DynProc.LimiterCfg(
@@ -1427,6 +1439,8 @@ internal fun resetDpPrefsToDefault(ctx: Context) {
 /** 音效页（DP）参数与运行中的 DSP 一并恢复默认 */
 internal suspend fun resetDpOnly(ctx: Context) {
     resetDpPrefsToDefault(ctx)
+    // 总开关没开：只把记录复位，不去碰 DSP，也绝不把开关打开
+    if (!ctx.getSharedPreferences("dynproc", Context.MODE_PRIVATE).getBoolean("on", false)) return
     withContext(Dispatchers.IO) {
         runCatching {
             if (DynProc.running) {
