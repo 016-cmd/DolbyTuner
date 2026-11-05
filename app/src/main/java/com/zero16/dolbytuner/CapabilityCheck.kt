@@ -56,9 +56,25 @@ internal data class CapResult(val total: Int, val usable: Int, val file: String)
 internal object AudioCap {
 
     private fun modeName(m: Int): String = when (m) {
-        AudioEffect.EFFECT_CONNECT_MODE_INSERT -> "插入式 INSERT（跟随单个播放器）"
-        AudioEffect.EFFECT_CONNECT_MODE_AUXILIARY -> "辅助式 AUX（挂在混音总线上）"
+        0x01000000 -> "插入式 INSERT（跟随单个播放器）"
+        0x02000000 -> "辅助式 AUX（挂在混音总线上）"
         else -> "其它模式($m)"
+    }
+
+    /** AudioEffect 的四参构造在 SDK 里被隐藏了，只能反射拿 */
+    private val ctor: java.lang.reflect.Constructor<*> by lazy {
+        AudioEffect::class.java.getDeclaredConstructor(
+            UUID::class.java,
+            UUID::class.java,
+            Int::class.javaPrimitiveType,
+            Int::class.javaPrimitiveType
+        ).apply { isAccessible = true }
+    }
+
+    /** 尝试建一个实例；成功返回对象（调用方负责 release），失败返回 null */
+    private fun tryCreate(type: UUID?, impl: UUID?): AudioEffect? {
+        if (type == null || impl == null) return null
+        return runCatching { ctor.newInstance(type, impl, 0, 0) as AudioEffect }.getOrNull()
     }
 
     private val TARGETS = listOf(
@@ -102,26 +118,26 @@ internal object AudioCap {
             var canCreate = "失败"
             var ctl = "—"
             val t0 = System.currentTimeMillis()
-            val ok = runCatching {
-                val e = AudioEffect(d.type, d.implementation, 0, 0)
+            val e0 = tryCreate(d.type, d.uuid)
+            if (e0 != null) {
                 try {
                     canCreate = "可以"
-                    val has = runCatching { e.hasControl() }.getOrDefault(false)
+                    val has = runCatching { e0.hasControl() }.getOrDefault(false)
                     ctl = if (has) "可以" else "否（已被占用）"
                     if (has) {
                         usable++
                         usableNames.add(name)
                     }
                 } finally {
-                    runCatching { e.release() }
+                    runCatching { e0.release() }
                 }
-            }.isSuccess
+            }
             val cost = System.currentTimeMillis() - t0
             sb.appendLine("[${idx + 1}] $name")
             sb.appendLine("    type：${d.type}")
-            sb.appendLine("    impl：${d.implementation}")
+            sb.appendLine("    impl：${d.uuid}")
             sb.appendLine("    接入：${modeName(d.connectMode)}")
-            sb.appendLine("    新建：$canCreate${if (ok) "（${cost}ms）" else "（构造抛异常，多为系统独占）"}")
+            sb.appendLine("    新建：$canCreate${if (e0 != null) "（${cost}ms）" else "（构造失败，多为系统独占）"}")
             sb.appendLine("    控制权：$ctl")
             sb.appendLine()
         }
@@ -131,19 +147,19 @@ internal object AudioCap {
         TARGETS.forEach { (label, uuidStr) ->
             val uuid = runCatching { UUID.fromString(uuidStr) }.getOrNull()
             val hit = if (uuid == null) null else list.firstOrNull {
-                it.type == uuid || it.implementation == uuid
+                it.type == uuid || it.uuid == uuid
             }
             val verdict = when {
                 uuid == null -> "UUID 写法有误"
                 hit == null -> "系统没有注册这个音效"
                 else -> {
-                    val e2 = runCatching {
-                        val e = AudioEffect(hit.type, hit.implementation, 0, 0)
-                        val has = runCatching { e.hasControl() }.getOrDefault(false)
-                        runCatching { e.release() }
-                        has
+                    val e2 = tryCreate(hit.type, hit.uuid)
+                    val has = if (e2 == null) false else {
+                        val h = runCatching { e2.hasControl() }.getOrDefault(false)
+                        runCatching { e2.release() }
+                        h
                     }
-                    if (e2.getOrDefault(false)) "有注册，且能取得控制权 → 可用"
+                    if (has) "有注册，且能取得控制权 → 可用"
                     else "有注册，但拿不到控制权（可能被别的应用占着）"
                 }
             }
