@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 底部导航「Dolby」页图标：左右对称的两个 D 形（镜像） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M2,4 L5,4 A6,7.5 0 0,1 5,19 L2,19 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M22,4 L19,4 A6,7.5 0 0,0 19,19 L22,19 Z" />
+</vector>

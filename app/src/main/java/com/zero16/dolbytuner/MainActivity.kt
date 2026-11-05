@@ -113,6 +113,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -150,7 +151,7 @@ private fun realModelName(): String {
 }
 
 private data class GateResult(val passed: Boolean, val reasons: List<String>, val deviceLine: String)
-private data class DockTab(val label: String, val icon: ImageVector)
+private data class DockTab(val label: String, val icon: ImageVector, val resId: Int? = null)
 
 class MainActivity : ComponentActivity() {
 
@@ -428,7 +429,7 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 listOf(
-                    DockTab("Dolby", Icons.Default.Equalizer),
+                    DockTab("Dolby", Icons.Default.Equalizer, R.drawable.dolby_mark),
                     DockTab("音效", Icons.Default.Tune),
                     DockTab("配置", Icons.Default.Bookmarks),
                     DockTab("设置", Icons.Default.Settings)
@@ -450,7 +451,14 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                                 .padding(horizontal = 18.dp, vertical = 4.dp),
                             verticalArrangement = Arrangement.Center
                         ) {
-                            Icon(tab.icon, tab.label, Modifier.size(20.dp), tint = tint)
+                            if (tab.resId != null) {
+                                Icon(
+                                    painterResource(tab.resId), tab.label,
+                                    Modifier.size(20.dp), tint = tint
+                                )
+                            } else {
+                                Icon(tab.icon, tab.label, Modifier.size(20.dp), tint = tint)
+                            }
                             Text(tab.label, fontSize = 9.sp, lineHeight = 11.sp, color = tint)
                         }
                     }

@@ -217,8 +217,8 @@ class DeviceAutomationService : Service() {
                     applyCallMute(true)
                 } else {
                     // 部分机型微信通话不切音频模式，只占麦克风：
-                    // 3 秒后麦克风还在被占用才算通话（避开「按住说话」这类短录音）
-                    handler.postDelayed(voipConfirm, 3000)
+                    // 6 秒后麦克风还在被占用才算通话（避开「按住说话」这类短录音）
+                    handler.postDelayed(voipConfirm, 6000)
                 }
             }
         }
