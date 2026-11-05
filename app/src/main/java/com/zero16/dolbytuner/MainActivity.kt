@@ -3650,15 +3650,26 @@ private fun SettingsScreen(activity: Activity) {
         }
     }
 
-    Column(
-        Modifier.fillMaxWidth().statusBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp).padding(bottom = 8.dp)
+    LazyColumn(
+        Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 14.dp).padding(bottom = 8.dp)
     ) {
+        item {
         Spacer(Modifier.height(14.dp))
+        }
+        item {
         Text("设置", fontSize = 25.sp, fontWeight = FontWeight.Bold)
+        }
+        item {
         Spacer(Modifier.height(12.dp))
+        }
+        item {
         CapabilitySection()
+        }
+        item {
         Spacer(Modifier.height(10.dp))
+        }
 
+        item {
         GlassCard(Modifier.fillMaxWidth()) {
             Text("外观", fontSize = 13.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
@@ -3681,8 +3692,12 @@ private fun SettingsScreen(activity: Activity) {
                 ThemePrefs.setMode(ctx, ThemeMode.SYSTEM); activity.recreate()
             }
         }
+        }
 
+        item {
         Spacer(Modifier.height(12.dp))
+        }
+        item {
         GlassCard(Modifier.fillMaxWidth()) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -3712,7 +3727,11 @@ private fun SettingsScreen(activity: Activity) {
                 )
             }
         }
+        }
+        item {
         Spacer(Modifier.height(12.dp))
+        }
+        item {
         GlassCard(Modifier.fillMaxWidth()) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -3873,7 +3892,11 @@ private fun SettingsScreen(activity: Activity) {
                 )
             }
         }
+        }
+        item {
         Spacer(Modifier.height(12.dp))
+        }
+        item {
         GlassCard(Modifier.fillMaxWidth()) {
             Text("DSP音效默认值", fontSize = 13.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
@@ -3912,8 +3935,12 @@ private fun SettingsScreen(activity: Activity) {
             )
             Spacer(Modifier.height(8.dp))
         }
+        }
 
+        item {
         Spacer(Modifier.height(12.dp))
+        }
+        item {
         AppearanceSection(
             onPickWallpaper = {
                 picker.launch(
@@ -3937,7 +3964,11 @@ private fun SettingsScreen(activity: Activity) {
                 }
             }
         )
+        }
+        item {
         Spacer(Modifier.height(12.dp))
+        }
+        item {
         GlassCard(Modifier.fillMaxWidth()) {
             Text("关于", fontSize = 13.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
@@ -3949,11 +3980,16 @@ private fun SettingsScreen(activity: Activity) {
                 subtitle = "Apache-2.0", selected = false
             ) { showLicense = true }
         }
+        }
+        item {
         Spacer(Modifier.height(12.dp))
+        }
+        item {
         Text(
             "Dolby Tuner · 无 root 方案\nGEQ 通过 Dolby DAP 参数 110 实时写入",
             fontSize = 10.sp, color = subInk()
         )
+        }
     }
 
     if (showBootDialog) {
