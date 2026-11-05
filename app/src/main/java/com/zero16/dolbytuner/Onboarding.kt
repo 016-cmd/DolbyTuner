@@ -158,6 +158,7 @@ fun OnboardingScreen(
 
     var busy by remember { mutableStateOf(false) }
     var errMsg by remember { mutableStateOf<String?>(null) }
+    var baseDone by remember { mutableStateOf(baseCaptured) }
 
     fun finish() {
         fix.edit().putBoolean("onboard_done", true)
@@ -192,7 +193,6 @@ fun OnboardingScreen(
     var bootFail by remember { mutableStateOf(false) }
     var showDeviceGuide by remember { mutableStateOf(false) }
     var showKeepGuide by remember { mutableStateOf(false) }
-    var baseDone by remember { mutableStateOf(baseCaptured) }
     val notifPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     fun startDeviceService() {
