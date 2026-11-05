@@ -2530,7 +2530,11 @@ private fun EffectsScreen() {
                                 onChange = { q4 -> pushGeq(i, q4) },
                                 maxAbsQ4 = 320,
                                 trackHeight = 200.dp,
-                                accent = cEq
+                                accent = cEq,
+                                trackColor = cs.outline.copy(alpha = 0.30f),
+                                tickColor = cs.onSurfaceVariant,
+                                valueColor = cs.onSurfaceVariant,
+                                freqColor = cs.onSurfaceVariant
                             )
                         }
                     }

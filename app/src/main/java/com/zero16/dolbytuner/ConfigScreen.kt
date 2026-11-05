@@ -238,7 +238,7 @@ internal fun ConfigScreen() {
                     Spacer(Modifier.height(6.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf(
-                            SCOPE_DOLBY to "杜比",
+                            SCOPE_DOLBY to "Dolby",
                             SCOPE_DP to "DP",
                             SCOPE_BOTH to "两者"
                         ).forEach { (v, label) ->
