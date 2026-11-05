@@ -2630,13 +2630,16 @@ private fun EffectsScreen() {
                         item {
                             Box(
                                 Modifier.width(80.dp)
-                                    .height(78.dp)
+                                    .heightIn(min = 92.dp)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(cEq.copy(alpha = 0.10f))
+                                    .background(cEq.copy(alpha = 0.12f))
                                     .clickable(enabled = dpOn) { addPeq() },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text("+", fontSize = 22.sp, color = cEq)
+                                Icon(
+                                    Icons.Default.Add, null,
+                                    Modifier.size(32.dp), tint = cEq
+                                )
                             }
                         }
                     }
