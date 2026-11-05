@@ -468,7 +468,7 @@ internal fun ConfigScreen() {
                             Text(
                                 "实时层只在这次开机内有效：想让它重启手机后仍然沿用，请到「音效」页点『保存到 Dolby（GEQ + 音效）』。",
                                 fontSize = 10.sp, lineHeight = 15.sp,
-                                color = hintInk(Color(0xFFB45309), Color(0xFFFBBF24))
+                                color = Appearance.colorLimit.value
                             )
                         }
                         else -> {
@@ -480,7 +480,7 @@ internal fun ConfigScreen() {
                             Text(
                                 "杜比部分只在这次开机内有效：想让它重启后仍然沿用，请到「音效」页点『保存到 Dolby（GEQ + 音效）』。",
                                 fontSize = 10.sp, lineHeight = 15.sp,
-                                color = hintInk(Color(0xFFB45309), Color(0xFFFBBF24))
+                                color = Appearance.colorLimit.value
                             )
                             Spacer(Modifier.height(6.dp))
                             Text(
@@ -510,9 +510,10 @@ private fun PresetBigCard(
     onDelete: () -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
-    val light = Color(0xFFF0FDF4)
-    val mid = Color(0xFFBBF7D0)
-    val deep = Color(0xFF22C55E)
+    val deep = Appearance.accent.value
+    val pale = if (cs.background.luminance() > 0.5f) Color.White else Color.Black
+    val light = androidx.compose.ui.graphics.lerp(deep, pale, 0.90f)
+    val mid = androidx.compose.ui.graphics.lerp(deep, pale, 0.50f)
     val ink = cs.onSurface
 
     var cpos by remember { mutableStateOf(Offset.Zero) }
@@ -734,7 +735,7 @@ private fun DetailTitle(text: String, cs: androidx.compose.material3.ColorScheme
         text,
         fontSize = 11.sp,
         fontWeight = FontWeight.Bold,
-        color = if (cs.background.luminance() > 0.5f) Color(0xFF14532D) else Color(0xFF86EFAC)
+        color = Appearance.accent.value
     )
     Spacer(Modifier.height(4.dp))
 }

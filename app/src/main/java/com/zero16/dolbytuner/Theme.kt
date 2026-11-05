@@ -151,7 +151,26 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
         ThemeMode.DARK -> true
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
     }
-    val colorScheme = if (isDark) DarkColorScheme else LightColorScheme
+    val colorScheme = run {
+        val base = if (isDark) DarkColorScheme else LightColorScheme
+        val accent = Appearance.accent.value
+        val second = Appearance.secondary.value
+        val third = Appearance.tertiary.value
+        base.copy(
+            primary = accent,
+            onPrimary = if (accent.luminance() > 0.55f) Color(0xFF101014) else Color.White,
+            primaryContainer = accent.copy(alpha = 0.20f),
+            onPrimaryContainer = accent,
+            secondary = second,
+            onSecondary = if (second.luminance() > 0.55f) Color(0xFF101014) else Color.White,
+            secondaryContainer = second.copy(alpha = 0.18f),
+            onSecondaryContainer = second,
+            tertiary = third,
+            onTertiary = if (third.luminance() > 0.55f) Color(0xFF101014) else Color.White,
+            tertiaryContainer = third.copy(alpha = 0.18f),
+            onTertiaryContainer = third
+        )
+    }
 
     // 用 onSizeChanged 获取真实窗口宽度 → WallpaperState.scale（Scene 同款：rootView.width/192）
     var windowWidthPx by remember { mutableIntStateOf(1080) }

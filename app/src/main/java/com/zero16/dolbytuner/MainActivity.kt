@@ -973,7 +973,7 @@ private fun GeqScreen(deviceLine: String) {
                             TextButton(onClick = {
                                 DeviceTuningStore.unbind(ctx, b.key)
                                 DeviceState.sync(ctx)
-                            }) { Text("删除", fontSize = 11.sp, color = hintInk(Color(0xFFB45309), Color(0xFFFBBF24))) }
+                            }) { Text("删除", fontSize = 11.sp, color = Appearance.colorLimit.value) }
                         }
                     }
                 }
@@ -1901,10 +1901,10 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
                         } else {
                             Text("• 音效恢复内置默认：环绕 / 人声增强 / 低音增强全部关闭，低音增益与带宽归 0", fontSize = 11.sp, color = cs.onSurfaceVariant)
                             Spacer(Modifier.height(4.dp))
-                            Text("尚未检测本机音效默认参数，当前使用的是内置默认值。", fontSize = 11.sp, color = hintInk(Color(0xFFB45309), Color(0xFFFBBF24)))
+                            Text("尚未检测本机音效默认参数，当前使用的是内置默认值。", fontSize = 11.sp, color = Appearance.colorLimit.value)
                         }
                         Spacer(Modifier.height(6.dp))
-                        Text("会立即写入 Dolby 并自动保存，重启后仍是重置状态。此操作不可撤销。", fontSize = 11.sp, color = hintInk(Color(0xFFB45309), Color(0xFFFBBF24)))
+                        Text("会立即写入 Dolby 并自动保存，重启后仍是重置状态。此操作不可撤销。", fontSize = 11.sp, color = Appearance.colorLimit.value)
                     }
                 },
                 confirmButton = {
@@ -1923,7 +1923,7 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
                                 else -> "已恢复为内置默认值（未检测本机参数）"
                             }
                         }
-                    }) { Text("重置", color = hintInk(Color(0xFFB45309), Color(0xFFFBBF24)), fontWeight = FontWeight.Bold, fontSize = 12.sp) }
+                    }) { Text("重置", color = Appearance.colorLimit.value, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
                 },
                 dismissButton = {
                     TextButton(onClick = { showResetConfirm = false }) { Text("取消", fontSize = 12.sp) }
@@ -2760,7 +2760,7 @@ private fun EffectsScreen() {
                     if (debugOn) "杜比 GEQ 已切平直 · 当前 EQ 由 DP 接管"
                     else "打开右侧开关后杜比 GEQ 临时平直，改由 DP 调节",
                     fontSize = 9.sp,
-                    color = if (debugOn) Color(0xFF10B981) else cs.onSurfaceVariant
+                    color = if (debugOn) Appearance.accent.value else cs.onSurfaceVariant
                 )
                 Spacer(Modifier.height(6.dp))
 
@@ -2776,7 +2776,7 @@ private fun EffectsScreen() {
                         if (aeqCurve != null) "AutoEQ 曲线生效中 · 127 点"
                         else "可从 AutoEQ 的 GraphicEQ 文本导入整条曲线",
                         fontSize = 9.sp,
-                        color = if (aeqCurve != null) Color(0xFF10B981) else cs.onSurfaceVariant,
+                        color = if (aeqCurve != null) Appearance.accent.value else cs.onSurfaceVariant,
                         modifier = Modifier.weight(1f)
                     )
                     if (aeqCurve != null) {
@@ -4002,7 +4002,7 @@ private fun SettingsScreen(activity: Activity) {
             text = {
                 Column {
                     if (bootDialogFailed) {
-                        Text("无法自动打开自启动设置。", fontSize = 12.sp, color = hintInk(Color(0xFFB45309), Color(0xFFFBBF24)))
+                        Text("无法自动打开自启动设置。", fontSize = 12.sp, color = Appearance.colorLimit.value)
                         Spacer(Modifier.height(6.dp))
                     }
                     Text("已开启。请允许 Dolby Tuner 自启动，否则重启后系统不会唤醒 APP 写回参数。", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
@@ -4140,7 +4140,7 @@ private fun SettingRow(
 private fun DolbyBadge(on: Boolean?, modifier: Modifier = Modifier) {
     val cs = MaterialTheme.colorScheme
     val color = when (on) {
-        true -> Color(0xFF22C55E)
+        true -> Appearance.accent.value
         false -> Color(0xFFEF4444)
         null -> subInk(0.8f)
     }
