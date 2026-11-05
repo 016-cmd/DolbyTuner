@@ -120,7 +120,8 @@ internal fun ConfigScreen() {
                         dpUnpack(dstr),
                         o.optInt("scope", SCOPE_DOLBY),
                         o.optInt("bb", 0) == 1, o.optInt("bba", 60),
-                        o.optInt("ds", 0) == 1, o.optInt("dsa", 40)
+                        o.optInt("ds", 0) == 1, o.optInt("dsa", 40),
+                        o.optInt("ag", 0) == 1
                     )
                 }
                 val merged = (presets + incoming).distinctBy { it.name }
@@ -285,7 +286,8 @@ internal fun ConfigScreen() {
                             Preset(
                                 name, loadGeq(ctx), loadFx(ctx), dp, saveScope,
                                 dpPrefs.getBoolean("bb_on", false), dpPrefs.getInt("bb_amt", 60),
-                                dpPrefs.getBoolean("ds_on", false), dpPrefs.getInt("ds_amt", 40)
+                                dpPrefs.getBoolean("ds_on", false), dpPrefs.getInt("ds_amt", 40),
+                                dpPrefs.getBoolean("auto_gain", false)
                             )
                     )
                     reload()
@@ -418,8 +420,11 @@ internal fun ConfigScreen() {
                     val name = p.name
                     deleteTarget = null
                     writePresets(ctx, presets.filterNot { it.name == name })
+                    // 指向这个预设的设备绑定一起清掉，否则主页会挂着一个不存在的预设
+                    val freed = DeviceTuningStore.unbindPreset(ctx, name)
+                    DeviceState.sync(ctx)
                     reload()
-                    status = "已删除：$name"
+                    status = if (freed > 0) "已删除：$name（同时解绑 $freed 个设备）" else "已删除：$name"
                 }) { Text("删除", color = hintInk(Color(0xFFDC2626), Color(0xFFF87171)), fontSize = 12.sp) }
             },
             dismissButton = {
@@ -686,6 +691,7 @@ private fun PresetDetailDialog(p: Preset, onClose: () -> Unit) {
                         if (p.bbOn) String.format("开 · +%.1f dB", p.bbAmt / 10f) else "关", cs
                     )
                     DetailRow("齿音抑制", if (p.dsOn) "开 · ${p.dsAmt}%" else "关", cs)
+                    DetailRow("等比增益", mark(p.autoGain), cs)
                     DetailTitle("音效页（DP）· 后置均衡", cs)
 
                     DetailRow("后置均衡", mark(d.postOn), cs)

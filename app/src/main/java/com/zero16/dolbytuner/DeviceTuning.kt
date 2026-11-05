@@ -127,6 +127,14 @@ object DeviceTuningStore {
         write(ctx, load(ctx).filterNot { it.key == key })
     }
 
+    /** 预设被删除时，把所有指向它的设备解绑；返回解绑数量 */
+    fun unbindPreset(ctx: Context, presetName: String): Int {
+        val all = load(ctx)
+        val keep = all.filterNot { it.presetName == presetName }
+        if (keep.size != all.size) write(ctx, keep)
+        return all.size - keep.size
+    }
+
     private fun write(ctx: Context, list: List<DeviceBinding>) {
         val obj = JSONObject()
         list.forEach { b ->

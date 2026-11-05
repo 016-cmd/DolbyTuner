@@ -920,7 +920,9 @@ internal data class Preset(
     val bbOn: Boolean = false,
     val bbAmt: Int = 60,
     val dsOn: Boolean = false,
-    val dsAmt: Int = 40
+    val dsAmt: Int = 40,
+    /** 等比增益：按曲线自动反向补偿 */
+    val autoGain: Boolean = false
 )
 
 // ── 预设 JSON 的读写工具：杜比侧字段 + 音效页两个宏 ──
@@ -954,6 +956,7 @@ internal fun org.json.JSONObject.putDpMacros(p: Preset) {
     put("bba", p.bbAmt)
     put("ds", if (p.dsOn) 1 else 0)
     put("dsa", p.dsAmt)
+    put("ag", if (p.autoGain) 1 else 0)
 }
 
 internal fun loadFx(ctx: Context): FxState {
@@ -1008,7 +1011,8 @@ internal fun loadPresets(ctx: Context): List<Preset> {
                     dpUnpack(dstr),
                     o.optInt("scope", SCOPE_DOLBY),
                     o.optInt("bb", 0) == 1, o.optInt("bba", 60),
-                    o.optInt("ds", 0) == 1, o.optInt("dsa", 40)
+                    o.optInt("ds", 0) == 1, o.optInt("dsa", 40),
+                    o.optInt("ag", 0) == 1
                 )
             }.getOrNull()
         }
@@ -1131,7 +1135,7 @@ internal suspend fun applyPreset(ctx: Context, p: Preset): String? {
     var e: String? = null
     if (p.scope == SCOPE_DOLBY || p.scope == SCOPE_BOTH) e = applyDolbyPreset(ctx, p)
     if (e == null && (p.scope == SCOPE_DP || p.scope == SCOPE_BOTH)) {
-        e = applyDpPreset(ctx, p.dp, p.bbOn, p.bbAmt, p.dsOn, p.dsAmt)
+        e = applyDpPreset(ctx, p.dp, p.bbOn, p.bbAmt, p.dsOn, p.dsAmt, p.autoGain)
     }
     return e
 }
@@ -1140,7 +1144,8 @@ private suspend fun applyDpPreset(
     ctx: Context,
     d: DpSnapshot?,
     bbOn: Boolean = false, bbAmt: Int = 60,
-    dsOn: Boolean = false, dsAmt: Int = 40
+    dsOn: Boolean = false, dsAmt: Int = 40,
+    autoGain: Boolean = false
 ): String? {
     if (d == null) return "预设里没有音效页参数"
     return withContext(Dispatchers.IO) {
@@ -1165,6 +1170,7 @@ private suspend fun applyDpPreset(
         ctx.getSharedPreferences("dynproc", Context.MODE_PRIVATE).edit()
             .putBoolean("bb_on", bbOn).putInt("bb_amt", bbAmt)
             .putBoolean("ds_on", dsOn).putInt("ds_amt", dsAmt)
+            .putBoolean("auto_gain", autoGain)
             .apply()
         null
     }
@@ -1365,6 +1371,7 @@ internal fun resetDpPrefsToDefault(ctx: Context) {
         .putString("geq_int", IntArray(DapRealtime.BANDS) { 100 }.joinToString(","))
         .putBoolean("bb_on", false).putInt("bb_amt", 60)
         .putBoolean("ds_on", false).putInt("ds_amt", 40)
+        .putBoolean("auto_gain", false)
         .apply()
     saveDpGeq(p, flatGeq)
     savePeq(p, peq)
