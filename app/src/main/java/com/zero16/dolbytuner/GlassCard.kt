@@ -127,14 +127,13 @@ fun Modifier.glassSurface(radius: Float, cardPos: Offset, cardSize: IntSize): Mo
     val blurBmp = WallpaperState.blurred
 
     val frosted = mode == GlassMode.FROSTED && on
-    val base = if (isDark) 0.24f else 0.42f
-    // 铺了模糊底图之后，上面的固定色可以更薄一点
+    // 卡片本身「无色」：只用一点点中性白抬高一点点明度，绝不给底色染黑/染灰
     val fillAlpha = when {
-        !on -> if (isDark) 0.32f else 0.50f
-        frosted -> base * 0.62f * (contrast / 1.1f)
-        else -> base * 0.40f * (contrast / 1.1f)
-    }
-    val fill = (if (isDark) Color.Black else Color.White).copy(alpha = fillAlpha)
+        !on -> if (isDark) 0.14f else 0.48f
+        frosted -> if (isDark) 0.055f else 0.30f
+        else -> if (isDark) 0.085f else 0.34f
+    } * (contrast / 1.1f)
+    val fill = Color.White.copy(alpha = fillAlpha)
 
     val warmA = if (sat > 1.1f) (sat - 1.1f) * 0.10f else 0f
     val coolA = if (sat < 1.1f) (1.1f - sat) * 0.10f else 0f
