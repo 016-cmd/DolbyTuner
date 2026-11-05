@@ -1,5 +1,7 @@
 package com.zero16.dolbytuner
 
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateFloatAsState
 import kotlin.math.roundToInt
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
@@ -452,20 +454,23 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                 }
         ) {
             val progress = pagerState.currentPage + pagerState.currentPageOffsetFraction
-            val thumbW = (tabW - 6.dp.toPx()).coerceAtLeast(24.dp.toPx())
+            // iOS 风格：指示器只占 tab 的 2/3，居中，像一颗小胶囊
+            val thumbW = with(dockDensity) {
+                (tabW * 0.66f).coerceIn(40.dp.toPx(), 72.dp.toPx())
+            }
+            val thumbH = with(dockDensity) { 34.dp.toPx() }
             Box(
                 Modifier
                     .offset {
                         androidx.compose.ui.unit.IntOffset(
-                            (10.dp.toPx() + progress * tabW + 3.dp.toPx())
-                                .roundToInt(),
-                            3.dp.roundToPx()
+                            (10.dp.toPx() + progress * tabW +
+                                    (tabW - thumbW) / 2f).roundToInt(),
+                            ((62.dp.toPx() - thumbH) / 2f).roundToInt()
                         )
                     }
                     .width(with(dockDensity) { thumbW.toDp() })
-                    .fillMaxHeight()
-                    .padding(vertical = 3.dp)
-                    .clip(RoundedCornerShape(22.dp))
+                    .height(with(dockDensity) { thumbH.toDp() })
+                    .clip(RoundedCornerShape(17.dp))
                     .background(
                         if (isDark) Color.White.copy(alpha = 0.14f)
                         else Color.Black.copy(alpha = 0.07f)
@@ -490,6 +495,14 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                 )
                     .forEachIndexed { index, tab ->
                         val selected = currentTab == index
+                        val iconScale by animateFloatAsState(
+                            targetValue = if (selected) 1.10f else 0.94f,
+                            animationSpec = spring(
+                                dampingRatio = 0.62f,
+                                stiffness = 420f
+                            ),
+                            label = "iconScale"
+                        )
                         val tint = if (selected) colors.primary
                         else colors.onSurfaceVariant.copy(alpha = if (isDark) 0.5f else 0.6f)
                         Column(
@@ -512,10 +525,21 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                             if (tab.resId != null) {
                                 Icon(
                                     painterResource(tab.resId), tab.label,
-                                    Modifier.size(20.dp), tint = tint
+                                    Modifier.size(20.dp).graphicsLayer {
+                                        scaleX = iconScale
+                                        scaleY = iconScale
+                                    },
+                                    tint = tint
                                 )
                             } else {
-                                Icon(tab.icon, tab.label, Modifier.size(20.dp), tint = tint)
+                                Icon(
+                                    tab.icon, tab.label,
+                                    Modifier.size(20.dp).graphicsLayer {
+                                        scaleX = iconScale
+                                        scaleY = iconScale
+                                    },
+                                    tint = tint
+                                )
                             }
                             Text(tab.label, fontSize = 9.sp, lineHeight = 11.sp, color = tint)
                         }
