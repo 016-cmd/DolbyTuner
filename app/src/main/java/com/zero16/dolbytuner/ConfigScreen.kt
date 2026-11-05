@@ -793,6 +793,7 @@ private fun GreenMiniButton(
 ) {
     Box(
         Modifier.fillMaxWidth().height(38.dp)
+            .jellyPress(Appearance.jelly.value > 0)
             .clip(RoundedCornerShape(9.dp))
             .background(bg)
             .clickable { onClick() },
@@ -806,7 +807,7 @@ private fun GreenMiniButton(
 private fun ConfigBtn(icon: ImageVector, text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier.height(44.dp),
+        modifier = modifier.height(44.dp).jellyPress(Appearance.jelly.value > 0),
         shape = RoundedCornerShape(10.dp),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = Accent)
     ) {

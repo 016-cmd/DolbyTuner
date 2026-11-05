@@ -74,7 +74,6 @@ fun GlassCard(
             }
             .clip(RoundedCornerShape(radius.dp))
             .glassSurface(radius.toFloat(), pos, sz)
-            .jellyPress(enabled = Appearance.jelly.value > 0)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) { content() }

@@ -1,5 +1,7 @@
 package com.zero16.dolbytuner
 
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.IntSize
@@ -262,7 +264,8 @@ private fun GateDialog(reasons: List<String>, onExit: () -> Unit) {
 /** 主框架：内容区 + 底部液态玻璃 Dock（与 K90 标准版同一套实现） */
 @Composable
 private fun MainApp(activity: Activity, deviceLine: String) {
-    var currentTab by remember { mutableIntStateOf(0) }
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 4 })
+    val currentTab = pagerState.currentPage
     val colors = MaterialTheme.colorScheme
     val isDark = colors.background.red * 0.299f + colors.background.green * 0.587f + colors.background.blue * 0.114f < 0.5f
     val ctx = activity.applicationContext
@@ -390,26 +393,16 @@ private fun MainApp(activity: Activity, deviceLine: String) {
     }
     var dockPos by remember { mutableStateOf(Offset.Zero) }
     var dockSize by remember { mutableStateOf(IntSize.Zero) }
-    var dragX by remember { mutableFloatStateOf(0f) }
-    var dragging by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
-        AnimatedContent(
-            targetState = currentTab,
-            transitionSpec = {
-                if (!Appearance.animPage.value) {
-                    EnterTransition.None togetherWith ExitTransition.None
-                } else {
-                    val dir = if (targetState > initialState) 1 else -1
-                    (slideInHorizontally(tween(300)) { it * dir } + fadeIn(tween(300))) togetherWith
-                        (slideOutHorizontally(tween(300)) { -it * dir } + fadeOut(tween(300)))
-                }
-            },
-            modifier = Modifier.fillMaxSize().graphicsLayer {
-                translationX = dragX * 0.35f
-            }
-        ) { tab ->
-            when (tab) {
+        // 无极拖动：长按 dock 后把横向位移直接喂给 Pager，
+        // 页面 1:1 跟手，松手吸附到最近的一页。
+        HorizontalPager(
+            state = pagerState,
+            userScrollEnabled = false,
+            modifier = Modifier.fillMaxSize()
+        ) { page ->
+            when (page) {
                 0 -> GeqScreen(deviceLine)
                 1 -> EffectsScreen()
                 2 -> ConfigScreen()
@@ -430,27 +423,21 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                 .glassSurface(28f, dockPos, dockSize)
                 .pointerInput(Unit) {
                     detectDragGesturesAfterLongPress(
-                        onDragStart = {
-                            dragging = true
-                            dragX = 0f
-                        },
+                        onDragStart = { },
                         onDrag = { change, amount ->
                             change.consume()
-                            dragX += amount.x
+                            // 手指左移 = 去下一页；直接驱动 Pager，页面跟手
+                            pagerState.dispatchRawDelta(-amount.x)
                         },
                         onDragEnd = {
-                            val threshold = size.width * 0.18f
-                            if (dragX <= -threshold) {
-                                currentTab = (currentTab + 1).coerceAtMost(3)
-                            } else if (dragX >= threshold) {
-                                currentTab = (currentTab - 1).coerceAtLeast(0)
+                            scope.launch {
+                                pagerState.animateScrollToPage(pagerState.currentPage)
                             }
-                            dragX = 0f
-                            dragging = false
                         },
                         onDragCancel = {
-                            dragX = 0f
-                            dragging = false
+                            scope.launch {
+                                pagerState.animateScrollToPage(pagerState.currentPage)
+                            }
                         }
                     )
                 }
@@ -479,7 +466,16 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                                         RoundedCornerShape(14.dp)
                                     ) else Modifier
                                 )
-                                .clickable { currentTab = index }
+                                .jellyPress(Appearance.jelly.value > 0)
+                                .clickable {
+                                    scope.launch {
+                                        if (Appearance.animPage.value) {
+                                            pagerState.animateScrollToPage(index)
+                                        } else {
+                                            pagerState.scrollToPage(index)
+                                        }
+                                    }
+                                }
                                 .padding(horizontal = 18.dp, vertical = 4.dp),
                             verticalArrangement = Arrangement.Center
                         ) {

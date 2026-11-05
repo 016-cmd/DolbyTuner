@@ -260,6 +260,7 @@ private fun SegRow(
                 Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(9.dp))
+                    .jellyPress(Appearance.jelly.value > 0)
                     .background(
                         if (on) Appearance.accent.value.copy(alpha = 0.22f)
                         else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
