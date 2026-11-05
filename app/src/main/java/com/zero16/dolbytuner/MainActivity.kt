@@ -4060,7 +4060,6 @@ private fun LicenseDialogContent(
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Column(
-        Spacer(Modifier.height(78.dp))
                 modifier = Modifier.weight(1f).fillMaxWidth()
                     .verticalScroll(rememberScrollState()).padding(16.dp)
             ) {

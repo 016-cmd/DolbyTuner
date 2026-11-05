@@ -143,7 +143,6 @@ internal fun ConfigScreen() {
     }
 
     Column(
-        Spacer(Modifier.height(78.dp))
         Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState())
             .padding(horizontal = 14.dp)
     ) {
@@ -223,6 +222,7 @@ internal fun ConfigScreen() {
 
         Spacer(Modifier.height(6.dp))
         Text(status, fontSize = 10.sp, color = subInk())
+        Spacer(Modifier.height(78.dp))
     }
 
     // 点击预设卡片：详细参数
