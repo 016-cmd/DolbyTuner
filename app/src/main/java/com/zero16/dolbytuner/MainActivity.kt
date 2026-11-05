@@ -1,5 +1,6 @@
 package com.zero16.dolbytuner
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
@@ -481,11 +482,9 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                 }
         ) {
             val progress = pagerState.currentPage + pagerState.currentPageOffsetFraction
-            // iOS 风格：指示器只占 tab 的 2/3，居中，像一颗小胶囊
-            val thumbW = with(dockDensity) {
-                (tabW * 0.66f).coerceIn(40.dp.toPx(), 72.dp.toPx())
-            }
-            val thumbH = with(dockDensity) { 46.dp.toPx() }
+            // 指示器 = 整个 tab 格子（和点击区一样大）
+            val thumbW = with(dockDensity) { (tabW - 2.dp.toPx()).coerceAtLeast(24.dp.toPx()) }
+            val thumbH = with(dockDensity) { 54.dp.toPx() }
             Box(
                 Modifier
                     .offset {
@@ -497,7 +496,7 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                     }
                     .width(with(dockDensity) { thumbW.toDp() })
                     .height(with(dockDensity) { thumbH.toDp() })
-                    .clip(RoundedCornerShape(23.dp))
+                    .clip(RoundedCornerShape(27.dp))
                     .background(
                         if (isDark) Color.White.copy(alpha = 0.14f)
                         else Color.Black.copy(alpha = 0.07f)
@@ -506,7 +505,7 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                         1.dp,
                         if (isDark) Color.White.copy(alpha = 0.14f)
                         else Color.Black.copy(alpha = 0.05f),
-                        RoundedCornerShape(23.dp)
+                        RoundedCornerShape(27.dp)
                     )
             )
             Row(
@@ -539,7 +538,10 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                                 .fillMaxHeight()
                                 .clip(RoundedCornerShape(14.dp))
                                 .jellyPress(Appearance.jelly.value > 0)
-                                .clickable {
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) {
                                     scope.launch {
                                         if (Appearance.animPage.value) {
                                             pagerState.animateScrollToPage(index)

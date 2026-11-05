@@ -75,9 +75,9 @@ fun GlassCard(
                 pos = it.positionInRoot()
                 sz = it.size
             }
+            .cardEnter()
             .clip(RoundedCornerShape(radius.dp))
             .glassSurface(radius.toFloat(), pos, sz)
-            .cardEnter()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) { content() }
@@ -98,9 +98,9 @@ fun GlassSurface(
                 pos = it.positionInRoot()
                 sz = it.size
             }
+            .cardEnter()
             .clip(RoundedCornerShape(radius.dp))
             .glassSurface(radius.toFloat(), pos, sz)
-            .cardEnter()
     ) { content() }
 }
 
@@ -119,9 +119,9 @@ fun GlassSettingsCard(
                 pos = it.positionInRoot()
                 sz = it.size
             }
+            .cardEnter()
             .clip(RoundedCornerShape(radius.dp))
             .glassSurface(radius.toFloat(), pos, sz)
-            .cardEnter()
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
             content()
@@ -174,13 +174,18 @@ fun Modifier.cardEnter(): Modifier {
     if (!Appearance.animCard.value) return this
     val anim = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        anim.animateTo(1f, tween(durationMillis = 380, easing = FastOutSlowInEasing))
+        // 弹簧入场：比 tween 柔和，不会「啪」一下结束
+        anim.animateTo(
+            1f,
+            spring(dampingRatio = 0.78f, stiffness = 240f, visibilityThreshold = 0.001f)
+        )
     }
+    // 注意：这个 modifier 必须放在 clip/glassSurface 之前，
+    // 这样缩放会连同「壁纸采样」一起变换，否则卡片会与背景错位
     return this.graphicsLayer {
         val p = anim.value
-        alpha = p
-        translationY = (1f - p) * 14.dp.toPx()
-        val s = 0.985f + 0.015f * p
+        alpha = p.coerceIn(0f, 1f)
+        val s = 0.965f + 0.035f * p
         scaleX = s
         scaleY = s
     }
