@@ -265,8 +265,22 @@ class MainActivity : ComponentActivity() {
         val gate = evaluateGate()
         setContent {
             DolbyTunerTheme {
-                if (gate.passed) MainApp(this, gate.deviceLine)
-                else GateDialog(gate.reasons) { finishAffinity() }
+                if (!gate.passed) {
+                    GateDialog(gate.reasons) { finishAffinity() }
+                } else {
+                    val obPrefs = remember { getSharedPreferences("dolby_tuner", MODE_PRIVATE) }
+                    var showOnboard by remember {
+                        mutableStateOf(!obPrefs.getBoolean("onboard_done", false))
+                    }
+                    if (showOnboard) {
+                        OnboardingScreen {
+                            obPrefs.edit().putBoolean("onboard_done", true).apply()
+                            showOnboard = false
+                        }
+                    } else {
+                        MainApp(this, gate.deviceLine)
+                    }
+                }
             }
         }
     }
@@ -3982,6 +3996,14 @@ private fun SettingsScreen(activity: Activity) {
                 icon = Icons.Default.Description, title = "开源许可证",
                 subtitle = "Apache-2.0", selected = false
             ) { showLicense = true }
+            SettingRow(
+                icon = Icons.Default.Refresh, title = "重新查看引导",
+                subtitle = "再看一遍首次使用说明", selected = false
+            ) {
+                getSharedPreferences("dolby_tuner", MODE_PRIVATE).edit()
+                    .putBoolean("onboard_done", false).apply()
+                activity.recreate()
+            }
         }
         }
         item {
