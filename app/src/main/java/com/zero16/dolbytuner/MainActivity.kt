@@ -2822,24 +2822,12 @@ private fun EffectsScreen() {
                 "整体增益", (if (gain > 0) "+${gain / 10f}" else "${gain / 10f}") + " dB",
                 gain, -200..200, dpOn && !autoGain,
                 fmt = { String.format("%+.1f dB", it / 10f) },
-                onLive = {
-                    if (autoGain) {
-                        autoGain = false
-                        prefs.edit().putBoolean("auto_gain", false).apply()
-                    }
-                    gain = it; applyGain()
-                },
-                onDone = {
-                    if (autoGain) {
-                        autoGain = false
-                        prefs.edit().putBoolean("auto_gain", false).apply()
-                    }
-                    gain = it; applyGain()
-                }
+                onLive = { gain = it; applyGain() },
+                onDone = { gain = it; applyGain() }
             )
             ParamToggle(
                 label = "等比增益",
-                hint = "按 EQ 的整体提升自动反向补偿，音量听感保持不变；一拖上面的滑杆就会自动关闭",
+                hint = "按 EQ 的整体提升自动反向补偿，音量听感保持不变",
                 checked = autoGain,
                 enabled = dpOn,
                 onCheckedChange = { on ->
