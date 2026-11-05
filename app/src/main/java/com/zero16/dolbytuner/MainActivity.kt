@@ -1061,7 +1061,7 @@ private suspend fun pushFx(next: FxState): String? = withContext(Dispatchers.IO)
 /**
  * 等比增益：只做「往下拉」。
  *
- * 曲线整体抬高多少，就补回多少，最多 -12 dB。
+ * 曲线整体抬高多少，就补回多少，最多 -10 dB。
  * 曲线凹陷时不再往上补（以前是双向 ±24 dB，遇到局部深谷会被放大成巨响，
  * 遇到窄峰又会被能量平均放大成 -20 dB 的闷声）。
  */
@@ -1070,7 +1070,7 @@ internal fun autoGainOf(curve: FloatArray): Float {
     var s = 0.0
     for (v in curve) s += Math.pow(10.0, (v / 10.0))
     val net = 10.0 * Math.log10(s / curve.size)
-    return (-net).coerceIn(-12.0, 0.0).toFloat()
+    return (-net).coerceIn(-10.0, 0.0).toFloat()
 }
 
 /** Q6 线性值 → dB 文本（64 = 0 dB，0 = -∞） */
@@ -2592,7 +2592,7 @@ private fun EffectsScreen() {
                             val sel = peqSel == i
                             Column(
                                 Modifier.width(80.dp)
-                                    .height(78.dp)
+                                    .heightIn(min = 92.dp)
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(
                                         if (sel) cEq.copy(alpha = 0.22f)
