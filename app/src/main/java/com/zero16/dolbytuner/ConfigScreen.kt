@@ -367,7 +367,7 @@ internal fun ConfigScreen() {
                         Text("· 杜比：GEQ 20 段 + 音效页参数", fontSize = 10.sp, color = cs.onSurfaceVariant)
                     }
                     if (p.scope == SCOPE_DP || p.scope == SCOPE_BOTH) {
-                        Text("· 音效页（DP）：EQ / 限幅 / MBC / 混响 / 等响", fontSize = 10.sp, color = cs.onSurfaceVariant)
+                        Text("· 音效页（DP）：EQ / 限幅 / MBC / 等响", fontSize = 10.sp, color = cs.onSurfaceVariant)
                     }
                     Spacer(Modifier.height(8.dp))
                     Text("当前正在输出的声音会立刻变化。", fontSize = 9.sp, color = cs.onSurfaceVariant)
@@ -512,7 +512,6 @@ private fun PresetBigCard(
                     FxLine("增益", String.format("%+.1f", d.gain / 10f), ink)
                     FxLine("限幅", mark(d.limOn), ink)
                     FxLine("MBC", mark(d.mbcOn), ink)
-                    FxLine("混响", mark(d.revOn), ink)
                     FxLine("等响", mark(d.elOn), ink)
                 } else {
                     FxLine("环绕", "耳${mark(p.fx.hpVirtual)} 外${mark(p.fx.spVirtual)}", ink)
@@ -637,19 +636,7 @@ private fun PresetDetailDialog(p: Preset, onClose: () -> Unit) {
                         )
                     }
 
-                    DetailTitle("音效页（DP）· 空间与修形", cs)
-                    DetailRow("空间混响", mark(d.revOn), cs)
-                    DetailRow(
-                        "混响引擎",
-                        if (d.revMode == 1) "预设混响 · " + DynPresetReverb.PRESET_NAMES.getOrElse(d.revPreset) { "--" }
-                        else "参数混响",
-                        cs
-                    )
-                    DetailRow("房间 / 高频吸收", String.format("%.1f / %.1f dB", d.rev.getOrElse(0) { -200 } / 100f, d.rev.getOrElse(1) { -100 } / 100f), cs)
-                    DetailRow("衰减 / 高频衰减比", String.format("%d ms / %.2f", d.rev.getOrElse(2) { 2200 }, d.rev.getOrElse(3) { 850 } / 1000f), cs)
-                    DetailRow("早期反射 / 延迟", String.format("%.1f dB / %d ms", d.rev.getOrElse(4) { -800 } / 100f, d.rev.getOrElse(5) { 15 }), cs)
-                    DetailRow("混响量 / 延迟", String.format("%.1f dB / %d ms", d.rev.getOrElse(6) { 300 } / 100f, d.rev.getOrElse(7) { 20 }), cs)
-                    DetailRow("扩散 / 密度", String.format("%.2f / %.2f", d.rev.getOrElse(8) { 1000 } / 1000f, d.rev.getOrElse(9) { 1000 } / 1000f), cs)
+                    DetailTitle("音效页（DP）· 后置均衡", cs)
 
                     DetailRow("后置均衡", mark(d.postOn), cs)
                     Text(

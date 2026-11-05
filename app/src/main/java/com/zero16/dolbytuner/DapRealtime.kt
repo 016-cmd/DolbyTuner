@@ -621,6 +621,65 @@ object DapRealtime {
         }
     }
     // ────────────────────────────────────────────────────────────
+    //  虚拟低频（杜比 DAP 的 runtime 参数：vbm / vbog / vbhm）
+    //
+    //  和 GEQ 的 profile 帧不同，这一类走 key = 0，且帧头带设备掩码：
+    //      [pitch][count] ([pitch][fourcc][n][values...])...
+    //  写之前必须先开路由（key 5, [0,1,1]）再 enable，否则 HAL 会把
+    //  参数静默丢掉（rc 仍然是 0）。
+    // ────────────────────────────────────────────────────────────
+
+    /** 'vbm' —— 虚拟低频开关 */
+    private const val F_VBM = 0x006D6276
+    /** 'vbog' —— 虚拟低频强度（0…192） */
+    private const val F_VBOG = 0x676F6276
+    /** 'vbhm' —— 谐波混合（杜比侧是 4 个槽，同值填满） */
+    private const val F_VBHM = 0x6D686276
+
+    /** 组 runtime 包：[pitch][count] ([pitch][id][n][values...])... */
+    private fun buildRuntimePayload(pitch: Int, params: List<IntArray>): ByteArray {
+        var n = 2
+        params.forEach { n += it.size + 2 }
+        val buf = ByteBuffer.allocate(n * 4).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt(pitch)
+        buf.putInt(params.size)
+        params.forEach { p ->
+            buf.putInt(pitch)
+            buf.putInt(p[0])            // fourcc
+            buf.putInt(p.size - 1)      // 值个数
+            for (i in 1 until p.size) buf.putInt(p[i])
+        }
+        return buf.array()
+    }
+
+    /** 写虚拟低频；失败返回原因，成功返回 null */
+    @Synchronized
+    fun writeVirtualBass(on: Boolean, amount: Int, blend: Int): String? {
+        return try {
+            val e = session ?: openEffect().also { session = it }
+            if (!e.hasControl()) return "无控制权"
+            // ① 开路由：不开的话后面那帧进不了 DSP
+            val route = ByteBuffer.allocate(12).order(ByteOrder.LITTLE_ENDIAN)
+                .putInt(0).putInt(1).putInt(1).array()
+            val r = e.setParam(CMD_PARAM, route)
+            if (r < 0) return statusText(r, "开 DAP 路由")
+            // ② 必须处于启用状态
+            runCatching { e.enabled = true }
+            val amt = amount.coerceIn(0, 192)
+            val mix = blend.coerceIn(0, 192)
+            val params = listOf(
+                intArrayOf(F_VBM, if (on) 1 else 0),
+                intArrayOf(F_VBOG, amt),
+                intArrayOf(F_VBHM, mix, mix, mix, mix)
+            )
+            val st = e.setParam(0, buildRuntimePayload(DEVICE_SPEAKER, params))
+            if (st < 0) statusText(st, "虚拟低频") else null
+        } catch (t: Throwable) {
+            rootCause(t)
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────
     //  FourCC 通道（A 类音效：dplp / beon / dvle / ieon / vol …）
     //
     //  写：command(5, [0x01000000, count, 0, fourcc, values…])

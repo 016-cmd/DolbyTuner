@@ -60,6 +60,8 @@ internal fun EffectCard(
     toggleOnly: Boolean = false,
     showSwitch: Boolean = true,
     initiallyExpanded: Boolean = false,
+    /** false = 永远不展开：参数区（content）直接常驻显示，点标题也不展开 */
+    expandable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
     var expanded by rememberSaveable { mutableStateOf(initiallyExpanded) }
@@ -99,7 +101,7 @@ internal fun EffectCard(
             Row(
                 Modifier.fillMaxWidth()
                     .then(
-                        if (toggleOnly) Modifier
+                        if (toggleOnly || !expandable) Modifier
                         else Modifier.clickable { expanded = !expanded }
                     )
                     .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -125,7 +127,14 @@ internal fun EffectCard(
                 }
             }
 
-            if (!toggleOnly) {
+            if (!toggleOnly && !expandable) {
+                Column(
+                    Modifier.fillMaxWidth()
+                        .alpha(if (dpOn) 1f else 0.45f)
+                        .padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
+                    content = content
+                )
+            } else if (!toggleOnly) {
                 AnimatedVisibility(
                     visible = expanded,
                     enter = expandVertically(),

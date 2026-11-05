@@ -808,7 +808,11 @@ internal data class FxState(
     val bassCutoff: Int = 150,
     val bassWidth: Int = 0,
     val dialogOn: Boolean = false,
-    val dialogAmt: Int = 4
+    val dialogAmt: Int = 4,
+    // 虚拟低频（杜比 DAP 的 vbm / vbog / vbhm）
+    val vbOn: Boolean = false,
+    val vbAmt: Int = 160,
+    val vbBlend: Int = 128
 )
 
 /** 音效页（DynamicsProcessing）参数快照 */
@@ -824,8 +828,6 @@ internal class DpSnapshot(
     val lim: IntArray,          // thr, atk, rel, rat, post, link
     val mbcOn: Boolean,
     val mbc: List<IntArray>,
-    val revOn: Boolean,
-    val rev: IntArray,
     val postOn: Boolean,
     val post: IntArray,
     val elOn: Boolean,
@@ -835,9 +837,7 @@ internal class DpSnapshot(
     // 强度 / AutoEQ（v2.12.5 起，旧预设没有这几项就走默认值）
     val eqIntensity: Int = 100,
     val geqInt: IntArray = IntArray(DapRealtime.BANDS) { 100 },
-    val aeq: String = "",
-    val revMode: Int = 0,        // 0 参数混响 / 1 预设混响
-    val revPreset: Int = 3
+    val aeq: String = ""
 )
 
 internal const val SCOPE_DOLBY = 0
@@ -850,8 +850,6 @@ internal fun dpPack(d: DpSnapshot): String = listOf(
     d.lim.joinToString(","),
     if (d.mbcOn) "1" else "0",
     d.mbc.joinToString(":") { it.joinToString(",") },
-    if (d.revOn) "1" else "0",
-    d.rev.joinToString(","),
     if (d.postOn) "1" else "0",
     d.post.joinToString(","),
     if (d.elOn) "1" else "0",
@@ -866,25 +864,27 @@ internal fun dpPack(d: DpSnapshot): String = listOf(
     d.curve.joinToString(","),
     d.eqIntensity.toString(),
     d.geqInt.joinToString(","),
-    d.aeq,
-    d.revMode.toString(),
-    d.revPreset.toString()
+    d.aeq
 ).joinToString("|")
 
 internal fun dpUnpack(s: String): DpSnapshot? {
     if (s.isBlank()) return null
-    val p = s.split("|")
-    if (p.size < 19) return null
+    var p = s.split("|")
+    // 旧格式（v2.13.x）带混响：索引 5/6 是 revOn/rev，22/23 是 revMode/revPreset
+    if (p.size == 24) {
+        p = p.filterIndexed { i, _ -> i != 5 && i != 6 && i != 22 && i != 23 }
+    }
+    if (p.size < 20) return null
     return runCatching {
         DpSnapshot(
-            curve = p[18].split(",").mapNotNull { it.toFloatOrNull() }.toFloatArray()
+            curve = p[16].split(",").mapNotNull { it.toFloatOrNull() }.toFloatArray()
                 .let { if (it.size == 127) it else FloatArray(127) },
-            eqTab = p[13].toInt(),
-            geqQ4 = p[14].split(",").mapNotNull { it.toIntOrNull() }.toIntArray()
+            eqTab = p[11].toInt(),
+            geqQ4 = p[12].split(",").mapNotNull { it.toIntOrNull() }.toIntArray()
                 .let { if (it.size == DapRealtime.BANDS) it else IntArray(DapRealtime.BANDS) },
-            geqQ = p[15].toInt(),
-            geqMaster = p[16].toInt(),
-            peq = p[17],
+            geqQ = p[13].toInt(),
+            geqMaster = p[14].toInt(),
+            peq = p[15],
             gain = p[0].toInt(),
             limOn = p[1] == "1",
             lim = p[2].split(",").mapNotNull { it.toIntOrNull() }.toIntArray(),
@@ -892,20 +892,16 @@ internal fun dpUnpack(s: String): DpSnapshot? {
             mbc = p[4].split(":").mapNotNull { seg ->
                 seg.split(",").mapNotNull { it.toIntOrNull() }.toIntArray().takeIf { it.size >= 9 }
             }.ifEmpty { defaultMbcInts() },
-            revOn = p[5] == "1",
-            rev = p[6].split(",").mapNotNull { it.toIntOrNull() }.toIntArray(),
-            postOn = p[7] == "1",
-            post = p[8].split(",").mapNotNull { it.toIntOrNull() }.toIntArray(),
-            elOn = p[9] == "1",
-            elBase = p[10].toInt(),
-            elStrength = p[11].toInt(),
-            elMaxDb = p[12].toInt(),
-            eqIntensity = p.getOrNull(19)?.toIntOrNull() ?: 100,
-            geqInt = (p.getOrNull(20) ?: "").split(",").mapNotNull { it.toIntOrNull() }.toIntArray()
+            postOn = p[5] == "1",
+            post = p[6].split(",").mapNotNull { it.toIntOrNull() }.toIntArray(),
+            elOn = p[7] == "1",
+            elBase = p[8].toInt(),
+            elStrength = p[9].toInt(),
+            elMaxDb = p[10].toInt(),
+            eqIntensity = p.getOrNull(17)?.toIntOrNull() ?: 100,
+            geqInt = (p.getOrNull(18) ?: "").split(",").mapNotNull { it.toIntOrNull() }.toIntArray()
                 .let { if (it.size == DapRealtime.BANDS) it else IntArray(DapRealtime.BANDS) { 100 } },
-            aeq = p.getOrNull(21) ?: "",
-            revMode = p.getOrNull(22)?.toIntOrNull() ?: 0,
-            revPreset = p.getOrNull(23)?.toIntOrNull() ?: 3
+            aeq = p.getOrNull(19) ?: ""
         )
     }.getOrNull()
 }
@@ -928,7 +924,10 @@ internal fun loadFx(ctx: Context): FxState {
             a.getOrNull(4)?.toIntOrNull() ?: 150,
             a.getOrNull(5)?.toIntOrNull() ?: 0,
             a.getOrNull(6) == "1",
-            a.getOrNull(7)?.toIntOrNull() ?: 4
+            a.getOrNull(7)?.toIntOrNull() ?: 4,
+            a.getOrNull(8) == "1",
+            a.getOrNull(9)?.toIntOrNull() ?: 160,
+            a.getOrNull(10)?.toIntOrNull() ?: 128
         )
     } catch (_: Exception) { FxState() }
 }
@@ -939,7 +938,8 @@ internal fun saveFx(ctx: Context, f: FxState) {
         if (f.spVirtual) "1" else "0",
         if (f.bassOn) "1" else "0",
         f.bassGain.toString(), f.bassCutoff.toString(), f.bassWidth.toString(),
-        if (f.dialogOn) "1" else "0", f.dialogAmt.toString()
+        if (f.dialogOn) "1" else "0", f.dialogAmt.toString(),
+        if (f.vbOn) "1" else "0", f.vbAmt.toString(), f.vbBlend.toString()
     ).joinToString(",")
     ctx.getSharedPreferences("dolby_tuner", Context.MODE_PRIVATE).edit().putString("fx", v).apply()
 }
@@ -1020,6 +1020,7 @@ private suspend fun pushFx(next: FxState): String? = withContext(Dispatchers.IO)
     if (e == null) e = DapRealtime.setParamValue(233, next.bassGain)
     if (e == null) e = DapRealtime.setParamValue(234, next.bassCutoff)
     if (e == null) e = DapRealtime.setParamValue(235, next.bassWidth)
+    if (e == null) e = DapRealtime.writeVirtualBass(next.vbOn, next.vbAmt, next.vbBlend)
     e
 }
 
@@ -1090,11 +1091,9 @@ internal fun loadDpSnapshot(ctx: Context): DpSnapshot {
             p.getInt("lim_rat", 100), p.getInt("lim_post", 0), p.getInt("lim_link", 0)
         ),
         mbcOn = p.getBoolean("mbc_on", false), mbc = loadMbc(p),
-        revOn = p.getBoolean("rev_on", false), rev = loadRev(p),
         postOn = p.getBoolean("post_on", false), post = loadPost(p),
         elOn = elOn, elBase = elBase, elStrength = elStrength, elMaxDb = elMaxDb,
-        eqIntensity = inten, geqInt = gi, aeq = aeqCsv,
-        revMode = p.getInt("rev_mode", 0), revPreset = p.getInt("rev_preset", 3)
+        eqIntensity = inten, geqInt = gi, aeq = aeqCsv
     )
 }
 
@@ -1124,18 +1123,6 @@ private suspend fun applyDpPreset(ctx: Context, d: DpSnapshot?): String? {
         if (!ok) return@withContext "音效引擎启动失败"
         DynProc.setPreEq(d.curve)
         if (d.postOn) DynProc.setPostEq(d.post, true)
-        if (d.revOn) {
-            if (d.revMode == 1) {
-                DynReverb.stop()
-                DynPresetReverb.start(d.revPreset)
-            } else {
-                DynPresetReverb.stop()
-                DynReverb.start(d.rev)
-            }
-        } else {
-            DynReverb.stop()
-            DynPresetReverb.stop()
-        }
         saveDpPrefs(ctx, d)
         null
     }
@@ -1153,7 +1140,6 @@ private fun saveDpPrefs(ctx: Context, d: DpSnapshot) {
         .putInt("lim_post", d.lim.getOrElse(4) { 0 })
         .putInt("lim_link", d.lim.getOrElse(5) { 0 })
         .putBoolean("mbc_on", d.mbcOn)
-        .putBoolean("rev_on", d.revOn)
         .putBoolean("post_on", d.postOn)
         .putInt("eq_tab", d.eqTab)
         .putInt("geq_q", d.geqQ)
@@ -1165,13 +1151,10 @@ private fun saveDpPrefs(ctx: Context, d: DpSnapshot) {
         .putInt("eq_intensity", d.eqIntensity)
         .putString("geq_int", d.geqInt.joinToString(","))
         .putString("aeq", d.aeq)
-        .putInt("rev_mode", d.revMode)
-        .putInt("rev_preset", d.revPreset)
         .apply()
     saveDpGeq(p, d.geqQ4)
     savePeq(p, parsePeqStr(d.peq))
     saveMbc(p, d.mbc)
-    saveRev(p, d.rev)
     savePost(p, d.post)
 }
 
@@ -1296,25 +1279,24 @@ internal fun resetDpPrefsToDefault(ctx: Context) {
     val flatGeq = IntArray(DapRealtime.BANDS)
     val peq = defaultPeq()
     val mbc = defaultMbcInts()
-    val rev = DynReverb.DEFAULTS.copyOf()
     val post = IntArray(11)
     p.edit()
         .putInt("gain", 0).putBoolean("lim_on", true)
         .putInt("lim_thr", -20).putInt("lim_atk", 10).putInt("lim_rel", 60)
         .putInt("lim_rat", 100).putInt("lim_post", 0).putInt("lim_link", 0)
-        .putBoolean("mbc_on", false).putBoolean("rev_on", false)
-        .putInt("rev_mode", 0).putInt("rev_preset", 3)
+        .putBoolean("mbc_on", false)
         .putBoolean("post_on", false).putInt("eq_tab", 0)
         .putInt("geq_q", 10).putInt("geq_master", 0)
         .putBoolean("el_on", false).putInt("el_base", -1)
         .putInt("el_strength", 10).putInt("el_maxdb", 80)
         .putInt("eq_intensity", 100).putString("aeq", "")
         .putString("geq_int", IntArray(DapRealtime.BANDS) { 100 }.joinToString(","))
+        .putBoolean("bb_on", false).putInt("bb_amt", 60)
+        .putBoolean("ds_on", false).putInt("ds_amt", 40)
         .apply()
     saveDpGeq(p, flatGeq)
     savePeq(p, peq)
     saveMbc(p, mbc)
-    saveRev(p, rev)
     savePost(p, post)
 }
 
@@ -1330,8 +1312,6 @@ internal suspend fun resetDpOnly(ctx: Context) {
                 DynProc.setMbc(DynProc.defaultMbc())
                 DynProc.setPostEq(IntArray(10), false)
             }
-            DynReverb.stop()
-            DynPresetReverb.stop()
         }
     }
 }
@@ -1422,6 +1402,49 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
 
 
         Spacer(Modifier.height(4.dp))
+        // ── 虚拟低频：拖动时 60ms 节流写一次（三个参数要一起发）──
+        val vbHolder = remember { arrayOfNulls<FxState>(1) }
+        vbHolder[0] = fx
+        val vbThrottle = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
+        val vbTick = remember {
+            Runnable {
+                val s = vbHolder[0]
+                if (s != null) scope.launch {
+                    withContext(Dispatchers.IO) {
+                        DapRealtime.writeVirtualBass(s.vbOn, s.vbAmt, s.vbBlend)
+                    }
+                }
+            }
+        }
+        fun pushVb(next: FxState, live: Boolean) {
+            fx = next
+            saveFx(ctx, next)
+            vbHolder[0] = next
+            vbThrottle.removeCallbacks(vbTick)
+            if (live) vbThrottle.postDelayed(vbTick, 60L) else vbThrottle.post(vbTick)
+        }
+        Spacer(Modifier.height(8.dp))
+        EffectCard(
+            title = "虚拟低频",
+            subtitle = "低频谐波再生 · 小音量下补回下潜",
+            icon = Icons.Default.VolumeUp,
+            enabled = fx.vbOn,
+            onEnabledChange = { pushVb(fx.copy(vbOn = it), false) },
+            accent = Color(0xFF6366F1)
+        ) {
+            FxSlider(
+                "强度", fx.vbAmt.toString(), fx.vbAmt, 0..192, fx.vbOn,
+                onLive = { pushVb(fx.copy(vbAmt = it), true) }
+            ) { pushVb(fx.copy(vbAmt = it), false) }
+            FxSlider(
+                "谐波混合", fx.vbBlend.toString(), fx.vbBlend, 0..192, fx.vbOn,
+                onLive = { pushVb(fx.copy(vbBlend = it), true) }
+            ) { pushVb(fx.copy(vbBlend = it), false) }
+            Text(
+                "走杜比 DAP 自身的谐波再生：音量越小越明显，音量大时几乎听不出",
+                fontSize = 9.sp, color = cs.onSurfaceVariant
+            )
+        }
         EffectCard(
             title = "低音增强",
             subtitle = "bass 111 · 增益 / 截止 / 带宽",
@@ -1681,17 +1704,6 @@ private fun savePost(prefs: android.content.SharedPreferences, a: IntArray) {
     prefs.edit().putString("post_data", a.joinToString(",")).apply()
 }
 
-private fun loadRev(prefs: android.content.SharedPreferences): IntArray {
-    val s = prefs.getString("rev_data", "").orEmpty()
-    if (s.isBlank()) return DynReverb.DEFAULTS.copyOf()
-    val a = s.split(",").mapNotNull { it.trim().toIntOrNull() }
-    return if (a.size == 10) a.toIntArray() else DynReverb.DEFAULTS.copyOf()
-}
-
-private fun saveRev(prefs: android.content.SharedPreferences, a: IntArray) {
-    prefs.edit().putString("rev_data", a.joinToString(",")).apply()
-}
-
 private fun defaultMbcInts(): List<IntArray> =
     List(4) { intArrayOf(-200, 30, 10, 80, 60, -900, 10, 0, 0, 0) }
 
@@ -1731,10 +1743,10 @@ private fun EffectsScreen() {
     var post by remember { mutableIntStateOf(prefs.getInt("lim_post", 0)) }
     var link by remember { mutableIntStateOf(prefs.getInt("lim_link", 0)) }
     var mbcOn by remember { mutableStateOf(prefs.getBoolean("mbc_on", false)) }
-    var revOn by remember { mutableStateOf(prefs.getBoolean("rev_on", false)) }
-    var revData by remember { mutableStateOf(loadRev(prefs)) }
-    var revMode by remember { mutableIntStateOf(prefs.getInt("rev_mode", 0)) }   // 0 参数 / 1 预设
-    var revPreset by remember { mutableIntStateOf(prefs.getInt("rev_preset", 3)) }
+    var bbOn by remember { mutableStateOf(prefs.getBoolean("bb_on", false)) }
+    var bbAmt by remember { mutableIntStateOf(prefs.getInt("bb_amt", 60)) }
+    var dsOn by remember { mutableStateOf(prefs.getBoolean("ds_on", false)) }
+    var dsAmt by remember { mutableIntStateOf(prefs.getInt("ds_amt", 40)) }
     var postOn by remember { mutableStateOf(prefs.getBoolean("post_on", false)) }
     var postData by remember { mutableStateOf(loadPost(prefs)) }
     var eqTab by remember { mutableIntStateOf(prefs.getInt("eq_tab", 0)) }
@@ -1804,8 +1816,40 @@ private fun EffectsScreen() {
         )
     }
 
+    // ── 两个「宏」：低频增强 / 齿音抑制，都叠在 MBC 对应段上，不改用户自己的段设置 ──
+    fun withMacros(base: List<DynProc.MbcBandCfg>): List<DynProc.MbcBandCfg> {
+        val out = base.toMutableList()
+        if (bbOn && out.isNotEmpty()) {
+            val b = out[0]
+            out[0] = b.copy(
+                enabled = true,
+                postGainDb = (b.postGainDb + bbAmt / 10f).coerceIn(-40f, 40f)
+            )
+        }
+        if (dsOn && out.size > 2) {
+            val b = out[2]
+            val f = dsAmt / 100f
+            out[2] = b.copy(
+                enabled = true,
+                attackMs = minOf(b.attackMs, 1.5f),
+                releaseMs = minOf(b.releaseMs, 70f),
+                ratio = maxOf(b.ratio, 4.8f * f + 1.2f),
+                thresholdDb = minOf(b.thresholdDb, -8f - 32f * f),
+                kneeWidth = maxOf(b.kneeWidth, 8f),
+                postGainDb = (b.postGainDb - f * 5.5f).coerceIn(-40f, 40f)
+            )
+        }
+        return out
+    }
+    fun pushMacros() {
+        val d = withMacros(toDynMbc(mbcStore))
+        scope.launch {
+            withContext(Dispatchers.IO) { DynProc.setMbc(d) }
+            status = DynProc.status
+        }
+    }
     fun applyMbc() {
-        val d = toDynMbc(mbcStore)
+        val d = withMacros(toDynMbc(mbcStore))
         scope.launch {
             withContext(Dispatchers.IO) { DynProc.setMbc(d) }
             status = DynProc.status
@@ -1822,72 +1866,11 @@ private fun EffectsScreen() {
         applyMbc()
     }
 
-    /** 按当前混响引擎模式启动/停止（0 = 参数混响，1 = 预设混响） */
-    fun applyRevEngine() {
-        if (!revOn) {
-            DynReverb.stop()
-            DynPresetReverb.stop()
-            return
-        }
-        if (revMode == 0) {
-            DynPresetReverb.stop()
-            DynReverb.start(revData.copyOf())
-        } else {
-            DynReverb.stop()
-            DynPresetReverb.start(revPreset)
-        }
-    }
-
-    /** 切换混响引擎：先停旧的再起新的 */
-    fun revEngineSwitch() {
-        scope.launch {
-            busy = true
-            withContext(Dispatchers.IO) { applyRevEngine() }
-            status = if (revMode == 0) DynReverb.status else DynPresetReverb.status
-            busy = false
-        }
-    }
-
-    fun applyRev() {
-        if (revMode == 1) {
-            scope.launch {
-                withContext(Dispatchers.IO) { DynPresetReverb.setPreset(revPreset) }
-                status = DynPresetReverb.status
-            }
-            return
-        }
-        val d = revData.copyOf()
-        scope.launch {
-            withContext(Dispatchers.IO) { DynReverb.set(d) }
-            status = DynReverb.status
-        }
-    }
-
-    fun toggleRev(on: Boolean) {
-        if (busy) return
-        revOn = on
-        prefs.edit().putBoolean("rev_on", on).apply()
-        scope.launch {
-            busy = true
-            withContext(Dispatchers.IO) { applyRevEngine() }
-            status = if (revMode == 0) DynReverb.status else DynPresetReverb.status
-            busy = false
-        }
-    }
-
-    fun updRev(idx: Int, v: Int) {
-        val a = revData.copyOf()
-        a[idx] = v
-        revData = a
-        saveRev(prefs, a)
-        applyRev()
-    }
-
     // ── 拖动节流：拖动期间不改 Compose state，避免整页重组 ──
     val throttle = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
+    val macroTick = remember { Runnable { pushMacros() } }
     val pendLim = remember { intArrayOf(thr, atk, rel, rat, post, link) }
     val pendMbc = remember { mbcStore[sel].copyOf() }
-    val pendRev = remember { revData.copyOf() }
 
     fun limFrom(p: IntArray) = DynProc.LimiterCfg(
         limOn, p[0] / 10f, p[1] / 10f, p[2].toFloat(), p[3] / 10f, p[4] / 10f, p[5]
@@ -1924,7 +1907,7 @@ private fun EffectsScreen() {
         Runnable {
             val l = mbcStore.toMutableList()
             l[sel] = pendMbc.copyOf()
-            val d = toDynMbc(l)
+            val d = withMacros(toDynMbc(l))
             scope.launch {
                 withContext(Dispatchers.IO) { DynProc.setMbc(d) }
                 status = DynProc.status
@@ -1946,30 +1929,6 @@ private fun EffectsScreen() {
         saveMbc(prefs, l)
         throttle.removeCallbacks(mbcTick)
         throttle.post(mbcTick)
-    }
-
-    val revTick = remember {
-        Runnable {
-            val d = pendRev.copyOf()
-            scope.launch {
-                withContext(Dispatchers.IO) { DynReverb.set(d) }
-                status = DynReverb.status
-            }
-        }
-    }
-
-    fun liveRev(i: Int, v: Int) {
-        pendRev[i] = v
-        throttle.removeCallbacks(revTick)
-        throttle.postDelayed(revTick, 60L)
-    }
-
-    fun commitRev(i: Int, v: Int) {
-        pendRev[i] = v
-        revData = pendRev.copyOf()
-        saveRev(prefs, revData)
-        throttle.removeCallbacks(revTick)
-        throttle.post(revTick)
     }
 
     val pendPost = remember { postData.copyOf() }
@@ -2062,8 +2021,6 @@ private fun EffectsScreen() {
         gain = 0
         limOn = true; thr = -20; atk = 10; rel = 60; rat = 100; post = 0; link = 0
         mbcOn = false; mbcStore = defaultMbcInts()
-        revOn = false; revData = DynReverb.DEFAULTS.copyOf()
-        revMode = 0; revPreset = 3
         postOn = false; postData = IntArray(11)
         eqTab = 0; geqQ4 = IntArray(DapRealtime.BANDS); geqQ = 10; geqMaster = 0
         peqData = defaultPeq()
@@ -2087,7 +2044,6 @@ private fun EffectsScreen() {
         saveDpGeq(prefs, geqQ4)
         savePeq(prefs, peqData)
         saveMbc(prefs, mbcStore)
-        saveRev(prefs, revData)
         savePost(prefs, postData)
         scope.launch {
             withContext(Dispatchers.IO) {
@@ -2102,8 +2058,6 @@ private fun EffectsScreen() {
                     )
                     DynProc.setMbc(dpMbc(defaultMbcInts(), false))
                     DynProc.setPostEq(IntArray(10), false)
-                    DynReverb.stop()
-                    DynPresetReverb.stop()
                 }
             }
             status = DynProc.status
@@ -2287,7 +2241,6 @@ private fun EffectsScreen() {
                     DynProc.setMbc(toDynMbc(mbcStore))
                     if (postOn) DynProc.setPostEq(postData.copyOf(), true)
                     else DynProc.setPostEq(IntArray(10), false)
-                    applyRevEngine()
                 }
             }
             status = DynProc.status
@@ -2323,10 +2276,6 @@ private fun EffectsScreen() {
     LaunchedEffect(Unit) {
         if (dpOn) {
             pushAllDp()
-        }
-        if (revOn && !DynReverb.running && !DynPresetReverb.running) {
-            withContext(Dispatchers.IO) { applyRevEngine() }
-            status = if (revMode == 0) DynReverb.status else DynPresetReverb.status
         }
     }
 
@@ -2822,6 +2771,36 @@ private fun EffectsScreen() {
             )
         }
 
+        // ===== 低频增强（DP · 叠在 MBC 第 0 段）=====
+        EffectCard(
+            title = "低频增强",
+            subtitle = "250Hz 以下补一档后级增益 · 最多 +12dB",
+            icon = Icons.Default.VolumeUp,
+            enabled = bbOn,
+            onEnabledChange = {
+                bbOn = it
+                prefs.edit().putBoolean("bb_on", it).apply()
+                pushMacros()
+            },
+            accent = Color(0xFFF97316),
+            expandable = false
+        ) {
+            FxSlider(
+                "增强量", String.format("%+.1f dB", bbAmt / 10f), bbAmt, 0..120, bbOn,
+                onLive = {
+                    bbAmt = it
+                    prefs.edit().putInt("bb_amt", it).apply()
+                    throttle.removeCallbacks(macroTick)
+                    throttle.postDelayed(macroTick, 60L)
+                }
+            ) {
+                bbAmt = it
+                prefs.edit().putInt("bb_amt", it).apply()
+                throttle.removeCallbacks(macroTick)
+                throttle.post(macroTick)
+            }
+        }
+
         // ===== MBC 多段压缩 =====
         EffectCard(
             title = "多段压缩器",
@@ -2935,142 +2914,33 @@ private fun EffectsScreen() {
             )
         }
 
-        // ===== 空间环境混响 =====
-        val revEngineTag = (if (revMode == 0) DynReverb.shortStatus else DynPresetReverb.shortStatus)
+        // ===== 齿音抑制（DP · 叠在 MBC 第 2 段）=====
         EffectCard(
-            title = "空间环境混响" + if (revEngineTag.isBlank()) "" else " · $revEngineTag",
-            subtitle = "Reverb · 空间感与残响",
-            icon = Icons.Default.Wallpaper,
-            enabled = revOn,
-            onEnabledChange = { toggleRev(it) },
-            accent = Color(0xFF0EA5E9)
+            title = "齿音抑制",
+            subtitle = "8kHz 以上的动态去齿 · 最多 -5.5dB",
+            icon = Icons.Default.GraphicEq,
+            enabled = dsOn,
+            onEnabledChange = {
+                dsOn = it
+                prefs.edit().putBoolean("ds_on", it).apply()
+                pushMacros()
+            },
+            accent = Color(0xFF06B6D4),
+            expandable = false
         ) {
-            val cRev = Color(0xFF0EA5E9)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                EqTab("参数混响", revMode == 0, cRev, dpOn) {
-                    revMode = 0
-                    prefs.edit().putInt("rev_mode", 0).apply()
-                    if (revOn) revEngineSwitch()
+            FxSlider(
+                "抑制量", "${dsAmt}%", dsAmt, 0..100, dsOn,
+                onLive = {
+                    dsAmt = it
+                    prefs.edit().putInt("ds_amt", it).apply()
+                    throttle.removeCallbacks(macroTick)
+                    throttle.postDelayed(macroTick, 60L)
                 }
-                EqTab("预设混响", revMode == 1, cRev, dpOn) {
-                    revMode = 1
-                    prefs.edit().putInt("rev_mode", 1).apply()
-                    if (revOn) revEngineSwitch()
-                }
-            }
-            Spacer(Modifier.height(4.dp))
-            val revDiag = if (revMode == 0) DynReverb.diag else DynPresetReverb.diag
-            if (revDiag.isNotBlank()) {
-                Text(
-                    "引擎：" + revDiag,
-                    fontSize = 9.sp, lineHeight = 13.sp,
-                    color = if (revOn) cs.onSurfaceVariant else cs.onSurfaceVariant.copy(alpha = 0.6f)
-                )
-                Spacer(Modifier.height(4.dp))
-            }
-            if (revMode == 0) {
-            val revPresets = listOf(
-                "原声" to intArrayOf(-200, -100, 2200, 850, -800, 15, 300, 20, 1000, 1000),
-                "演奏厅" to intArrayOf(-100, -200, 2800, 900, -600, 20, 400, 25, 1000, 1000),
-                "圣殿" to intArrayOf(0, -300, 5000, 700, -400, 35, 600, 40, 1000, 1000),
-                "金属板" to intArrayOf(-200, -50, 1800, 1200, -800, 5, 400, 10, 950, 1000),
-                "耳语室" to intArrayOf(-300, -200, 1000, 800, -700, 8, 200, 12, 1000, 1000),
-                "深谷" to intArrayOf(0, -500, 7000, 600, -200, 50, 600, 60, 1000, 1000)
-            )
-            revPresets.chunked(3).forEach { row ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    row.forEach { pr ->
-                        Surface(
-                            Modifier.weight(1f).clickable(enabled = revOn && dpOn) {
-                                revData = pr.second.copyOf()
-                                revData.copyInto(pendRev)
-                                saveRev(prefs, revData)
-                                applyRev()
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            color = cRev.copy(alpha = 0.14f),
-                            border = BorderStroke(1.dp, cRev.copy(alpha = 0.4f))
-                        ) {
-                            Box(Modifier.padding(vertical = 7.dp), contentAlignment = Alignment.Center) {
-                                Text(pr.first, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-                Spacer(Modifier.height(4.dp))
-            }
-
-            FxSlider(
-                "房间大小 · Room", String.format("%.1f dB", revData[0] / 100f), revData[0], -9000..0, revOn,
-                onLive = { liveRev(0, it) }, onDone = { commitRev(0, it) }
-            )
-            FxSlider(
-                "高频吸收 · Room HF", String.format("%.1f dB", revData[1] / 100f), revData[1], -9000..0, revOn,
-                onLive = { liveRev(1, it) }, onDone = { commitRev(1, it) }
-            )
-            FxSlider(
-                "衰减时间 · Decay", "${revData[2]} ms", revData[2], 100..20000, revOn,
-                onLive = { liveRev(2, it) }, onDone = { commitRev(2, it) }
-            )
-            FxSlider(
-                "高频衰减比 · HF Ratio", String.format("%.2f", revData[3] / 1000f), revData[3], 100..2000, revOn,
-                onLive = { liveRev(3, it) }, onDone = { commitRev(3, it) }
-            )
-            FxSlider(
-                "早期反射 · Reflections", String.format("%.1f dB", revData[4] / 100f), revData[4], -9000..0, revOn,
-                onLive = { liveRev(4, it) }, onDone = { commitRev(4, it) }
-            )
-            FxSlider(
-                "反射延迟 · Reflect Delay", "${revData[5]} ms", revData[5], 0..300, revOn,
-                onLive = { liveRev(5, it) }, onDone = { commitRev(5, it) }
-            )
-            FxSlider(
-                "混响量 · Reverb Level", String.format("%.1f dB", revData[6] / 100f), revData[6], -9000..0, revOn,
-                onLive = { liveRev(6, it) }, onDone = { commitRev(6, it) }
-            )
-            FxSlider(
-                "混响延迟 · Reverb Delay", "${revData[7]} ms", revData[7], 0..100, revOn,
-                onLive = { liveRev(7, it) }, onDone = { commitRev(7, it) }
-            )
-            FxSlider(
-                "扩散度 · Diffusion", String.format("%.2f", revData[8] / 1000f), revData[8], 0..1000, revOn,
-                onLive = { liveRev(8, it) }, onDone = { commitRev(8, it) }
-            )
-            FxSlider(
-                "密度 · Density", String.format("%.2f", revData[9] / 1000f), revData[9], 0..1000, revOn,
-                onLive = { liveRev(9, it) }, onDone = { commitRev(9, it) }
-            )
-            } else {
-                val rvItems = DynPresetReverb.PRESET_NAMES.mapIndexed { i, s -> i to s }
-                rvItems.chunked(3).forEach { row ->
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        row.forEach { pr ->
-                            val sel = revPreset == pr.first
-                            Surface(
-                                Modifier.weight(1f).clickable(enabled = revOn && dpOn) {
-                                    revPreset = pr.first
-                                    prefs.edit().putInt("rev_preset", pr.first).apply()
-                                    applyRev()
-                                },
-                                shape = RoundedCornerShape(10.dp),
-                                color = cRev.copy(alpha = if (sel) 0.26f else 0.10f),
-                                border = BorderStroke(1.dp, cRev.copy(alpha = if (sel) 0.7f else 0.3f))
-                            ) {
-                                Box(Modifier.padding(vertical = 7.dp), contentAlignment = Alignment.Center) {
-                                    Text(
-                                        pr.second, fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                                        color = if (sel) cRev else cs.onSurface
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(4.dp))
-                }
-                Text(
-                    "预设混响是系统自带的经典混响档位，听感比参数混响明显；想细调请切到「参数混响」。",
-                    fontSize = 9.sp, lineHeight = 13.sp, color = cs.onSurfaceVariant
-                )
+            ) {
+                dsAmt = it
+                prefs.edit().putInt("ds_amt", it).apply()
+                throttle.removeCallbacks(macroTick)
+                throttle.post(macroTick)
             }
         }
 
