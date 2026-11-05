@@ -1,5 +1,9 @@
 package com.zero16.dolbytuner
 
+import androidx.compose.material.icons.filled.FilterAlt
+import androidx.compose.material.icons.filled.Compress
+import androidx.compose.material.icons.filled.Waves
+import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Animatable
@@ -2972,7 +2976,7 @@ private fun EffectsScreen() {
             title = "等响补偿",
             subtitle = if (elBase < 0) "请先设定基准音量"
             else "低于基准音量时自动增强低频与高频",
-            icon = Icons.Default.GraphicEq,
+            icon = Icons.Default.Hearing,
             enabled = elOn,
             onEnabledChange = { on ->
                 if (on && elBase <= 0) {
@@ -3097,7 +3101,7 @@ private fun EffectsScreen() {
         EffectCard(
             title = "动态限制器",
             subtitle = "Limiter · 防削波与峰值压制",
-            icon = Icons.Default.GraphicEq,
+            icon = Icons.Default.Waves,
             enabled = limOn,
             onEnabledChange = { limOn = it; applyLim(true) },
             accent = cLim
@@ -3171,7 +3175,7 @@ private fun EffectsScreen() {
         EffectCard(
             title = "低频增强",
             subtitle = "250Hz 以下补一档后级增益 · 最多 +12dB",
-            icon = Icons.Default.VolumeUp,
+            icon = Icons.Default.Speaker,
             enabled = bbOn,
             onEnabledChange = {
                 bbOn = it
@@ -3200,7 +3204,7 @@ private fun EffectsScreen() {
         EffectCard(
             title = "多段压缩器",
             subtitle = "4段动态 · 250 / 2k / 8k / 20k",
-            icon = Icons.Default.Equalizer,
+            icon = Icons.Default.Compress,
             enabled = mbcOn,
             onEnabledChange = { mbcOn = it; prefs.edit().putBoolean("mbc_on", it).apply(); applyMbc() },
             accent = Color(0xFFA855F7)
@@ -3313,7 +3317,7 @@ private fun EffectsScreen() {
         EffectCard(
             title = "齿音抑制",
             subtitle = "8kHz 以上的动态去齿 · 最多 -5.5dB",
-            icon = Icons.Default.GraphicEq,
+            icon = Icons.Default.FilterAlt,
             enabled = dsOn,
             onEnabledChange = {
                 dsOn = it
