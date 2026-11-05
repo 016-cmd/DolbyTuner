@@ -9,6 +9,7 @@ import android.content.Intent
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.media.AudioRecordingConfiguration
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -200,7 +201,7 @@ class DeviceAutomationService : Service() {
         val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
         val cb = object : AudioManager.AudioRecordingCallback() {
             override fun onRecordingConfigChanged(
-                configs: MutableList<AudioManager.AudioRecordingConfiguration>
+                configs: List<AudioRecordingConfiguration>
             ) {
                 handler.removeCallbacks(voipConfirm)
                 if (configs.isEmpty()) {
