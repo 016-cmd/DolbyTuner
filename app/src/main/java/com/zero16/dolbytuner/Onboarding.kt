@@ -130,6 +130,7 @@ fun OnboardingScreen(
     deviceLine: String,
     passed: Boolean,
     reasons: List<String>,
+    baseCaptured: Boolean,
     onExit: () -> Unit,
     onDone: () -> Unit
 ) {
@@ -173,6 +174,7 @@ fun OnboardingScreen(
                 saveFx(ctx, DspBaseline.fx(ctx))
                 fix.edit().putBoolean("dsp_base_prompted", true).apply()
                 DeviceState.notifyApplied()
+                baseDone = true
                 busy = false
                 finish()
             } else {
@@ -188,7 +190,9 @@ fun OnboardingScreen(
     var keepAlive by remember { mutableStateOf(fix.getBoolean("keepalive_job", false)) }
     var showBootDlg by remember { mutableStateOf(false) }
     var bootFail by remember { mutableStateOf(false) }
+    var showDeviceGuide by remember { mutableStateOf(false) }
     var showKeepGuide by remember { mutableStateOf(false) }
+    var baseDone by remember { mutableStateOf(baseCaptured) }
     val notifPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     fun startDeviceService() {
@@ -221,7 +225,7 @@ fun OnboardingScreen(
         deviceService = on
         fix.edit().putBoolean("device_service", on).apply()
         if (on) {
-            showKeepGuide = true
+            showDeviceGuide = true
             if (Build.VERSION.SDK_INT >= 33) {
                 notifPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
@@ -331,7 +335,7 @@ fun OnboardingScreen(
 
             if (pager.currentPage == total - 1) {
                 Button(
-                    onClick = { runCapture() },
+                    onClick = { if (baseDone) finish() else runCapture() },
                     enabled = !busy,
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(14.dp),
@@ -339,9 +343,24 @@ fun OnboardingScreen(
                         containerColor = accent,
                         contentColor = if (accent.luminance() > 0.55f) Color(0xFF101014) else Color.White
                     )
-                ) { Text(if (busy) "检测中…" else "检测并保存默认值", fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
-                TextButton(onClick = { onExit() }, modifier = Modifier.fillMaxWidth()) {
-                    Text("不执行检测 · 退出APP", fontSize = 12.sp, color = subInk())
+                ) {
+                    Text(
+                        when {
+                            busy -> "检测中…"
+                            baseDone -> "已检测过 DSP 默认参数"
+                            else -> "检测并保存默认值"
+                        },
+                        fontSize = 14.sp, fontWeight = FontWeight.SemiBold
+                    )
+                }
+                if (baseDone) {
+                    TextButton(onClick = { if (!busy) runCapture() }, modifier = Modifier.fillMaxWidth()) {
+                        Text("重新检测一次", fontSize = 12.sp, color = accent)
+                    }
+                } else {
+                    TextButton(onClick = { onExit() }, modifier = Modifier.fillMaxWidth()) {
+                        Text("不执行检测 · 退出APP", fontSize = 12.sp, color = subInk())
+                    }
                 }
             } else {
                 Button(
@@ -396,6 +415,10 @@ fun OnboardingScreen(
                 TextButton(onClick = { showBootDlg = false }) { Text("稍后", fontSize = 12.sp) }
             }
         )
+    }
+
+    if (showDeviceGuide) {
+        DeviceListenGuideDialog(ctx = ctx, accent = accent) { showDeviceGuide = false }
     }
 
     if (showKeepGuide) {

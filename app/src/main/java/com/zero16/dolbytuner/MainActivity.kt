@@ -276,6 +276,7 @@ class MainActivity : ComponentActivity() {
                         deviceLine = gate.deviceLine,
                         passed = gate.passed,
                         reasons = gate.reasons,
+                        baseCaptured = DspBaseline.captured(this),
                         onExit = { finishAffinity() },
                         onDone = {
                             obPrefs.edit().putBoolean("onboard_done", true).apply()
@@ -3617,7 +3618,8 @@ private fun SettingsScreen(activity: Activity) {
     val prefs = ctx.getSharedPreferences("dolby_tuner", Context.MODE_PRIVATE)
     var bootWrite by remember { mutableStateOf(prefs.getBoolean("boot_writeback", false)) }
     var showBootDialog by remember { mutableStateOf(false) }
-    var showKeepAliveGuide by remember { mutableStateOf(false) }
+    var showDeviceGuide by remember { mutableStateOf(false) }
+    var showKeepGuide by remember { mutableStateOf(false) }
     var showSponsor by remember { mutableStateOf(false) }
     var deviceService by remember { mutableStateOf(prefs.getBoolean("device_service", false)) }
     var hideRecents by remember { mutableStateOf(prefs.getBoolean("hide_recents", false)) }
@@ -3776,7 +3778,7 @@ private fun SettingsScreen(activity: Activity) {
                         deviceService = on
                         prefs.edit().putBoolean("device_service", on).apply()
                         if (on) {
-                            showKeepAliveGuide = true
+                            showDeviceGuide = true
                             if (Build.VERSION.SDK_INT >= 33) {
                                 notifPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
                             }
@@ -3851,7 +3853,7 @@ private fun SettingsScreen(activity: Activity) {
                         keepAlive = on
                         prefs.edit().putBoolean("keepalive_job", on).apply()
                         if (on) {
-                            showKeepAliveGuide = true
+                            showKeepGuide = true
                             KeepAliveJobService.schedule(ctx)
                             runCatching {
                                 ctx.startForegroundService(
@@ -4085,8 +4087,12 @@ private fun SettingsScreen(activity: Activity) {
         SponsorDialog(ctx = ctx, accent = Accent) { showSponsor = false }
     }
 
-    if (showKeepAliveGuide) {
-        KeepAliveGuideDialog(ctx = ctx, accent = Accent) { showKeepAliveGuide = false }
+    if (showDeviceGuide) {
+        DeviceListenGuideDialog(ctx = ctx, accent = Accent) { showDeviceGuide = false }
+    }
+
+    if (showKeepGuide) {
+        KeepAliveGuideDialog(ctx = ctx, accent = Accent) { showKeepGuide = false }
     }
 
     if (showLicense) {
