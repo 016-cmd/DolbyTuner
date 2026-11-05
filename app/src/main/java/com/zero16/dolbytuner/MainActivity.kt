@@ -197,6 +197,12 @@ class MainActivity : ComponentActivity() {
                 "end ok=" + r.isSuccess + " err=" + (r.exceptionOrNull()?.toString() ?: "-")
             )
         }.start()
+        // 后台隐藏：上次开着就继续让最近任务里看不到本 APP（服务照常跑）
+        runCatching {
+            if (getSharedPreferences("dolby_tuner", MODE_PRIVATE)
+                    .getBoolean("hide_recents", false)
+            ) setExcludeFromRecents(true)
+        }
         val gate = evaluateGate()
         setContent {
             DolbyTunerTheme {
@@ -3330,6 +3336,7 @@ private fun SettingsScreen(activity: Activity) {
     var bootWrite by remember { mutableStateOf(prefs.getBoolean("boot_writeback", false)) }
     var showBootDialog by remember { mutableStateOf(false) }
     var deviceService by remember { mutableStateOf(prefs.getBoolean("device_service", false)) }
+    var hideRecents by remember { mutableStateOf(prefs.getBoolean("hide_recents", false)) }
     val notifPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     var bootDialogFailed by remember { mutableStateOf(false) }
     fun openAutostart(): Boolean = runCatching {
@@ -3511,6 +3518,44 @@ private fun SettingsScreen(activity: Activity) {
                     fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+        Spacer(Modifier.height(12.dp))
+        GlassCard(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Bookmarks, null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("后台隐藏", fontSize = 13.sp)
+                    Text(
+                        if (hideRecents) "最近任务里看不到本 APP · 服务照常运行"
+                        else "最近任务里会显示本 APP",
+                        fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                androidx.compose.material3.Switch(
+                    checked = hideRecents,
+                    onCheckedChange = { on ->
+                        hideRecents = on
+                        prefs.edit().putBoolean("hide_recents", on).apply()
+                        runCatching { activity.setExcludeFromRecents(on) }
+                        android.widget.Toast.makeText(
+                            ctx,
+                            if (on) "已隐藏：退出后最近任务里不再出现" else "已恢复：最近任务正常显示",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "只影响「最近任务」列表，不改前台服务与通知；常驻通知本身是静默优先级，不会响铃弹窗。",
+                fontSize = 9.sp, lineHeight = 14.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         Spacer(Modifier.height(12.dp))
         GlassCard(Modifier.fillMaxWidth()) {
