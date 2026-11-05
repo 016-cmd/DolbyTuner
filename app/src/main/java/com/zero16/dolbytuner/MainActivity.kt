@@ -60,7 +60,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
-.jellyPress(Appearance.jelly.value > 0)
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -594,8 +593,7 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                                 .weight(1f)
                                 .fillMaxHeight()
                                 .clip(RoundedCornerShape(14.dp))
-                                .jellyPress(Appearance.jelly.value > 0)
-                                .clickable(
+                                .jellyPress(Appearance.jelly.value > 0).clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null
                                 ) {
@@ -929,8 +927,7 @@ private fun GeqScreen(deviceLine: String) {
                     }
                     list.forEach { p ->
                         Row(
-                            .jellyPress(Appearance.jelly.value > 0)
-                            Modifier.fillMaxWidth().clickable {
+                            Modifier.fillMaxWidth().jellyPress(Appearance.jelly.value > 0).clickable {
                                 DeviceTuningStore.bind(ctx, device, p.name)
                                 DeviceState.sync(ctx)
                                 showBindDialog = false
@@ -2881,8 +2878,7 @@ private fun EffectsScreen() {
                                     .heightIn(min = 92.dp)
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(cEq.copy(alpha = 0.12f))
-                                    .jellyPress(Appearance.jelly.value > 0)
-                                    .clickable(enabled = dpOn) { addPeq() },
+                                    .jellyPress(Appearance.jelly.value > 0).clickable(enabled = dpOn) { addPeq() },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
@@ -3123,8 +3119,7 @@ private fun EffectsScreen() {
                 presets.forEach { pr ->
                     Surface(
                         Modifier.weight(1f)
-                            .jellyPress(Appearance.jelly.value > 0)
-                            .clickable(enabled = limOn && dpOn) {
+                            .jellyPress(Appearance.jelly.value > 0).clickable(enabled = limOn && dpOn) {
                                 thr = pr.second[0]; atk = pr.second[1]; rel = pr.second[2]
                                 rat = pr.second[3]; post = pr.second[4]
                                 applyLim(true)
@@ -3220,8 +3215,7 @@ private fun EffectsScreen() {
                 segNames.forEachIndexed { i, n ->
                     Surface(
                         Modifier.weight(1f)
-                            .jellyPress(Appearance.jelly.value > 0)
-                            .clickable { sel = i; mbcStore[i].copyInto(pendMbc); prefs.edit().putInt("mbc_sel", i).apply() },
+                            .jellyPress(Appearance.jelly.value > 0).clickable { sel = i; mbcStore[i].copyInto(pendMbc); prefs.edit().putInt("mbc_sel", i).apply() },
                         shape = RoundedCornerShape(10.dp),
                         color = cMbc.copy(alpha = if (sel == i) 0.30f else 0.08f),
                         border = BorderStroke(1.dp, cMbc.copy(alpha = if (sel == i) 0.72f else 0.26f))
@@ -3261,8 +3255,7 @@ private fun EffectsScreen() {
                 mbcPresets.forEach { pr ->
                     Surface(
                         Modifier.weight(1f)
-                            .jellyPress(Appearance.jelly.value > 0)
-                            .clickable(enabled = mbcOn && dpOn) {
+                            .jellyPress(Appearance.jelly.value > 0).clickable(enabled = mbcOn && dpOn) {
                                 val l = List(4) { pr.second.copyOf() }
                                 mbcStore = l
                                 pr.second.copyInto(pendMbc)
@@ -3504,8 +3497,7 @@ private fun EqTab(
     onClick: () -> Unit
 ) {
     Surface(
-        .jellyPress(Appearance.jelly.value > 0)
-        Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = enabled, onClick = onClick),
+        Modifier.clip(RoundedCornerShape(8.dp)).jellyPress(Appearance.jelly.value > 0).clickable(enabled = enabled, onClick = onClick),
         shape = RoundedCornerShape(8.dp),
         color = accent.copy(alpha = if (active) 0.28f else 0.06f),
         border = BorderStroke(1.dp, accent.copy(alpha = if (active) 0.7f else 0.2f))
@@ -4060,8 +4052,7 @@ private fun SettingRow(
 ) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-            .jellyPress(Appearance.jelly.value > 0)
-            .clickable(onClick = onClick)
+            .jellyPress(Appearance.jelly.value > 0).clickable(onClick = onClick)
             .padding(vertical = 10.dp, horizontal = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

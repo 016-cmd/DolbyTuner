@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-.jellyPress(Appearance.jelly.value > 0)
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -60,8 +59,7 @@ fun AppearanceSection(
 
     GlassCard(Modifier.fillMaxWidth()) {
         Row(
-            .jellyPress(Appearance.jelly.value > 0)
-            Modifier.fillMaxWidth().clickable { expanded = !expanded },
+            Modifier.fillMaxWidth().jellyPress(Appearance.jelly.value > 0).clickable { expanded = !expanded },
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(Icons.Default.Palette, null, tint = accent, modifier = Modifier.size(18.dp))
@@ -294,13 +292,11 @@ private fun SegRow(
                 Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(9.dp))
-                    .jellyPress(Appearance.jelly.value > 0)
                     .background(
                         if (on) Appearance.accent.value.copy(alpha = 0.22f)
                         else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
                     )
-                    .jellyPress(Appearance.jelly.value > 0)
-                    .clickable { onSelect(i) }
+                    .jellyPress(Appearance.jelly.value > 0).clickable { onSelect(i) }
                     .padding(vertical = 6.dp),
                 contentAlignment = Alignment.Center
             ) {
