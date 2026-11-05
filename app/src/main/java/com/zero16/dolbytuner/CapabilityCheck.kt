@@ -136,7 +136,7 @@ internal object AudioCap {
             sb.appendLine("[${idx + 1}] $name")
             sb.appendLine("    type：${d.type}")
             sb.appendLine("    impl：${d.uuid}")
-            sb.appendLine("    接入：${modeName(d.connectMode)}")
+            sb.appendLine("    接入：${d.connectMode}")
             sb.appendLine("    新建：$canCreate${if (e0 != null) "（${cost}ms）" else "（构造失败，多为系统独占）"}")
             sb.appendLine("    控制权：$ctl")
             sb.appendLine()
