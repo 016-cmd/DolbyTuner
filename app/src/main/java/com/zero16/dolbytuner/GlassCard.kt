@@ -1,7 +1,5 @@
 package com.zero16.dolbytuner
 
-/** 切页计数：每次换页 +1，用来让卡片入场动画每次都重播 */
-val LocalCardEpoch = androidx.compose.runtime.compositionLocalOf { 0 }
 
 import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.effects.lens
@@ -54,6 +52,10 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.sin
+
+/** 切页计数：每次换页 +1，用来让卡片入场动画每次都重播 */
+val LocalCardEpoch = androidx.compose.runtime.compositionLocalOf { 0 }
+
 
 /**
  * 液态玻璃卡片（自研绘制，不抓实时背景 → 无 RenderThread 崩溃风险）。
