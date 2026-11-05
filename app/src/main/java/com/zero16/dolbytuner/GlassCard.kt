@@ -102,8 +102,9 @@ fun Modifier.glassSurface(radius: Float): Modifier {
     val warmA = if (sat > 1.1f) (sat - 1.1f) * 0.10f else 0f
     val coolA = if (sat < 1.1f) (1.1f - sat) * 0.10f else 0f
 
-    val strokeW = 1.dp.toPx()
-    val r = radius.dp.toPx()
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val strokeW = with(density) { 1.dp.toPx() }
+    val r = with(density) { radius.dp.toPx() }
 
     return this.drawWithCache {
         val w = size.width
