@@ -41,7 +41,7 @@ class DolbyTileService : TileService() {
             val muted = CallGuard.muted.value
             val on = p.getBoolean("on", false) && !muted
             tile.state = if (on) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-            tile.label = "Dolby音效"
+            tile.label = "Tuner DPS"
             tile.subtitle = when {
                 muted -> "通话中已暂停"
                 on -> "已开启"
