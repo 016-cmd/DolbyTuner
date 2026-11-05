@@ -127,13 +127,16 @@ fun Modifier.glassSurface(radius: Float, cardPos: Offset, cardSize: IntSize): Mo
     val blurBmp = WallpaperState.blurred
 
     val frosted = mode == GlassMode.FROSTED && on
-    // 卡片本身「无色」：只用一点点中性白抬高一点点明度，绝不给底色染黑/染灰
+    // 卡片「无色」：铺一层中性灰（无色相），把壁纸的彩色压下去，不让它把卡片染成蓝/紫
+    // 深色模式 = 黑卡，浅色模式 = 白卡；只靠透明度控制「透多少」，绝不染色
+    val neutral = if (isDark) Color.Black else Color.White
     val fillAlpha = when {
-        !on -> if (isDark) 0.14f else 0.48f
-        frosted -> if (isDark) 0.055f else 0.30f
-        else -> if (isDark) 0.085f else 0.34f
+        !on -> if (isDark) 0.90f else 0.96f
+        frosted -> if (isDark) 0.62f else 0.78f
+        else -> if (isDark) 0.48f else 0.68f
     } * (contrast / 1.1f)
-    val fill = Color.White.copy(alpha = fillAlpha)
+    val fill = neutral.copy(alpha = fillAlpha)
+    val sheen = Color.White.copy(alpha = if (isDark) 0.03f else 0.05f)
 
     val warmA = if (sat > 1.1f) (sat - 1.1f) * 0.10f else 0f
     val coolA = if (sat < 1.1f) (1.1f - sat) * 0.10f else 0f
@@ -180,8 +183,9 @@ fun Modifier.glassSurface(radius: Float, cardPos: Offset, cardSize: IntSize): Mo
                 }
             }
 
-            // 2) 固定底色
+            // 2) 中性底色（无色相）+ 一点白，避免壁纸颜色把卡片染色
             drawRoundRect(color = fill, cornerRadius = corner)
+            drawRoundRect(color = sheen, cornerRadius = corner)
 
             // 3) 顶部高光
             val hl = if (liquid) 0.26f else 0.16f
