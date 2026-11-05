@@ -1,5 +1,8 @@
 package com.zero16.dolbytuner
 
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.Image
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -47,6 +50,8 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun AppearanceSection(
     onPickWallpaper: () -> Unit,
+    onClearWallpaper: () -> Unit,
+    hasLocalWallpaper: Boolean,
     onWallpaperKind: (Int) -> Unit
 ) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -134,6 +139,27 @@ fun AppearanceSection(
                 }
 
                 GroupLabel("壁纸")
+
+                // 当前壁纸预览
+                val wp = WallpaperState.original
+                if (wp != null) {
+                    Image(
+                        bitmap = wp.asImageBitmap(),
+                        contentDescription = "当前壁纸",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
+                Text(
+                    "当前：${WallpaperState.builtinName(Appearance.wallpaperKind.value)}",
+                    fontSize = 9.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
                 SegRow(
                     "来源",
                     listOf("本地", "极光", "晨雾", "暖砂"),
@@ -142,11 +168,22 @@ fun AppearanceSection(
                 SliderRow("压暗", "", Appearance.wallpaperDim.value, 0f..60f) {
                     Appearance.setWallpaperDim(ctx, it)
                 }
-                TextButton(
-                    onClick = onPickWallpaper,
-                    modifier = Modifier.align(Alignment.End)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
                 ) {
-                    Text("从相册选择图片", fontSize = 11.sp, color = accent)
+                    if (hasLocalWallpaper) {
+                        TextButton(onClick = onClearWallpaper) {
+                            Text(
+                                "清除本地壁纸",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    TextButton(onClick = onPickWallpaper) {
+                        Text("从相册选择图片", fontSize = 11.sp, color = accent)
+                    }
                 }
 
                 GroupLabel("页面")

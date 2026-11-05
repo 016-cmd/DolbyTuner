@@ -1,5 +1,7 @@
 package com.zero16.dolbytuner
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateFloatAsState
 import kotlin.math.roundToInt
@@ -398,6 +400,19 @@ private fun MainApp(activity: Activity, deviceLine: String) {
             }
         )
     }
+    // 启动动画：内容淡入 + 轻微放大上移；dock 从下方弹入
+    val launchAnim = remember { Animatable(0f) }
+    val dockAnim = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        if (Appearance.animLaunch.value) {
+            launchAnim.animateTo(1f, tween(520, easing = FastOutSlowInEasing))
+            dockAnim.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
+        } else {
+            launchAnim.snapTo(1f)
+            dockAnim.snapTo(1f)
+        }
+    }
+
     var dockPos by remember { mutableStateOf(Offset.Zero) }
     var dockSize by remember { mutableStateOf(IntSize.Zero) }
     val dockDensity = LocalDensity.current
@@ -415,7 +430,14 @@ private fun MainApp(activity: Activity, deviceLine: String) {
         HorizontalPager(
             state = pagerState,
             userScrollEnabled = false,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize().graphicsLayer {
+                val p2 = launchAnim.value
+                alpha = p2
+                translationY = (1f - p2) * 22.dp.toPx()
+                val s = 0.945f + 0.055f * p2
+                scaleX = s
+                scaleY = s
+            }
         ) { page ->
             when (page) {
                 0 -> GeqScreen(deviceLine)
@@ -430,6 +452,11 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                 .navigationBarsPadding()
                 .padding(horizontal = 32.dp, vertical = 16.dp)
                 .height(62.dp)
+                .graphicsLayer {
+                    val p2 = dockAnim.value
+                    alpha = p2
+                    translationY = (1f - p2) * 64.dp.toPx()
+                }
                 .onGloballyPositioned {
                     dockPos = it.positionInRoot()
                     dockSize = it.size
@@ -3813,6 +3840,12 @@ private fun SettingsScreen(activity: Activity) {
                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                 )
             },
+            onClearWallpaper = {
+                ThemePrefs.setWallpaperUri(ctx, null)
+                Appearance.setWallpaperKind(ctx, 2)
+                activity.recreate()
+            },
+            hasLocalWallpaper = ThemePrefs.getWallpaperUri(ctx) != null,
             onWallpaperKind = { k ->
                 Appearance.setWallpaperKind(ctx, k)
                 if (k == 0 && ThemePrefs.getWallpaperUri(ctx) == null) {

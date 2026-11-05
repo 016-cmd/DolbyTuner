@@ -1,5 +1,8 @@
 package com.zero16.dolbytuner
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -74,6 +77,7 @@ fun GlassCard(
             }
             .clip(RoundedCornerShape(radius.dp))
             .glassSurface(radius.toFloat(), pos, sz)
+            .cardEnter()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) { content() }
@@ -96,6 +100,7 @@ fun GlassSurface(
             }
             .clip(RoundedCornerShape(radius.dp))
             .glassSurface(radius.toFloat(), pos, sz)
+            .cardEnter()
     ) { content() }
 }
 
@@ -116,6 +121,7 @@ fun GlassSettingsCard(
             }
             .clip(RoundedCornerShape(radius.dp))
             .glassSurface(radius.toFloat(), pos, sz)
+            .cardEnter()
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
             content()
@@ -157,6 +163,27 @@ fun Modifier.jellyPress(enabled: Boolean): Modifier {
                 scope.launch { sy.animateTo(1f, spec) }
             }
         }
+}
+
+/**
+ * 卡片入场：透明度 + 轻微上移 + 轻微放大。
+ * 只播一次（remember），开关是 Appearance.animCard。
+ */
+@Composable
+fun Modifier.cardEnter(): Modifier {
+    if (!Appearance.animCard.value) return this
+    val anim = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        anim.animateTo(1f, tween(durationMillis = 380, easing = FastOutSlowInEasing))
+    }
+    return this.graphicsLayer {
+        val p = anim.value
+        alpha = p
+        translationY = (1f - p) * 14.dp.toPx()
+        val s = 0.985f + 0.015f * p
+        scaleX = s
+        scaleY = s
+    }
 }
 
 /** 玻璃表面绘制 */
