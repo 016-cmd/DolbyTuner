@@ -12,6 +12,8 @@ import android.media.AudioManager
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.telephony.PhoneStateListener
+import android.telephony.TelephonyManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,6 +29,9 @@ class DeviceAutomationService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var registered = false
     private var pending: Runnable? = null
+    /** 通话期间临时停掉音效页（不写偏好，通话结束照原样恢复） */
+    private var phoneListener: PhoneStateListener? = null
+    private var dpMutedByCall = false
 
     private val callback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) = scheduleCheck()
@@ -37,12 +42,24 @@ class DeviceAutomationService : Service() {
         super.onCreate()
         startForeground(NOTIFICATION_ID, buildNotification())
         register()
+        // 服务一起来就把音效页按本地记录重建：APP 退出后 DP 仍然生效
+        if (DpRestore.isOn(this)) {
+            scope.launch { runCatching { DpRestore.apply(this@DeviceAutomationService) } }
+        }
+        syncPhoneListener()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (!registered) register()
-        // 设置页「重新下发监听通知」：按当前设备/绑定刷新一次常驻通知
-        if (intent?.action == ACTION_REFRESH) refreshNotice()
+        syncPhoneListener()
+        when (intent?.action) {
+            // 设置页「重新下发监听通知」：按当前设备/绑定刷新一次常驻通知
+            ACTION_REFRESH -> refreshNotice()
+            // 开机广播 / 手动恢复：按本地记录把音效页整套写回
+            ACTION_RESTORE -> scope.launch {
+                runCatching { DpRestore.apply(this@DeviceAutomationService) }
+            }
+        }
         return START_STICKY
     }
 
@@ -58,6 +75,7 @@ class DeviceAutomationService : Service() {
 
     override fun onDestroy() {
         pending?.let { handler.removeCallbacks(it) }
+        unregisterPhoneListener()
         if (registered) {
             val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
             runCatching { am?.unregisterAudioDeviceCallback(callback) }
@@ -88,7 +106,9 @@ class DeviceAutomationService : Service() {
 
     private fun checkAndApply() {
         val prefs = getSharedPreferences("dolby_tuner", Context.MODE_PRIVATE)
-        if (!prefs.getBoolean("device_service", false)) {
+        val keepAlive = prefs.getBoolean("keepalive_job", false)
+        val callMute = prefs.getBoolean("call_mute_dp", false)
+        if (!prefs.getBoolean("device_service", false) && !keepAlive && !callMute) {
             stopSelf()
             return
         }
@@ -121,6 +141,53 @@ class DeviceAutomationService : Service() {
                     updateNotification(device.name, preset?.name ?: "默认（平直）")
                 }
             }
+        }
+    }
+
+    // ── 通话监听：来电/通话中临时关掉音效页，挂断后按本地记录恢复 ──
+    private fun syncPhoneListener() {
+        val on = getSharedPreferences("dolby_tuner", Context.MODE_PRIVATE)
+            .getBoolean("call_mute_dp", false)
+        if (on) registerPhoneListener() else unregisterPhoneListener()
+    }
+
+    private fun registerPhoneListener() {
+        if (phoneListener != null) return
+        val tm = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager ?: return
+        @Suppress("DEPRECATION")
+        val l = object : PhoneStateListener() {
+            override fun onCallStateChanged(state: Int, phoneNumber: String?) {
+                when (state) {
+                    TelephonyManager.CALL_STATE_RINGING,
+                    TelephonyManager.CALL_STATE_OFFHOOK -> {
+                        if (!dpMutedByCall && DynProc.running) {
+                            dpMutedByCall = true
+                            scope.launch { runCatching { DynProc.stop() } }
+                        }
+                    }
+                    TelephonyManager.CALL_STATE_IDLE -> {
+                        if (dpMutedByCall) {
+                            dpMutedByCall = false
+                            scope.launch { runCatching { DpRestore.apply(this@DeviceAutomationService) } }
+                        }
+                    }
+                }
+            }
+        }
+        val ok = runCatching {
+            tm.listen(l, PhoneStateListener.LISTEN_CALL_STATE)
+            true
+        }.getOrDefault(false)
+        if (ok) phoneListener = l
+    }
+
+    private fun unregisterPhoneListener() {
+        val l = phoneListener ?: return
+        phoneListener = null
+        runCatching {
+            val tm = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+            @Suppress("DEPRECATION")
+            tm?.listen(l, PhoneStateListener.LISTEN_NONE)
         }
     }
 
@@ -164,6 +231,8 @@ class DeviceAutomationService : Service() {
     companion object {
         /** 设置页点「重新下发监听通知」时带的 action */
         const val ACTION_REFRESH = "com.zero16.dolbytuner.ACTION_REFRESH_NOTICE"
+        /** 开机 / 手动：按本地记录写回音效页 */
+        const val ACTION_RESTORE = "com.zero16.dolbytuner.ACTION_RESTORE_DP"
         private const val CHANNEL_ID = "device_automation"
         private const val NOTIFICATION_ID = 1001
     }

@@ -888,16 +888,22 @@ internal fun dpUnpack(s: String): DpSnapshot? {
     return runCatching {
         DpSnapshot(
             curve = p[16].split(",").mapNotNull { it.toFloatOrNull() }.toFloatArray()
-                .let { if (it.size == 127) it else FloatArray(127) },
+                .let { if (it.size == 127) it.map { v -> v.coerceIn(-40f, 40f) }.toFloatArray() else FloatArray(127) },
             eqTab = p[11].toInt(),
             geqQ4 = p[12].split(",").mapNotNull { it.toIntOrNull() }.toIntArray()
                 .let { if (it.size == DapRealtime.BANDS) it else IntArray(DapRealtime.BANDS) },
             geqQ = p[13].toInt(),
             geqMaster = p[14].toInt(),
             peq = p[15],
-            gain = p[0].toInt(),
+            gain = p[0].toInt().coerceIn(-200, 200),
             limOn = p[1] == "1",
-            lim = p[2].split(",").mapNotNull { it.toIntOrNull() }.toIntArray(),
+            lim = p[2].split(",").mapNotNull { it.toIntOrNull() }.toIntArray()
+                .let { a ->
+                    if (a.size >= 6) intArrayOf(
+                        a[0].coerceIn(-600, 0), a[1].coerceIn(0, 1000), a[2].coerceIn(1, 2000),
+                        a[3].coerceIn(10, 1000), a[4].coerceIn(-200, 200), a[5].coerceIn(0, 3)
+                    ) else intArrayOf(-20, 10, 60, 100, 0, 0)
+                },
             mbcOn = p[3] == "1",
             mbc = p[4].split(":").mapNotNull { seg ->
                 seg.split(",").mapNotNull { it.toIntOrNull() }.toIntArray().takeIf { it.size >= 9 }
@@ -1266,7 +1272,7 @@ internal fun applyDpMacros(
     return out
 }
 
-private fun dpMbc(l: List<IntArray>, on: Boolean): List<DynProc.MbcBandCfg> = l.map { a ->
+internal fun dpMbc(l: List<IntArray>, on: Boolean): List<DynProc.MbcBandCfg> = l.map { a ->
     DynProc.MbcBandCfg(
         enabled = on && a.getOrElse(9) { 0 } == 1,
         thresholdDb = a.getOrElse(0) { -200 } / 10f,
@@ -2374,6 +2380,7 @@ private fun EffectsScreen() {
                     } else {
                         DynProc.setInputGain(0f)
                     }
+                    DynProc.setLimiter(cfg())
                     DynProc.setOutGain(gDb)
                     DynProc.setPreEq(curve)
                     DynProc.setMbc(toDynMbc(mbcStore))
@@ -2420,9 +2427,13 @@ private fun EffectsScreen() {
     }
 
     LaunchedEffect(Unit) {
-        if (dpOn) {
-            pushAllDp()
+        // 先把曲线按本地记录算出来：总开关关着也要和滑杆一致，不能显示成平线
+        runCatching {
+            val raw = currentRaw()
+            eqRaw = raw
+            eqCurve = finalEq(raw)
         }
+        if (dpOn) pushAllDp()
     }
 
     val accent = Color(0xFF38BDF8)
@@ -3346,7 +3357,12 @@ private fun SettingsScreen(activity: Activity) {
     var showBootDialog by remember { mutableStateOf(false) }
     var deviceService by remember { mutableStateOf(prefs.getBoolean("device_service", false)) }
     var hideRecents by remember { mutableStateOf(prefs.getBoolean("hide_recents", false)) }
+    var keepAlive by remember { mutableStateOf(prefs.getBoolean("keepalive_job", false)) }
+    var callMute by remember { mutableStateOf(prefs.getBoolean("call_mute_dp", false)) }
     val notifPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val phonePerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (!ok) android.widget.Toast.makeText(ctx, "没有电话状态权限，通话暂停不会生效", android.widget.Toast.LENGTH_LONG).show()
+    }
     var bootDialogFailed by remember { mutableStateOf(false) }
     fun openAutostart(): Boolean = runCatching {
         ctx.startActivity(
@@ -3436,7 +3452,8 @@ private fun SettingsScreen(activity: Activity) {
                 Column(Modifier.weight(1f)) {
                     Text("开机参数自动写回", fontSize = 13.sp)
                     Text(
-                        if (bootWrite) "已开启 · 开机时重新下发 GEQ 与音效" else "关闭时开机不写入任何参数",
+                        if (bootWrite) "已开启 · 开机写回杜比参数与音效页"
+                        else "关闭时开机不写入任何参数",
                         fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -3527,22 +3544,68 @@ private fun SettingsScreen(activity: Activity) {
                     fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-        }
-        Spacer(Modifier.height(12.dp))
-        GlassCard(Modifier.fillMaxWidth()) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.Bookmarks, null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("后台隐藏", fontSize = 13.sp)
+                    Text("后台保活", fontSize = 12.sp)
+                    Text(
+                        "被系统清掉后由系统定时把服务拉回来",
+                        fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                androidx.compose.material3.Switch(
+                    checked = keepAlive,
+                    onCheckedChange = { on ->
+                        keepAlive = on
+                        prefs.edit().putBoolean("keepalive_job", on).apply()
+                        if (on) {
+                            KeepAliveJobService.schedule(ctx)
+                            runCatching {
+                                ctx.startForegroundService(
+                                    Intent(ctx, DeviceAutomationService::class.java)
+                                )
+                            }
+                        } else {
+                            KeepAliveJobService.cancel(ctx)
+                        }
+                    }
+                )
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("通话时暂停音效", fontSize = 12.sp)
+                    Text(
+                        "来电或通话中自动关掉音效页，挂断后按记录恢复",
+                        fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                androidx.compose.material3.Switch(
+                    checked = callMute,
+                    onCheckedChange = { on ->
+                        callMute = on
+                        prefs.edit().putBoolean("call_mute_dp", on).apply()
+                        if (on) {
+                            if (Build.VERSION.SDK_INT >= 23) {
+                                runCatching { phonePerm.launch(Manifest.permission.READ_PHONE_STATE) }
+                            }
+                            runCatching {
+                                ctx.startForegroundService(
+                                    Intent(ctx, DeviceAutomationService::class.java)
+                                )
+                            }
+                        }
+                    }
+                )
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("后台隐藏", fontSize = 12.sp)
                     Text(
                         if (hideRecents) "最近任务里看不到本 APP · 服务照常运行"
                         else "最近任务里会显示本 APP",
-                        fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                        fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 androidx.compose.material3.Switch(
@@ -3551,20 +3614,9 @@ private fun SettingsScreen(activity: Activity) {
                         hideRecents = on
                         prefs.edit().putBoolean("hide_recents", on).apply()
                         setHideInRecents(activity, on)
-                        android.widget.Toast.makeText(
-                            ctx,
-                            if (on) "已隐藏：退出后最近任务里不再出现" else "已恢复：最近任务正常显示",
-                            android.widget.Toast.LENGTH_SHORT
-                        ).show()
                     }
                 )
             }
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "只影响「最近任务」列表，不改前台服务与通知；常驻通知本身是静默优先级，不会响铃弹窗。",
-                fontSize = 9.sp, lineHeight = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
         Spacer(Modifier.height(12.dp))
         GlassCard(Modifier.fillMaxWidth()) {

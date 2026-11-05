@@ -29,6 +29,16 @@ class BootReceiver : BroadcastReceiver() {
 
         if (!sp.getBoolean("boot_writeback", false)) return
 
+        // 音效页（DP）要写回必须借服务进程重建：DP 是进程内 AudioEffect
+        if (DpRestore.isOn(context)) {
+            runCatching {
+                context.startForegroundService(
+                    Intent(context, DeviceAutomationService::class.java)
+                        .setAction(DeviceAutomationService.ACTION_RESTORE)
+                )
+            }
+        }
+
         val pending = goAsync()
         Thread {
             try {
