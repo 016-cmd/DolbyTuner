@@ -74,22 +74,11 @@ internal fun EffectCard(
     // 每张卡片按「类别色」上色，不依赖开关状态：
     // 关闭 = 很淡的类别底 + 淡彩边；开启 = 更实的类别底 + 更亮的彩边
     // （浅色 / 深色模式用两档透明度，避免在壁纸上发白或发灰）
-    val container = accent.copy(
-        alpha = when {
-            effEnabled && dark -> 0.26f
-            effEnabled -> 0.19f
-            dark -> 0.12f
-            else -> 0.11f
-        }
-    )
-    val borderColor = accent.copy(
-        alpha = when {
-            effEnabled && dark -> 0.72f
-            effEnabled -> 0.58f
-            dark -> 0.34f
-            else -> 0.28f
-        }
-    )
+    // 卡片本体只分白卡 / 黑卡，不再按类别上色（类别色只留在图标与开关上）
+    val container = if (dark) Color.Black.copy(alpha = if (effEnabled) 0.58f else 0.50f)
+    else Color.White.copy(alpha = if (effEnabled) 0.80f else 0.72f)
+    val borderColor = if (dark) Color.White.copy(alpha = 0.10f)
+    else Color.Black.copy(alpha = 0.06f)
     val subColor = if (dark) Color.White.copy(alpha = 0.72f) else Color(0xFF2E2E2E).copy(alpha = 0.66f)
 
     Card(

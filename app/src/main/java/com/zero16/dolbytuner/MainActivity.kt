@@ -2537,9 +2537,15 @@ private fun EffectsScreen() {
         Card(
             Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, accent.copy(alpha = if (dpOn) 0.7f else 0.3f)),
+            // 白卡 / 黑卡：底色不染色，类别色只留在图标与状态文字上
+            border = BorderStroke(
+                1.dp,
+                if (androidx.compose.foundation.isSystemInDarkTheme())
+                    Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.06f)
+            ),
             colors = CardDefaults.cardColors(
-                containerColor = accent.copy(alpha = if (dpOn) 0.18f else 0.08f)
+                containerColor = if (androidx.compose.foundation.isSystemInDarkTheme())
+                    Color.Black.copy(alpha = 0.58f) else Color.White.copy(alpha = 0.80f)
             )
         ) {
             Row(
