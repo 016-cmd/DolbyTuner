@@ -1058,6 +1058,15 @@ private suspend fun pushFx(next: FxState): String? = withContext(Dispatchers.IO)
     e
 }
 
+/** 等比增益：按曲线能量平均反向补偿，钳制在 ±24 dB */
+internal fun autoGainOf(curve: FloatArray): Float {
+    if (curve.isEmpty()) return 0f
+    var s = 0.0
+    for (v in curve) s += Math.pow(10.0, v / 10.0)
+    val avg = 10.0 * Math.log10(s / curve.size)
+    return (-avg).toFloat().coerceIn(-24f, 24f)
+}
+
 /** Q6 线性值 → dB 文本（64 = 0 dB，0 = -∞） */
 private fun q6db(v: Int): String =
     if (v <= 0) "-∞ dB" else String.format("%+.1f dB", 20.0 * Math.log10(v / 64.0))
@@ -1163,7 +1172,7 @@ private suspend fun applyDpPreset(
             applyDpMacros(dpMbc(d.mbc, d.mbcOn), bbOn, bbAmt, dsOn, dsAmt)
         )
         if (!ok) return@withContext "音效引擎启动失败"
-        DynProc.setOutGain(d.gain / 10f)
+        DynProc.setOutGain(if (autoGain) autoGainOf(d.curve) else d.gain / 10f)
         DynProc.setPreEq(d.curve)
         if (d.postOn) DynProc.setPostEq(d.post, true)
         saveDpPrefs(ctx, d)
@@ -2098,14 +2107,7 @@ private fun EffectsScreen() {
     }
 
     /** 等比增益要补的 dB：取最终曲线的能量平均，反向抵消 */
-    fun autoGainDb(): Float {
-        val c = eqCurve
-        if (c.isEmpty()) return 0f
-        var s = 0.0
-        for (v in c) s += Math.pow(10.0, v / 10.0)
-        val avg = 10.0 * Math.log10(s / c.size)
-        return (-avg).toFloat().coerceIn(-24f, 24f)
-    }
+    fun autoGainDb(): Float = autoGainOf(eqCurve)
 
     fun pushEq() {
         val raw = rawCurve(peqLive())
@@ -2118,7 +2120,6 @@ private fun EffectsScreen() {
         }
         if (autoGain) {
             val ag = autoGainDb()
-            gain = (ag * 10).toInt()
             scope.launch {
                 withContext(Dispatchers.IO) { DynProc.setOutGain(ag) }
                 status = DynProc.status
@@ -2342,7 +2343,7 @@ private fun EffectsScreen() {
         eqRaw = raw
         val curve = finalEq(raw)
         eqCurve = curve
-        val gDb = gain / 10f
+        val gDb = if (autoGain) autoGainDb() else gain / 10f
         scope.launch {
             busy = true
             withContext(Dispatchers.IO) {
@@ -2383,7 +2384,7 @@ private fun EffectsScreen() {
     // 输出增益：拖动时 50ms 节流一次，避免一次拖动堆出几十个协程互相覆盖
     val gainTick = remember {
         Runnable {
-            val g = gain / 10f
+            val g = if (autoGain) autoGainDb() else gain / 10f
             val v = gain
             scope.launch {
                 withContext(Dispatchers.IO) { DynProc.setOutGain(g) }
@@ -2819,7 +2820,7 @@ private fun EffectsScreen() {
         ) {
             FxSlider(
                 "整体增益", (if (gain > 0) "+${gain / 10f}" else "${gain / 10f}") + " dB",
-                gain, -200..200, dpOn,
+                gain, -200..200, dpOn && !autoGain,
                 fmt = { String.format("%+.1f dB", it / 10f) },
                 onLive = {
                     if (autoGain) {
@@ -2844,13 +2845,7 @@ private fun EffectsScreen() {
                 onCheckedChange = { on ->
                     autoGain = on
                     prefs.edit().putBoolean("auto_gain", on).apply()
-                    if (on) {
-                        val ag = autoGainDb()
-                        gain = (ag * 10).toInt()
-                        applyGain()
-                    } else {
-                        applyGain()
-                    }
+                    applyGain()
                 }
             )
             Text(
