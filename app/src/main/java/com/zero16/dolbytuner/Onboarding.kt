@@ -1,6 +1,13 @@
 package com.zero16.dolbytuner
 
+import android.Manifest
 import android.content.Context
+import android.content.Intent
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -14,6 +21,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,14 +38,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Waves
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -170,6 +182,67 @@ fun OnboardingScreen(
         }
     }
 
+    // 后台相关：和设置页同一套 setter
+    var bootWrite by remember { mutableStateOf(fix.getBoolean("boot_writeback", false)) }
+    var deviceService by remember { mutableStateOf(fix.getBoolean("device_service", false)) }
+    var keepAlive by remember { mutableStateOf(fix.getBoolean("keepalive_job", false)) }
+    var showBootDlg by remember { mutableStateOf(false) }
+    var bootFail by remember { mutableStateOf(false) }
+    var showKeepGuide by remember { mutableStateOf(false) }
+    val notifPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    fun startDeviceService() {
+        runCatching { ctx.startForegroundService(Intent(ctx, DeviceAutomationService::class.java)) }
+    }
+
+    fun openAutostart(): Boolean = runCatching {
+        ctx.startActivity(
+            Intent().apply {
+                component = android.content.ComponentName(
+                    "com.miui.securitycenter",
+                    "com.miui.permcenter.autostart.AutoStartManagementActivity"
+                )
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        )
+        true
+    }.getOrDefault(false)
+
+    fun setBoot(on: Boolean) {
+        bootWrite = on
+        fix.edit().putBoolean("boot_writeback", on).apply()
+        if (on) {
+            bootFail = false
+            showBootDlg = true
+        }
+    }
+
+    fun setDev(on: Boolean) {
+        deviceService = on
+        fix.edit().putBoolean("device_service", on).apply()
+        if (on) {
+            showKeepGuide = true
+            if (Build.VERSION.SDK_INT >= 33) {
+                notifPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            startDeviceService()
+        } else {
+            runCatching { ctx.stopService(Intent(ctx, DeviceAutomationService::class.java)) }
+        }
+    }
+
+    fun setKeep(on: Boolean) {
+        keepAlive = on
+        fix.edit().putBoolean("keepalive_job", on).apply()
+        if (on) {
+            showKeepGuide = true
+            KeepAliveJobService.schedule(ctx)
+            startDeviceService()
+        } else {
+            KeepAliveJobService.cancel(ctx)
+        }
+    }
+
     Box(Modifier.fillMaxSize().statusBarsPadding()) {
         Column(
             Modifier.fillMaxSize().padding(horizontal = 18.dp).navigationBarsPadding()
@@ -217,7 +290,11 @@ fun OnboardingScreen(
                                 )
                                 else -> DspBody(
                                     accent = accent, cs = cs, busy = busy, errMsg = errMsg,
-                                    pulse = pulse, halo = halo
+                                    pulse = pulse, halo = halo,
+                                    bootWrite = bootWrite, deviceService = deviceService,
+                                    keepAlive = keepAlive,
+                                    onBoot = { setBoot(it) }, onDev = { setDev(it) },
+                                    onKeep = { setKeep(it) }
                                 )
                             }
                         }
@@ -281,6 +358,48 @@ fun OnboardingScreen(
                 Spacer(Modifier.height(14.dp))
             }
         }
+    }
+
+    if (showBootDlg) {
+        AlertDialog(
+            onDismissRequest = { showBootDlg = false },
+            title = { Text("开机参数自动写回", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
+            text = {
+                Column {
+                    if (bootFail) {
+                        Text(
+                            "无法自动打开自启动设置。", fontSize = 12.sp,
+                            color = Appearance.colorLimit.value
+                        )
+                        Spacer(Modifier.height(6.dp))
+                    }
+                    Text(
+                        "已开启。请允许 Dolby Tuner 自启动，否则重启后系统不会唤醒 APP 写回参数。",
+                        fontSize = 11.sp, lineHeight = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "路径：设置 → 应用设置 → 授权管理 → 自启动 → 允许 Dolby Tuner",
+                        fontSize = 10.sp, color = subInk()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (openAutostart()) showBootDlg = false else bootFail = true
+                }) {
+                    Text("去设置", color = accent, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBootDlg = false }) { Text("稍后", fontSize = 12.sp) }
+            }
+        )
+    }
+
+    if (showKeepGuide) {
+        KeepAliveGuideDialog(ctx = ctx, accent = accent) { showKeepGuide = false }
     }
 }
 
@@ -348,27 +467,107 @@ private fun CheckBody(
 }
 
 @Composable
-private fun DspBody(accent: Color, cs: androidx.compose.material3.ColorScheme, busy: Boolean, errMsg: String?, pulse: Float, halo: Float) {
-    Box(
-        Modifier.size(76.dp)
-            .graphicsLayer { scaleX = pulse; scaleY = pulse }
-            .clip(CircleShape).background(accent.copy(alpha = halo)),
-        contentAlignment = Alignment.Center
-    ) { Icon(Icons.Default.Tune, null, tint = accent, modifier = Modifier.size(38.dp)) }
-    Spacer(Modifier.height(18.dp))
-    Text("记录音效默认值", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = cs.onSurface)
-    Spacer(Modifier.height(8.dp))
-    Text(
-        "每台手机的杜比默认参数都不一样。现在读一次本机 DSP 的当前音效参数，存成「重置」时的基准。",
-        fontSize = 11.sp, lineHeight = 18.sp, color = cs.onSurface
-    )
-    Spacer(Modifier.height(10.dp))
-    Text(
-        "以后点重置：GEQ 归零、音效恢复成这套值。检测只读不改任何参数。",
-        fontSize = 10.sp, lineHeight = 16.sp, color = subInk(0.9f)
-    )
-    errMsg?.let {
+private fun DspBody(
+    accent: Color, cs: androidx.compose.material3.ColorScheme, busy: Boolean, errMsg: String?,
+    pulse: Float, halo: Float,
+    bootWrite: Boolean, deviceService: Boolean, keepAlive: Boolean,
+    onBoot: (Boolean) -> Unit, onDev: (Boolean) -> Unit, onKeep: (Boolean) -> Unit
+) {
+    Column(
+        Modifier.fillMaxWidth().fillMaxHeight()
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            Modifier.size(76.dp)
+                .graphicsLayer { scaleX = pulse; scaleY = pulse }
+                .clip(CircleShape).background(accent.copy(alpha = halo)),
+            contentAlignment = Alignment.Center
+        ) { Icon(Icons.Default.Tune, null, tint = accent, modifier = Modifier.size(38.dp)) }
+        Spacer(Modifier.height(16.dp))
+        Text("音效页 · 实时 DSP", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = cs.onSurface)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "音效页是一套自己跑的实时处理：图形 / 参数均衡、输出增益、等比增益、限幅器、多段压缩、等响补偿。参数直接进 DSP，拖动就听得见。",
+            fontSize = 11.sp, lineHeight = 18.sp, color = cs.onSurface
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "它跟着 APP 的音频处理会话走：切到后台也照常工作，但被系统清理或强制停止后就停了。想让改动一直生效，把下面三项打开。",
+            fontSize = 11.sp, lineHeight = 18.sp, color = cs.onSurface
+        )
+        Spacer(Modifier.height(14.dp))
+
+        ObSwitchRow(
+            icon = Icons.Default.RestartAlt, checked = bootWrite, accent = accent, cs = cs,
+            title = "开机参数自动写回",
+            sub = "重启后自动把杜比参数与音效参数写回一次",
+            onChange = onBoot
+        )
+        Spacer(Modifier.height(8.dp))
+        ObSwitchRow(
+            icon = Icons.Default.Tune, checked = deviceService, accent = accent, cs = cs,
+            title = "后台设备监听",
+            sub = "息屏时也按绑定的预设自动切换（需要通知权限）",
+            onChange = onDev
+        )
+        Spacer(Modifier.height(8.dp))
+        ObSwitchRow(
+            icon = Icons.Default.Refresh, checked = keepAlive, accent = accent, cs = cs,
+            title = "后台保活",
+            sub = "被系统清掉后，由系统定时把服务拉回来",
+            onChange = onKeep
+        )
+
         Spacer(Modifier.height(10.dp))
-        Text(it, fontSize = 10.sp, lineHeight = 16.sp, color = Color(0xFFEF4444))
+        Text(
+            "三项都在本机运行，不需要 root；只用到通知和通话状态这类必要权限。现在不打开也没关系，以后在「设置」里随时能改。",
+            fontSize = 9.sp, lineHeight = 15.sp, color = subInk(0.85f),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(Modifier.height(12.dp))
+        Text("记录音效默认值", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "每台手机的杜比默认参数都不一样。现在读一次本机 DSP 的当前音效参数，存成「重置」时的基准。",
+            fontSize = 11.sp, lineHeight = 18.sp, color = cs.onSurface
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "以后点重置：GEQ 归零、音效恢复成这套值。检测只读不改任何参数。",
+            fontSize = 10.sp, lineHeight = 16.sp, color = subInk(0.9f)
+        )
+        errMsg?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, fontSize = 10.sp, lineHeight = 16.sp, color = Color(0xFFEF4444))
+        }
+        Spacer(Modifier.height(4.dp))
+    }
+}
+
+@Composable
+private fun ObSwitchRow(
+    icon: ImageVector, checked: Boolean, accent: Color,
+    cs: androidx.compose.material3.ColorScheme,
+    title: String, sub: String, onChange: (Boolean) -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(cs.surfaceVariant.copy(alpha = 0.45f))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            icon, null, tint = if (checked) accent else cs.onSurfaceVariant,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 12.sp, color = cs.onSurface)
+            Text(sub, fontSize = 9.sp, lineHeight = 13.sp, color = subInk(0.85f))
+        }
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }

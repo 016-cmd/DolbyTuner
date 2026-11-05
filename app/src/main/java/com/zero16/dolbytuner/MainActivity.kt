@@ -3615,6 +3615,7 @@ private fun SettingsScreen(activity: Activity) {
     val prefs = ctx.getSharedPreferences("dolby_tuner", Context.MODE_PRIVATE)
     var bootWrite by remember { mutableStateOf(prefs.getBoolean("boot_writeback", false)) }
     var showBootDialog by remember { mutableStateOf(false) }
+    var showKeepAliveGuide by remember { mutableStateOf(false) }
     var deviceService by remember { mutableStateOf(prefs.getBoolean("device_service", false)) }
     var hideRecents by remember { mutableStateOf(prefs.getBoolean("hide_recents", false)) }
     var keepAlive by remember { mutableStateOf(prefs.getBoolean("keepalive_job", false)) }
@@ -3772,6 +3773,7 @@ private fun SettingsScreen(activity: Activity) {
                         deviceService = on
                         prefs.edit().putBoolean("device_service", on).apply()
                         if (on) {
+                            showKeepAliveGuide = true
                             if (Build.VERSION.SDK_INT >= 33) {
                                 notifPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
                             }
@@ -3846,6 +3848,7 @@ private fun SettingsScreen(activity: Activity) {
                         keepAlive = on
                         prefs.edit().putBoolean("keepalive_job", on).apply()
                         if (on) {
+                            showKeepAliveGuide = true
                             KeepAliveJobService.schedule(ctx)
                             runCatching {
                                 ctx.startForegroundService(
@@ -4043,6 +4046,10 @@ private fun SettingsScreen(activity: Activity) {
                 TextButton(onClick = { showBootDialog = false }) { Text("稍后", fontSize = 12.sp) }
             }
         )
+    }
+
+    if (showKeepAliveGuide) {
+        KeepAliveGuideDialog(ctx = ctx, accent = Accent) { showKeepAliveGuide = false }
     }
 
     if (showLicense) {
