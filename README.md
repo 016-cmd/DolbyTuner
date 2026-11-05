@@ -120,7 +120,7 @@ app/src/main/java/com/zero16/dolbytuner/
 ├── Theme.kt                     # 主题模式与配色派生
 ├── DpEqCanvas.kt / BandCurveCanvas.kt / DapBandSlider.kt
 └── UiEffectCard.kt              # 音效页卡片
-reference/                       # 参数记录与基线数据（开发参考）
+# 本地另有 reference/：参数记录与基线数据，仅开发参考，不参与构建
 ```
 
 ---
