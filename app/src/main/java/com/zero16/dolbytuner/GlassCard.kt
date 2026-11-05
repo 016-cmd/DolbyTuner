@@ -208,7 +208,8 @@ fun Modifier.glassSurface(radius: Float, cardPos: Offset, cardSize: IntSize): Mo
 
     val density = LocalDensity.current
     val rPx = with(density) { radius.dp.toPx() }
-    val strokePx = with(density) { Appearance.strokeDp().dp.toPx() }
+    // 描边细一点：固定 0.9dp（原来跟「边缘宽度」联动会有 1.5~2.4dp）
+    val strokePx = with(density) { 0.9.dp.toPx() }
 
     if (useBackdrop) {
         val shape = RoundedCornerShape(radius.dp)
@@ -260,8 +261,9 @@ fun Modifier.glassSurface(radius: Float, cardPos: Offset, cardSize: IntSize): Mo
                     }
                     // 外框
                     drawRoundRect(
-                        color = if (isDark) Color.White.copy(alpha = 0.18f)
-                        else Color.White.copy(alpha = 0.66f),
+                        // 浅色用淡灰（黑 10%），深色用淡白（白 12%）
+                        color = if (isDark) Color.White.copy(alpha = 0.12f)
+                        else Color.Black.copy(alpha = 0.10f),
                         cornerRadius = corner,
                         style = Stroke(strokePx)
                     )
@@ -298,8 +300,8 @@ fun Modifier.glassSurface(radius: Float, cardPos: Offset, cardSize: IntSize): Mo
                 cornerRadius = corner
             )
             drawRoundRect(
-                color = if (isDark) Color.White.copy(alpha = 0.14f)
-                else Color.White.copy(alpha = 0.55f),
+                color = if (isDark) Color.White.copy(alpha = 0.12f)
+                else Color.Black.copy(alpha = 0.10f),
                 cornerRadius = corner,
                 style = Stroke(strokePx)
             )

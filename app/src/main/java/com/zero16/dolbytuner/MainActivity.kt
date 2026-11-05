@@ -309,6 +309,23 @@ private fun MainApp(activity: Activity, deviceLine: String) {
     val isDark = colors.background.red * 0.299f + colors.background.green * 0.587f + colors.background.blue * 0.114f < 0.5f
     val ctx = activity.applicationContext
     var deviceTick by remember { mutableIntStateOf(0) }
+    // 前台状态：后台不做设备检测/刷新，回前台立刻补一次（省电）
+    var inForeground by remember { mutableStateOf(true) }
+    DisposableEffect(activity) {
+        val owner = activity as? androidx.lifecycle.LifecycleOwner
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_START -> inForeground = true
+                androidx.lifecycle.Lifecycle.Event.ON_STOP -> inForeground = false
+                else -> {}
+            }
+        }
+        owner?.lifecycle?.addObserver(obs)
+        onDispose { owner?.lifecycle?.removeObserver(obs) }
+    }
+    LaunchedEffect(inForeground) {
+        if (inForeground) deviceTick++   // 回前台：立刻补一次刷新
+    }
 
     // 设备监听放到主层：不管当前在 GEQ / 音效 / 设置，插拔都能及时响应
     DisposableEffect(Unit) {
@@ -321,7 +338,8 @@ private fun MainApp(activity: Activity, deviceLine: String) {
         onDispose { am?.unregisterAudioDeviceCallback(cb) }
     }
 
-    LaunchedEffect(deviceTick) {
+    LaunchedEffect(deviceTick, inForeground) {
+        if (!inForeground) return@LaunchedEffect
         val d = withContext(Dispatchers.IO) { detectOutputDevice(ctx) }
         DeviceState.device = d
         DeviceState.bindings = withContext(Dispatchers.IO) { DeviceTuningStore.load(ctx) }

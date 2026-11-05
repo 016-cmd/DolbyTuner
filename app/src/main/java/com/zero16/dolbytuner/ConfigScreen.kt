@@ -1,5 +1,6 @@
 package com.zero16.dolbytuner
 
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.IntSize
@@ -81,7 +82,10 @@ internal fun ConfigScreen() {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var presets by remember { mutableStateOf(loadPresets(ctx)) }
+    var presets by remember { mutableStateOf(emptyList<Preset>()) }
+    LaunchedEffect(Unit) {
+        presets = withContext(Dispatchers.IO) { loadPresets(ctx) }
+    }
     var status by remember { mutableStateOf("预设包含 GEQ 与音效参数") }
 
     var showSaveDialog by remember { mutableStateOf(false) }
@@ -176,20 +180,15 @@ internal fun ConfigScreen() {
         Spacer(Modifier.height(12.dp))
 
         // ── 加号：保存当前为预设 ───────────────────────────
-        Box(
+        GlassSurface(
             Modifier.fillMaxWidth().height(86.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(Accent.copy(alpha = 0.18f), Accent.copy(alpha = 0.05f))
-                    )
-                )
                 .clickable {
                     presetName = ""
                     showSaveDialog = true
                 },
-            contentAlignment = Alignment.Center
+            radius = Appearance.radius.value
         ) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Add, null, tint = Accent, modifier = Modifier.size(26.dp))
                 Spacer(Modifier.width(8.dp))
@@ -197,6 +196,7 @@ internal fun ConfigScreen() {
                     Text("保存当前为预设", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Accent)
                     Text("GEQ 20 段 + 全部音效参数", fontSize = 9.sp, color = subInk())
                 }
+            }
             }
         }
 

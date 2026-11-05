@@ -93,7 +93,7 @@ fun AppearanceSection(
                 GroupLabel("玻璃")
                 SegRow(
                     "玻璃风格",
-                    listOf("清透", "标准", "浓郁", "柔和", "省电"),
+                    listOf("清透", "标准", "浓厚", "柔和", "省电"),
                     Appearance.presetIndex()
                 ) { Appearance.applyPreset(ctx, it) }
                 SegRow(
@@ -222,7 +222,7 @@ private fun nearest(v: Int, arr: IntArray): Int {
 
 private fun summary(): String {
     val tint = when (Appearance.tintMode.value) { 1 -> "纯白"; 2 -> "纯黑"; else -> "自动" }
-    val preset = listOf("清透", "标准", "浓郁", "柔和", "省电")[Appearance.presetIndex()]
+    val preset = listOf("清透", "标准", "浓厚", "柔和", "省电")[Appearance.presetIndex()]
     return "液态玻璃 · $preset · $tint · 圆角 ${Appearance.radius.value}dp"
 }
 

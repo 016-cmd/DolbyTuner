@@ -137,7 +137,7 @@ object Appearance {
 
     /**
      * 玻璃风格预设（一次写入一组参数）
-     * 0 清透 / 1 标准 / 2 浓郁 / 3 柔和 / 4 省电
+     * 0 清透 / 1 标准 / 2 浓厚 / 3 柔和 / 4 省电
      */
     fun applyPreset(ctx: Context, i: Int) {
         when (i) {
@@ -151,9 +151,9 @@ object Appearance {
                 setVibrancy(ctx, 55); setDispersion(ctx, 35); setLightAngle(ctx, 315)
                 setVolumeLight(ctx, 2); setRadius(ctx, 26); setThickness(ctx, 1)
             }
-            2 -> { // 浓郁：最强折射 + 色散 + 厚玻璃
-                setRefraction(ctx, 100); setEdgeWidth(ctx, 2); setBlurRadius(ctx, 4)
-                setVibrancy(ctx, 85); setDispersion(ctx, 80); setLightAngle(ctx, 300)
+            2 -> { // 浓厚：更厚的玻璃 + 更大的模糊（不是一味堆折射）
+                setRefraction(ctx, 70); setEdgeWidth(ctx, 2); setBlurRadius(ctx, 30)
+                setVibrancy(ctx, 65); setDispersion(ctx, 30); setLightAngle(ctx, 315)
                 setVolumeLight(ctx, 3); setRadius(ctx, 30); setThickness(ctx, 2)
             }
             3 -> { // 柔和：低折射、轻色散
@@ -173,7 +173,7 @@ object Appearance {
     fun presetIndex(): Int {
         val r = refraction.value
         return when {
-            r >= 95 -> 2
+            r >= 65 && blurRadius.value >= 24 -> 2
             r >= 75 -> 0
             r <= 30 -> 4
             r <= 50 -> 3
