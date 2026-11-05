@@ -265,21 +265,23 @@ class MainActivity : ComponentActivity() {
         val gate = evaluateGate()
         setContent {
             DolbyTunerTheme {
-                if (!gate.passed) {
-                    GateDialog(gate.reasons) { finishAffinity() }
-                } else {
-                    val obPrefs = remember { getSharedPreferences("dolby_tuner", MODE_PRIVATE) }
-                    var showOnboard by remember {
-                        mutableStateOf(!obPrefs.getBoolean("onboard_done", false))
-                    }
-                    if (showOnboard) {
-                        OnboardingScreen {
+                val obPrefs = remember { getSharedPreferences("dolby_tuner", MODE_PRIVATE) }
+                var showOnboard by remember {
+                    mutableStateOf(!obPrefs.getBoolean("onboard_done", false))
+                }
+                if (showOnboard) {
+                    OnboardingScreen(
+                        deviceLine = gate.deviceLine,
+                        passed = gate.passed,
+                        reasons = gate.reasons,
+                        onExit = { finishAffinity() },
+                        onDone = {
                             obPrefs.edit().putBoolean("onboard_done", true).apply()
                             showOnboard = false
                         }
-                    } else {
-                        MainApp(this, gate.deviceLine)
-                    }
+                    )
+                } else {
+                    MainApp(this, gate.deviceLine)
                 }
             }
         }
