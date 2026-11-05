@@ -458,7 +458,7 @@ private fun MainApp(activity: Activity, deviceLine: String) {
             val thumbW = with(dockDensity) {
                 (tabW * 0.66f).coerceIn(40.dp.toPx(), 72.dp.toPx())
             }
-            val thumbH = with(dockDensity) { 34.dp.toPx() }
+            val thumbH = with(dockDensity) { 46.dp.toPx() }
             Box(
                 Modifier
                     .offset {
@@ -470,7 +470,7 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                     }
                     .width(with(dockDensity) { thumbW.toDp() })
                     .height(with(dockDensity) { thumbH.toDp() })
-                    .clip(RoundedCornerShape(17.dp))
+                    .clip(RoundedCornerShape(23.dp))
                     .background(
                         if (isDark) Color.White.copy(alpha = 0.14f)
                         else Color.Black.copy(alpha = 0.07f)
@@ -479,12 +479,11 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                         1.dp,
                         if (isDark) Color.White.copy(alpha = 0.14f)
                         else Color.Black.copy(alpha = 0.05f),
-                        RoundedCornerShape(22.dp)
+                        RoundedCornerShape(23.dp)
                     )
             )
             Row(
                 Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 listOf(
@@ -507,8 +506,11 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                         else colors.onSurfaceVariant.copy(alpha = if (isDark) 0.5f else 0.6f)
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.clip(RoundedCornerShape(14.dp))
-
+                            verticalArrangement = Arrangement.Center,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(14.dp))
                                 .jellyPress(Appearance.jelly.value > 0)
                                 .clickable {
                                     scope.launch {
@@ -519,8 +521,6 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                                         }
                                     }
                                 }
-                                .padding(horizontal = 18.dp, vertical = 4.dp),
-                            verticalArrangement = Arrangement.Center
                         ) {
                             if (tab.resId != null) {
                                 Icon(
