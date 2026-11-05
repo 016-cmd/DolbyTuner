@@ -143,8 +143,9 @@ internal fun ConfigScreen() {
     }
 
     Column(
+        Spacer(Modifier.height(78.dp))
         Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp).padding(bottom = 78.dp)
+            .padding(horizontal = 14.dp)
     ) {
         Spacer(Modifier.height(14.dp))
         Text("配置预设", fontSize = 25.sp, fontWeight = FontWeight.Bold)

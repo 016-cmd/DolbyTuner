@@ -703,7 +703,7 @@ private fun GeqScreen(deviceLine: String) {
 
     Column(
         Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp).padding(bottom = 78.dp)
+            .padding(horizontal = 14.dp)
     ) {
         Spacer(Modifier.height(14.dp))
         Text("Dolby Tuner", fontSize = 25.sp, fontWeight = FontWeight.Bold)
@@ -911,6 +911,7 @@ private fun GeqScreen(deviceLine: String) {
             }
         }
         Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(78.dp))
     }
 
     if (showBindDialog) {
@@ -2671,7 +2672,8 @@ private fun EffectsScreen() {
     androidx.compose.runtime.CompositionLocalProvider(LocalDpOn provides dpOn) {
     LazyColumn(
         Modifier.fillMaxSize().statusBarsPadding()
-            .padding(horizontal = 14.dp).padding(top = 18.dp).padding(bottom = 78.dp)
+            .padding(horizontal = 14.dp).padding(top = 18.dp),
+        contentPadding = PaddingValues(bottom = 78.dp),
     ) {
         item {
         Text("DynamicsProcessing音效", fontSize = 22.sp, fontWeight = FontWeight.Bold)
@@ -3651,7 +3653,8 @@ private fun SettingsScreen(activity: Activity) {
     }
 
     LazyColumn(
-        Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 14.dp).padding(bottom = 78.dp)
+        Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 14.dp),
+        contentPadding = PaddingValues(bottom = 78.dp),
     ) {
         item {
         Spacer(Modifier.height(14.dp))
@@ -4057,6 +4060,7 @@ private fun LicenseDialogContent(
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Column(
+        Spacer(Modifier.height(78.dp))
                 modifier = Modifier.weight(1f).fillMaxWidth()
                     .verticalScroll(rememberScrollState()).padding(16.dp)
             ) {
