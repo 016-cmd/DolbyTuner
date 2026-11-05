@@ -2348,13 +2348,21 @@ private fun EffectsScreen() {
         }
     }
 
-    fun applyGain() {
-        val g = gain / 10f
-        scope.launch {
-            withContext(Dispatchers.IO) { DynProc.setInputGain(g) }
-            status = DynProc.status
-            prefs.edit().putInt("gain", gain).apply()
+    // 输出增益：拖动时 50ms 节流一次，避免一次拖动堆出几十个协程互相覆盖
+    val gainTick = remember {
+        Runnable {
+            val g = gain / 10f
+            val v = gain
+            scope.launch {
+                withContext(Dispatchers.IO) { DynProc.setInputGain(g) }
+                status = DynProc.status
+                prefs.edit().putInt("gain", v).apply()
+            }
         }
+    }
+    fun applyGain() {
+        throttle.removeCallbacks(gainTick)
+        throttle.postDelayed(gainTick, 50L)
     }
 
     LaunchedEffect(Unit) {

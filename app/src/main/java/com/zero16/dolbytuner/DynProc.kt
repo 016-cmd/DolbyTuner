@@ -336,22 +336,23 @@ object DynProc {
     fun setInputGain(gainDb: Float, muteLeft: Boolean, muteRight: Boolean) {
         lastGain = gainDb
         val d = dp ?: return
-        var ok = false
+        val g = gainDb.coerceIn(-40f, 40f)
+        // ① 先整体写一遍：这一步一定走 Channel 对象之外的原生接口，最稳。
+        //    （以前只在“通道回写失败”时才用它，结果通道回写“成功但没写进去”时，
+        //     会把缓存的 0 再写回去 —— 表现就是滑杆完全没反应。）
+        val allOk = runCatching { d.setInputGainAllChannelsTo(g) }.isSuccess
+        // ② 再按声道回写（Flowmix 同款写法，支持左右独立静音）。
+        //    这一步失败也不影响第 ① 步已经生效的值。
         for (ch in 0..1) {
-            val r = runCatching {
+            runCatching {
                 val c = d.getChannelByChannelIndex(ch)
-                c.setInputGain(
-                    if ((ch == 0 && muteLeft) || (ch == 1 && muteRight)) -100f
-                    else gainDb.coerceIn(-40f, 40f)
-                )
-                d.setChannelTo(ch, c)
+                val target = if ((ch == 0 && muteLeft) || (ch == 1 && muteRight)) -100f else g
+                runCatching { c.setInputGain(target) }
+                runCatching { d.setChannelTo(ch, c) }
             }
-            if (r.isSuccess) ok = true
         }
-        if (!ok) {
-            runCatching { d.setInputGainAllChannelsTo(gainDb) }
-                .onFailure { Log.w(TAG, "setInputGain failed") }
-        }
+        if (!allOk) Log.w(TAG, "setInputGain(AllChannelsTo) failed, channel path only")
+        status = String.format("输出增益 %+.1f dB", g)
     }
 
     /** 运行时改 Limiter */
