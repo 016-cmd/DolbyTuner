@@ -635,6 +635,10 @@ object DapRealtime {
     private const val F_VBOG = 0x676F6276
     /** 'vbhm' —— 谐波混合（杜比侧是 4 个槽，同值填满） */
     private const val F_VBHM = 0x6D686276
+    /** 'vbhg' —— 谐波增益（同样 4 个槽） */
+    private const val F_VBHG = 0x67686276
+    /** 'vbsf' —— 低频起始频率 */
+    private const val F_VBSF = 0x66736276
 
     /** 组 runtime 包：[pitch][count] ([pitch][id][n][values...])... */
     private fun buildRuntimePayload(pitch: Int, params: List<IntArray>): ByteArray {
@@ -654,7 +658,7 @@ object DapRealtime {
 
     /** 写虚拟低频；失败返回原因，成功返回 null */
     @Synchronized
-    fun writeVirtualBass(on: Boolean, amount: Int, blend: Int): String? {
+    fun writeVirtualBass(on: Boolean, amount: Int, blend: Int, harm: Int, lowHz: Int): String? {
         return try {
             val e = session ?: openEffect().also { session = it }
             if (!e.hasControl()) return "无控制权"
@@ -667,10 +671,14 @@ object DapRealtime {
             runCatching { e.enabled = true }
             val amt = amount.coerceIn(0, 192)
             val mix = blend.coerceIn(0, 192)
+            val hg = harm.coerceIn(0, 192)
+            val sf = lowHz.coerceIn(40, 200)
             val params = listOf(
                 intArrayOf(F_VBM, if (on) 1 else 0),
                 intArrayOf(F_VBOG, amt),
-                intArrayOf(F_VBHM, mix, mix, mix, mix)
+                intArrayOf(F_VBHM, mix, mix, mix, mix),
+                intArrayOf(F_VBHG, hg, hg, hg, hg),
+                intArrayOf(F_VBSF, sf)
             )
             val st = e.setParam(0, buildRuntimePayload(DEVICE_SPEAKER, params))
             if (st < 0) statusText(st, "虚拟低频") else null

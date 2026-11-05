@@ -812,7 +812,9 @@ internal data class FxState(
     // 虚拟低频（杜比 DAP 的 vbm / vbog / vbhm）
     val vbOn: Boolean = false,
     val vbAmt: Int = 160,
-    val vbBlend: Int = 128
+    val vbBlend: Int = 128,
+    val vbHarm: Int = 96,
+    val vbLow: Int = 100
 )
 
 /** 音效页（DynamicsProcessing）参数快照 */
@@ -927,7 +929,9 @@ internal fun loadFx(ctx: Context): FxState {
             a.getOrNull(7)?.toIntOrNull() ?: 4,
             a.getOrNull(8) == "1",
             a.getOrNull(9)?.toIntOrNull() ?: 160,
-            a.getOrNull(10)?.toIntOrNull() ?: 128
+            a.getOrNull(10)?.toIntOrNull() ?: 128,
+            a.getOrNull(11)?.toIntOrNull() ?: 96,
+            a.getOrNull(12)?.toIntOrNull() ?: 100
         )
     } catch (_: Exception) { FxState() }
 }
@@ -939,7 +943,8 @@ internal fun saveFx(ctx: Context, f: FxState) {
         if (f.bassOn) "1" else "0",
         f.bassGain.toString(), f.bassCutoff.toString(), f.bassWidth.toString(),
         if (f.dialogOn) "1" else "0", f.dialogAmt.toString(),
-        if (f.vbOn) "1" else "0", f.vbAmt.toString(), f.vbBlend.toString()
+        if (f.vbOn) "1" else "0", f.vbAmt.toString(), f.vbBlend.toString(),
+        f.vbHarm.toString(), f.vbLow.toString()
     ).joinToString(",")
     ctx.getSharedPreferences("dolby_tuner", Context.MODE_PRIVATE).edit().putString("fx", v).apply()
 }
@@ -1020,7 +1025,7 @@ private suspend fun pushFx(next: FxState): String? = withContext(Dispatchers.IO)
     if (e == null) e = DapRealtime.setParamValue(233, next.bassGain)
     if (e == null) e = DapRealtime.setParamValue(234, next.bassCutoff)
     if (e == null) e = DapRealtime.setParamValue(235, next.bassWidth)
-    if (e == null) e = DapRealtime.writeVirtualBass(next.vbOn, next.vbAmt, next.vbBlend)
+    if (e == null) e = DapRealtime.writeVirtualBass(next.vbOn, next.vbAmt, next.vbBlend, next.vbHarm, next.vbLow)
     e
 }
 
@@ -1411,7 +1416,7 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
                 val s = vbHolder[0]
                 if (s != null) scope.launch {
                     withContext(Dispatchers.IO) {
-                        DapRealtime.writeVirtualBass(s.vbOn, s.vbAmt, s.vbBlend)
+                        DapRealtime.writeVirtualBass(s.vbOn, s.vbAmt, s.vbBlend, s.vbHarm, s.vbLow)
                     }
                 }
             }
@@ -1440,6 +1445,14 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
                 "谐波混合", fx.vbBlend.toString(), fx.vbBlend, 0..192, fx.vbOn,
                 onLive = { pushVb(fx.copy(vbBlend = it), true) }
             ) { pushVb(fx.copy(vbBlend = it), false) }
+            FxSlider(
+                "谐波增益", fx.vbHarm.toString(), fx.vbHarm, 0..192, fx.vbOn,
+                onLive = { pushVb(fx.copy(vbHarm = it), true) }
+            ) { pushVb(fx.copy(vbHarm = it), false) }
+            FxSlider(
+                "起始频率 · Hz", fx.vbLow.toString(), fx.vbLow, 40..200, fx.vbOn,
+                onLive = { pushVb(fx.copy(vbLow = it), true) }
+            ) { pushVb(fx.copy(vbLow = it), false) }
             Text(
                 "走杜比 DAP 自身的谐波再生：音量越小越明显，音量大时几乎听不出",
                 fontSize = 9.sp, color = cs.onSurfaceVariant
@@ -2782,8 +2795,7 @@ private fun EffectsScreen() {
                 prefs.edit().putBoolean("bb_on", it).apply()
                 pushMacros()
             },
-            accent = Color(0xFFF97316),
-            expandable = false
+            accent = Color(0xFFF97316)
         ) {
             FxSlider(
                 "增强量", String.format("%+.1f dB", bbAmt / 10f), bbAmt, 0..120, bbOn,
@@ -2925,8 +2937,7 @@ private fun EffectsScreen() {
                 prefs.edit().putBoolean("ds_on", it).apply()
                 pushMacros()
             },
-            accent = Color(0xFF06B6D4),
-            expandable = false
+            accent = Color(0xFF06B6D4)
         ) {
             FxSlider(
                 "抑制量", "${dsAmt}%", dsAmt, 0..100, dsOn,
@@ -3227,6 +3238,8 @@ private fun SettingsScreen(activity: Activity) {
         Spacer(Modifier.height(14.dp))
         Text("设置", fontSize = 25.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
+        CapabilitySection()
+        Spacer(Modifier.height(10.dp))
 
         GlassCard(Modifier.fillMaxWidth()) {
             Text("外观", fontSize = 13.sp, fontWeight = FontWeight.Bold)
