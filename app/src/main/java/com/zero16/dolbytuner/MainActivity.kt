@@ -915,8 +915,46 @@ internal data class Preset(
     val geq: IntArray,
     val fx: FxState,
     val dp: DpSnapshot? = null,
-    val scope: Int = SCOPE_DOLBY
+    val scope: Int = SCOPE_DOLBY,
+    // 音效页的两个宏（不属于 DpSnapshot，单独存，带默认值兼容旧预设）
+    val bbOn: Boolean = false,
+    val bbAmt: Int = 60,
+    val dsOn: Boolean = false,
+    val dsAmt: Int = 40
 )
+
+// ── 预设 JSON 的读写工具：杜比侧字段 + 音效页两个宏 ──
+internal fun org.json.JSONObject.putFxJson(f: FxState) {
+    put("hp", if (f.hpVirtual) 1 else 0)
+    put("sp", if (f.spVirtual) 1 else 0)
+    put("bass", if (f.bassOn) 1 else 0)
+    put("gain", f.bassGain)
+    put("cutoff", f.bassCutoff)
+    put("width", f.bassWidth)
+    put("dialog", if (f.dialogOn) 1 else 0)
+    put("damt", f.dialogAmt)
+    put("vb", if (f.vbOn) 1 else 0)
+    put("vba", f.vbAmt)
+    put("vbb", f.vbBlend)
+    put("vbh", f.vbHarm)
+    put("vbl", f.vbLow)
+}
+
+internal fun org.json.JSONObject.readFxJson(): FxState = FxState(
+    optInt("hp", 0) == 1, optInt("sp", 0) == 1,
+    optInt("bass", 0) == 1, optInt("gain", 0),
+    optInt("cutoff", 150), optInt("width", 0),
+    optInt("dialog", 0) == 1, optInt("damt", 4),
+    optInt("vb", 0) == 1, optInt("vba", 160), optInt("vbb", 128),
+    optInt("vbh", 96), optInt("vbl", 100)
+)
+
+internal fun org.json.JSONObject.putDpMacros(p: Preset) {
+    put("bb", if (p.bbOn) 1 else 0)
+    put("bba", p.bbAmt)
+    put("ds", if (p.dsOn) 1 else 0)
+    put("dsa", p.dsAmt)
+}
 
 internal fun loadFx(ctx: Context): FxState {
     val a = ctx.getSharedPreferences("dolby_tuner", Context.MODE_PRIVATE)
@@ -966,14 +1004,11 @@ internal fun loadPresets(ctx: Context): List<Preset> {
                 val dstr = o.optString("dp", "")
                 if (geq.size != DapRealtime.BANDS) null else Preset(
                     o.getString("name"), geq,
-                    FxState(
-                        o.optInt("hp", 0) == 1, o.optInt("sp", 0) == 1,
-                        o.optInt("bass", 0) == 1, o.optInt("gain", 0),
-                        o.optInt("cutoff", 150), o.optInt("width", 0),
-                        o.optInt("dialog", 0) == 1, o.optInt("damt", 4)
-                    ),
+                    o.readFxJson(),
                     dpUnpack(dstr),
-                    o.optInt("scope", SCOPE_DOLBY)
+                    o.optInt("scope", SCOPE_DOLBY),
+                    o.optInt("bb", 0) == 1, o.optInt("bba", 60),
+                    o.optInt("ds", 0) == 1, o.optInt("dsa", 40)
                 )
             }.getOrNull()
         }
@@ -986,16 +1021,10 @@ internal fun writePresets(ctx: Context, list: List<Preset>) {
         arr.put(org.json.JSONObject().apply {
             put("name", p.name)
             put("geq", org.json.JSONArray(p.geq.toList()))
-            put("hp", if (p.fx.hpVirtual) 1 else 0)
-            put("sp", if (p.fx.spVirtual) 1 else 0)
-            put("bass", if (p.fx.bassOn) 1 else 0)
-            put("gain", p.fx.bassGain)
-            put("cutoff", p.fx.bassCutoff)
-            put("width", p.fx.bassWidth)
-            put("dialog", if (p.fx.dialogOn) 1 else 0)
-            put("damt", p.fx.dialogAmt)
+            putFxJson(p.fx)
             put("scope", p.scope)
             put("dp", p.dp?.let { dpPack(it) } ?: "")
+            putDpMacros(p)
         })
     }
     presetFile(ctx).writeText(arr.toString(2))
@@ -1005,16 +1034,10 @@ internal fun writePresets(ctx: Context, list: List<Preset>) {
 private fun presetJsonString(p: Preset): String = org.json.JSONObject().apply {
     put("name", p.name)
     put("geq", org.json.JSONArray(p.geq.toList()))
-    put("hp", if (p.fx.hpVirtual) 1 else 0)
-    put("sp", if (p.fx.spVirtual) 1 else 0)
-    put("bass", if (p.fx.bassOn) 1 else 0)
-    put("gain", p.fx.bassGain)
-    put("cutoff", p.fx.bassCutoff)
-    put("width", p.fx.bassWidth)
-    put("dialog", if (p.fx.dialogOn) 1 else 0)
-    put("damt", p.fx.dialogAmt)
+    putFxJson(p.fx)
     put("scope", p.scope)
     put("dp", p.dp?.let { dpPack(it) } ?: "")
+    putDpMacros(p)
 }.toString(2)
 
 /** 正式写入全部音效参数（失败返回原因） */
@@ -1107,11 +1130,18 @@ internal fun loadDpSnapshot(ctx: Context): DpSnapshot {
 internal suspend fun applyPreset(ctx: Context, p: Preset): String? {
     var e: String? = null
     if (p.scope == SCOPE_DOLBY || p.scope == SCOPE_BOTH) e = applyDolbyPreset(ctx, p)
-    if (e == null && (p.scope == SCOPE_DP || p.scope == SCOPE_BOTH)) e = applyDpPreset(ctx, p.dp)
+    if (e == null && (p.scope == SCOPE_DP || p.scope == SCOPE_BOTH)) {
+        e = applyDpPreset(ctx, p.dp, p.bbOn, p.bbAmt, p.dsOn, p.dsAmt)
+    }
     return e
 }
 
-private suspend fun applyDpPreset(ctx: Context, d: DpSnapshot?): String? {
+private suspend fun applyDpPreset(
+    ctx: Context,
+    d: DpSnapshot?,
+    bbOn: Boolean = false, bbAmt: Int = 60,
+    dsOn: Boolean = false, dsAmt: Int = 40
+): String? {
     if (d == null) return "预设里没有音效页参数"
     return withContext(Dispatchers.IO) {
         val ok = DynProc.start(
@@ -1125,12 +1155,16 @@ private suspend fun applyDpPreset(ctx: Context, d: DpSnapshot?): String? {
                 postGainDb = d.lim.getOrElse(4) { 0 } / 10f,
                 linkGroup = d.lim.getOrElse(5) { 0 }
             ),
-            dpMbc(d.mbc, d.mbcOn)
+            applyDpMacros(dpMbc(d.mbc, d.mbcOn), bbOn, bbAmt, dsOn, dsAmt)
         )
         if (!ok) return@withContext "音效引擎启动失败"
         DynProc.setPreEq(d.curve)
         if (d.postOn) DynProc.setPostEq(d.post, true)
         saveDpPrefs(ctx, d)
+        ctx.getSharedPreferences("dynproc", Context.MODE_PRIVATE).edit()
+            .putBoolean("bb_on", bbOn).putInt("bb_amt", bbAmt)
+            .putBoolean("ds_on", dsOn).putInt("ds_amt", dsAmt)
+            .apply()
         null
     }
 }
@@ -1163,6 +1197,36 @@ private fun saveDpPrefs(ctx: Context, d: DpSnapshot) {
     savePeq(p, parsePeqStr(d.peq))
     saveMbc(p, d.mbc)
     savePost(p, d.post)
+}
+
+/** 把「低频增强 / 齿音抑制」两个宏叠到 MBC 上（与音效页里的算法完全一致） */
+internal fun applyDpMacros(
+    base: List<DynProc.MbcBandCfg>,
+    bbOn: Boolean, bbAmt: Int,
+    dsOn: Boolean, dsAmt: Int
+): List<DynProc.MbcBandCfg> {
+    val out = base.toMutableList()
+    if (bbOn && out.isNotEmpty()) {
+        val b = out[0]
+        out[0] = b.copy(
+            enabled = true,
+            postGainDb = (b.postGainDb + bbAmt / 10f).coerceIn(-40f, 40f)
+        )
+    }
+    if (dsOn && out.size > 2) {
+        val b = out[2]
+        val f = dsAmt / 100f
+        out[2] = b.copy(
+            enabled = true,
+            attackMs = minOf(b.attackMs, 1.5f),
+            releaseMs = minOf(b.releaseMs, 70f),
+            ratio = maxOf(b.ratio, 4.8f * f + 1.2f),
+            thresholdDb = minOf(b.thresholdDb, -8f - 32f * f),
+            kneeWidth = maxOf(b.kneeWidth, 8f),
+            postGainDb = (b.postGainDb - f * 5.5f).coerceIn(-40f, 40f)
+        )
+    }
+    return out
 }
 
 private fun dpMbc(l: List<IntArray>, on: Boolean): List<DynProc.MbcBandCfg> = l.map { a ->

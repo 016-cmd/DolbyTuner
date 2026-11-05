@@ -116,14 +116,11 @@ internal fun ConfigScreen() {
                     val dstr = o.optString("dp", "")
                     if (geq.size == DapRealtime.BANDS) incoming += Preset(
                         o.getString("name"), geq,
-                        FxState(
-                            o.optInt("hp", 0) == 1, o.optInt("sp", 0) == 1,
-                            o.optInt("bass", 0) == 1, o.optInt("gain", 0),
-                            o.optInt("cutoff", 150), o.optInt("width", 0),
-                            o.optInt("dialog", 0) == 1, o.optInt("damt", 4)
-                        ),
+                        o.readFxJson(),
                         dpUnpack(dstr),
-                        o.optInt("scope", SCOPE_DOLBY)
+                        o.optInt("scope", SCOPE_DOLBY),
+                        o.optInt("bb", 0) == 1, o.optInt("bba", 60),
+                        o.optInt("ds", 0) == 1, o.optInt("dsa", 40)
                     )
                 }
                 val merged = (presets + incoming).distinctBy { it.name }
@@ -281,10 +278,15 @@ internal fun ConfigScreen() {
                 TextButton(onClick = {
                     val name = presetName.trim().ifBlank { "预设 ${presets.size + 1}" }
                     val dp = if (saveScope != SCOPE_DOLBY) loadDpSnapshot(ctx) else null
+                    val dpPrefs = ctx.getSharedPreferences("dynproc", Context.MODE_PRIVATE)
                     writePresets(
                         ctx,
                         presets.filterNot { it.name == name } +
-                            Preset(name, loadGeq(ctx), loadFx(ctx), dp, saveScope)
+                            Preset(
+                                name, loadGeq(ctx), loadFx(ctx), dp, saveScope,
+                                dpPrefs.getBoolean("bb_on", false), dpPrefs.getInt("bb_amt", 60),
+                                dpPrefs.getBoolean("ds_on", false), dpPrefs.getInt("ds_amt", 40)
+                            )
                     )
                     reload()
                     presetName = ""
@@ -630,6 +632,9 @@ private fun PresetDetailDialog(p: Preset, onClose: () -> Unit) {
                 DetailRow("低音增益", p.fx.bassGain.toString(), cs)
                 DetailRow("低音截止", p.fx.bassCutoff.toString(), cs)
                 DetailRow("低音带宽", p.fx.bassWidth.toString(), cs)
+                DetailRow("虚拟低频", mark(p.fx.vbOn), cs)
+                DetailRow("虚拟·强度 / 谐波混合", "${p.fx.vbAmt} / ${p.fx.vbBlend}", cs)
+                DetailRow("虚拟·谐波增益 / 起始频率", "${p.fx.vbHarm} / ${p.fx.vbLow} Hz", cs)
 
                 val d = p.dp
                 if (p.scope != SCOPE_DOLBY && d != null) {
@@ -676,6 +681,11 @@ private fun PresetDetailDialog(p: Preset, onClose: () -> Unit) {
                         )
                     }
 
+                    DetailRow(
+                        "低频增强",
+                        if (p.bbOn) String.format("开 · +%.1f dB", p.bbAmt / 10f) else "关", cs
+                    )
+                    DetailRow("齿音抑制", if (p.dsOn) "开 · ${p.dsAmt}%" else "关", cs)
                     DetailTitle("音效页（DP）· 后置均衡", cs)
 
                     DetailRow("后置均衡", mark(d.postOn), cs)
@@ -691,8 +701,10 @@ private fun PresetDetailDialog(p: Preset, onClose: () -> Unit) {
                     DetailRow("补偿强度 / 上限", String.format("%.1f / %.1f dB", d.elStrength / 10f, d.elMaxDb / 10f), cs)
                     DetailRow("整体强度", "${d.eqIntensity}%", cs)
                     if (d.aeq.isNotBlank()) DetailRow("曲线来源", "AutoEQ 导入（127 点）", cs)
-                    val nz = d.geqInt.count { it != 100 }
-                    if (nz > 0) DetailRow("逐段强度", "$nz 段已调整", cs)
+                    val nz = d.geqInt.mapIndexedNotNull { idx, v ->
+                        if (v != 100) "${DapRealtime.FREQS[idx]}Hz ${v}%" else null
+                    }
+                    if (nz.isNotEmpty()) DetailRow("逐段强度", nz.joinToString(" / "), cs)
                 }
 
             }
@@ -804,16 +816,10 @@ private fun exportPresets(ctx: Context, name: String, list: List<Preset>): Strin
         arr.put(org.json.JSONObject().apply {
             put("name", p.name)
             put("geq", org.json.JSONArray(p.geq.toList()))
-            put("hp", if (p.fx.hpVirtual) 1 else 0)
-            put("sp", if (p.fx.spVirtual) 1 else 0)
-            put("bass", if (p.fx.bassOn) 1 else 0)
-            put("gain", p.fx.bassGain)
-            put("cutoff", p.fx.bassCutoff)
-            put("width", p.fx.bassWidth)
-            put("dialog", if (p.fx.dialogOn) 1 else 0)
-            put("damt", p.fx.dialogAmt)
+            putFxJson(p.fx)
             put("scope", p.scope)
             put("dp", p.dp?.let { dpPack(it) } ?: "")
+            putDpMacros(p)
         })
     }
     return try {
