@@ -198,10 +198,10 @@ class MainActivity : ComponentActivity() {
             )
         }.start()
         // 后台隐藏：上次开着就继续让最近任务里看不到本 APP（服务照常跑）
-        runCatching {
+        window.decorView.post {
             if (getSharedPreferences("dolby_tuner", MODE_PRIVATE)
                     .getBoolean("hide_recents", false)
-            ) setExcludeFromRecents(true)
+            ) setHideInRecents(this, true)
         }
         val gate = evaluateGate()
         setContent {
@@ -1071,6 +1071,15 @@ private suspend fun pushFx(next: FxState): String? = withContext(Dispatchers.IO)
  * 曲线凹陷时不再往上补（以前是双向 ±24 dB，遇到局部深谷会被放大成巨响，
  * 遇到窄峰又会被能量平均放大成 -20 dB 的闷声）。
  */
+/** 从最近任务列表隐藏 / 恢复本 APP（服务不受影响） */
+internal fun setHideInRecents(ctx: android.content.Context, hide: Boolean) {
+    runCatching {
+        val am = ctx.getSystemService(android.content.Context.ACTIVITY_SERVICE)
+            as? android.app.ActivityManager ?: return
+        am.appTasks.firstOrNull()?.setExcludeFromRecents(hide)
+    }
+}
+
 internal fun autoGainOf(curve: FloatArray): Float {
     if (curve.isEmpty()) return 0f
     var s = 0.0
@@ -3541,7 +3550,7 @@ private fun SettingsScreen(activity: Activity) {
                     onCheckedChange = { on ->
                         hideRecents = on
                         prefs.edit().putBoolean("hide_recents", on).apply()
-                        runCatching { activity.setExcludeFromRecents(on) }
+                        setHideInRecents(activity, on)
                         android.widget.Toast.makeText(
                             ctx,
                             if (on) "已隐藏：退出后最近任务里不再出现" else "已恢复：最近任务正常显示",
