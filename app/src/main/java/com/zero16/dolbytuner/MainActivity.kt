@@ -1058,13 +1058,19 @@ private suspend fun pushFx(next: FxState): String? = withContext(Dispatchers.IO)
     e
 }
 
-/** 等比增益：按曲线能量平均反向补偿，钳制在 ±24 dB */
+/**
+ * 等比增益：只做「往下拉」。
+ *
+ * 曲线整体抬高多少，就补回多少，最多 -12 dB。
+ * 曲线凹陷时不再往上补（以前是双向 ±24 dB，遇到局部深谷会被放大成巨响，
+ * 遇到窄峰又会被能量平均放大成 -20 dB 的闷声）。
+ */
 internal fun autoGainOf(curve: FloatArray): Float {
     if (curve.isEmpty()) return 0f
     var s = 0.0
-    for (v in curve) s += Math.pow(10.0, v / 10.0)
-    val avg = 10.0 * Math.log10(s / curve.size)
-    return (-avg).toFloat().coerceIn(-24f, 24f)
+    for (v in curve) s += Math.pow(10.0, (v / 10.0))
+    val net = 10.0 * Math.log10(s / curve.size)
+    return (-net).coerceIn(-12.0, 0.0).toFloat()
 }
 
 /** Q6 线性值 → dB 文本（64 = 0 dB，0 = -∞） */
@@ -2827,7 +2833,8 @@ private fun EffectsScreen() {
             )
             ParamToggle(
                 label = "等比增益",
-                hint = "按 EQ 的整体提升自动反向补偿，音量听感保持不变",
+                hint = "按 EQ 的整体提升自动反向补偿，音量听感保持不变（当前 " +
+                    String.format("%+.1f dB", autoGainDb()) + "）",
                 checked = autoGain,
                 enabled = dpOn,
                 onCheckedChange = { on ->
