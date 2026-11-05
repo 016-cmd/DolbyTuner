@@ -76,6 +76,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -2665,12 +2666,12 @@ private fun EffectsScreen() {
     val accent = Appearance.secondary.value
     val cLim = Appearance.colorLimit.value
 
-    Column(
+    androidx.compose.runtime.CompositionLocalProvider(LocalDpOn provides dpOn) {
+    LazyColumn(
         Modifier.fillMaxSize().statusBarsPadding()
-            .verticalScroll(rememberScrollState())
             .padding(horizontal = 14.dp).padding(top = 18.dp).padding(bottom = 96.dp)
     ) {
-        androidx.compose.runtime.CompositionLocalProvider(LocalDpOn provides dpOn) {
+        item {
         Text("DynamicsProcessing音效", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
         Text(
@@ -2678,7 +2679,9 @@ private fun EffectsScreen() {
             fontSize = 11.sp, color = cs.onSurfaceVariant
         )
         Spacer(Modifier.height(14.dp))
+        }
 
+        item {
         // ===== 引擎总开关 =====
         GlassSurface(
             Modifier.fillMaxWidth(),
@@ -2713,8 +2716,10 @@ private fun EffectsScreen() {
             }
         }
 
+        }
         Spacer(Modifier.height(8.dp))
 
+        item {
         // ===== DP EQ（GEQ / PEQ） =====
         val cEq = Appearance.tertiary.value
         GlassSurface(
@@ -2909,7 +2914,9 @@ private fun EffectsScreen() {
                 }
             }
         }
+        }
 
+        item {
         // ===== EQ 强度（整体 / 逐段）=====
         EffectCard(
             title = "EQ 强度",
@@ -2969,7 +2976,9 @@ private fun EffectsScreen() {
                 )
             }
         }
+        }
 
+        item {
         // ===== 等响补偿 =====
         val cEl = Appearance.colorDyn.value
         EffectCard(
@@ -3061,7 +3070,9 @@ private fun EffectsScreen() {
                 )
             }
         }
+        }
 
+        item {
         // ===== 输入增益 =====
         EffectCard(
             title = "输出增益",
@@ -3096,7 +3107,9 @@ private fun EffectsScreen() {
                 fontSize = 9.sp, lineHeight = 13.sp, color = cs.onSurfaceVariant
             )
         }
+        }
 
+        item {
         // ===== Limiter =====
         EffectCard(
             title = "动态限制器",
@@ -3170,7 +3183,9 @@ private fun EffectsScreen() {
                 onDone = { commitLim(5, it) }
             )
         }
+        }
 
+        item {
         // ===== 低频增强（DP · 叠在 MBC 第 0 段）=====
         EffectCard(
             title = "低频增强",
@@ -3199,7 +3214,9 @@ private fun EffectsScreen() {
                 throttle.post(macroTick)
             }
         }
+        }
 
+        item {
         // ===== MBC 多段压缩 =====
         EffectCard(
             title = "多段压缩器",
@@ -3312,7 +3329,9 @@ private fun EffectsScreen() {
                 onLive = { liveMbc(8, it) }, onDone = { commitMbc(8, it) }
             )
         }
+        }
 
+        item {
         // ===== 齿音抑制（DP · 叠在 MBC 第 2 段）=====
         EffectCard(
             title = "齿音抑制",
@@ -3341,7 +3360,9 @@ private fun EffectsScreen() {
                 throttle.post(macroTick)
             }
         }
+        }
 
+        item {
         // ===== 后置均衡器 =====
         EffectCard(
             title = "后置均衡器",
@@ -3368,6 +3389,8 @@ private fun EffectsScreen() {
                 onLive = { livePost(10, it) }, onDone = { commitPost(10, it) }
             )
         }
+        }
+        item {
 
         Spacer(Modifier.height(8.dp))
         // ===== 重置 =====
@@ -3393,6 +3416,7 @@ private fun EffectsScreen() {
                 if (busy) "正在下发…" else status,
                 fontSize = 10.sp, color = cs.onSurfaceVariant
             )
+        }
         }
         }
     }
