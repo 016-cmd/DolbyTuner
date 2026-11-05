@@ -60,6 +60,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
+.jellyPress(Appearance.jelly.value > 0)
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -928,6 +929,7 @@ private fun GeqScreen(deviceLine: String) {
                     }
                     list.forEach { p ->
                         Row(
+                            .jellyPress(Appearance.jelly.value > 0)
                             Modifier.fillMaxWidth().clickable {
                                 DeviceTuningStore.bind(ctx, device, p.name)
                                 DeviceState.sync(ctx)
@@ -2879,6 +2881,7 @@ private fun EffectsScreen() {
                                     .heightIn(min = 92.dp)
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(cEq.copy(alpha = 0.12f))
+                                    .jellyPress(Appearance.jelly.value > 0)
                                     .clickable(enabled = dpOn) { addPeq() },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -3120,6 +3123,7 @@ private fun EffectsScreen() {
                 presets.forEach { pr ->
                     Surface(
                         Modifier.weight(1f)
+                            .jellyPress(Appearance.jelly.value > 0)
                             .clickable(enabled = limOn && dpOn) {
                                 thr = pr.second[0]; atk = pr.second[1]; rel = pr.second[2]
                                 rat = pr.second[3]; post = pr.second[4]
@@ -3216,6 +3220,7 @@ private fun EffectsScreen() {
                 segNames.forEachIndexed { i, n ->
                     Surface(
                         Modifier.weight(1f)
+                            .jellyPress(Appearance.jelly.value > 0)
                             .clickable { sel = i; mbcStore[i].copyInto(pendMbc); prefs.edit().putInt("mbc_sel", i).apply() },
                         shape = RoundedCornerShape(10.dp),
                         color = cMbc.copy(alpha = if (sel == i) 0.30f else 0.08f),
@@ -3256,6 +3261,7 @@ private fun EffectsScreen() {
                 mbcPresets.forEach { pr ->
                     Surface(
                         Modifier.weight(1f)
+                            .jellyPress(Appearance.jelly.value > 0)
                             .clickable(enabled = mbcOn && dpOn) {
                                 val l = List(4) { pr.second.copyOf() }
                                 mbcStore = l
@@ -3498,6 +3504,7 @@ private fun EqTab(
     onClick: () -> Unit
 ) {
     Surface(
+        .jellyPress(Appearance.jelly.value > 0)
         Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = enabled, onClick = onClick),
         shape = RoundedCornerShape(8.dp),
         color = accent.copy(alpha = if (active) 0.28f else 0.06f),
@@ -4053,6 +4060,7 @@ private fun SettingRow(
 ) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+            .jellyPress(Appearance.jelly.value > 0)
             .clickable(onClick = onClick)
             .padding(vertical = 10.dp, horizontal = 2.dp),
         verticalAlignment = Alignment.CenterVertically

@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
+.jellyPress(Appearance.jelly.value > 0)
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -89,6 +90,7 @@ internal fun EffectCard(
                 Modifier.fillMaxWidth()
                     .then(
                         if (toggleOnly || !expandable) Modifier
+                        .jellyPress(Appearance.jelly.value > 0)
                         else Modifier.clickable { expanded = !expanded }
                     )
                     .heightIn(min = 68.dp)
@@ -227,6 +229,7 @@ internal fun ParamChoice(
                 ) {
                     Row(
                         Modifier.fillMaxWidth()
+                            .jellyPress(Appearance.jelly.value > 0)
                             .then(if (enabled) Modifier.clickable { onSelect(i) } else Modifier)
                             .padding(vertical = 7.dp),
                         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center

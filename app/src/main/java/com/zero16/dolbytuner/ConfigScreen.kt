@@ -13,6 +13,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+.jellyPress(Appearance.jelly.value > 0)
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -251,6 +252,7 @@ internal fun ConfigScreen() {
                             Surface(
                                 Modifier.weight(1f)
                                     .clip(RoundedCornerShape(8.dp))
+                                    .jellyPress(Appearance.jelly.value > 0)
                                     .clickable { saveScope = v },
                                 shape = RoundedCornerShape(8.dp),
                                 color = if (on) Accent.copy(alpha = 0.22f)
@@ -528,6 +530,7 @@ private fun PresetBigCard(
         Row(Modifier.fillMaxSize()) {
             // 左 60%：GEQ 曲线（点击看详细参数）
             Box(
+                .jellyPress(Appearance.jelly.value > 0)
                 Modifier.fillMaxHeight().weight(0.60f).clickable { onOpen() },
                 contentAlignment = Alignment.Center
             ) {
@@ -552,6 +555,7 @@ private fun PresetBigCard(
             // 中 20%：音效页参数摘要（点击看详细参数）
             Column(
                 Modifier.fillMaxHeight().weight(0.20f).padding(horizontal = 2.dp)
+                    .jellyPress(Appearance.jelly.value > 0)
                     .clickable { onOpen() },
                 verticalArrangement = Arrangement.Center
             ) {
@@ -766,6 +770,7 @@ private fun ExportPickRow(name: String, selected: Boolean, cs: androidx.compose.
         Modifier.fillMaxWidth().padding(vertical = 2.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(if (selected) Accent.copy(alpha = 0.16f) else androidx.compose.ui.graphics.Color.Transparent)
+            .jellyPress(Appearance.jelly.value > 0)
             .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -796,6 +801,7 @@ private fun GreenMiniButton(
             .jellyPress(Appearance.jelly.value > 0)
             .clip(RoundedCornerShape(9.dp))
             .background(bg)
+            .jellyPress(Appearance.jelly.value > 0)
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
