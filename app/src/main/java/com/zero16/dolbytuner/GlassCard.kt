@@ -102,7 +102,7 @@ fun GlassSurface(
 @Composable
 fun GlassSettingsCard(
     modifier: Modifier = Modifier,
-    radius: Int = 16,
+    radius: Int = Appearance.radius.value,
     content: @Composable ColumnScope.() -> Unit
 ) {
     var pos by remember { mutableStateOf(Offset.Zero) }

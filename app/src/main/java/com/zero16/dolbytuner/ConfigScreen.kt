@@ -149,7 +149,7 @@ internal fun ConfigScreen() {
         // ── 顶部：导入 / 导出 ──────────────────────────────
         GlassSurface(
             Modifier.fillMaxWidth(),
-            radius = 16
+            radius = Appearance.radius.value
         ) {
             Column(Modifier.padding(14.dp)) {
                 Text("备份与恢复", fontSize = 13.sp, fontWeight = FontWeight.Bold)

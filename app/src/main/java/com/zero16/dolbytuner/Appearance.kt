@@ -45,7 +45,7 @@ object Appearance {
 
     // ── 形状 ──
     /** 圆角 12~32 dp */
-    val radius = mutableStateOf(22)
+    val radius = mutableStateOf(26)
     /** 玻璃厚度：0 薄 / 1 标准 / 2 厚 */
     val thickness = mutableStateOf(1)
 
@@ -115,7 +115,7 @@ object Appearance {
         lightAngle.value = s.getInt("light_angle", 315).coerceIn(0, 360)
         volumeLight.value = s.getInt("volume_light", 2).coerceIn(0, 3)
         tintMode.value = s.getInt("tint_mode", 0).coerceIn(0, 2)
-        radius.value = s.getInt("radius", 22).coerceIn(12, 32)
+        radius.value = s.getInt("radius", 26).coerceIn(12, 34)
         thickness.value = s.getInt("thickness", 1).coerceIn(0, 2)
         jelly.value = s.getInt("jelly", 70).coerceIn(0, 100)
         spring.value = s.getInt("spring", 1).coerceIn(0, 2)

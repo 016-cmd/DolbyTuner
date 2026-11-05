@@ -1,5 +1,8 @@
 package com.zero16.dolbytuner
 
+import kotlin.math.roundToInt
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.ui.layout.positionInRoot
@@ -393,6 +396,14 @@ private fun MainApp(activity: Activity, deviceLine: String) {
     }
     var dockPos by remember { mutableStateOf(Offset.Zero) }
     var dockSize by remember { mutableStateOf(IntSize.Zero) }
+    val dockDensity = LocalDensity.current
+    val pageW = with(dockDensity) {
+        LocalConfiguration.current.screenWidthDp.dp.toPx()
+    }
+    val innerW = with(dockDensity) {
+        (dockSize.width.toDp() - 20.dp).toPx()
+    }
+    val tabW = (innerW / 4f).coerceAtLeast(1f)
 
     Box(Modifier.fillMaxSize()) {
         // 无极拖动：长按 dock 后把横向位移直接喂给 Pager，
@@ -421,27 +432,49 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                 }
                 .clip(RoundedCornerShape(28.dp))
                 .glassSurface(28f, dockPos, dockSize)
-                .pointerInput(Unit) {
-                    detectDragGesturesAfterLongPress(
-                        onDragStart = { },
+                .pointerInput(tabW, pageW) {
+                    detectDragGestures(
                         onDrag = { change, amount ->
                             change.consume()
-                            // 手指左移 = 去下一页；直接驱动 Pager，页面跟手
-                            pagerState.dispatchRawDelta(-amount.x)
+                            val ratio = if (tabW > 1f) pageW / tabW else 1f
+                            pagerState.dispatchRawDelta(amount.x * ratio)
                         },
                         onDragEnd = {
+                            val p = pagerState.currentPage +
+                                    pagerState.currentPageOffsetFraction
                             scope.launch {
-                                pagerState.animateScrollToPage(pagerState.currentPage)
-                            }
-                        },
-                        onDragCancel = {
-                            scope.launch {
-                                pagerState.animateScrollToPage(pagerState.currentPage)
+                                pagerState.animateScrollToPage(p.roundToInt().coerceIn(0, 3))
                             }
                         }
                     )
                 }
         ) {
+            val progress = pagerState.currentPage + pagerState.currentPageOffsetFraction
+            val thumbW = (tabW - 6.dp.toPx()).coerceAtLeast(24.dp.toPx())
+            Box(
+                Modifier
+                    .offset {
+                        androidx.compose.ui.unit.IntOffset(
+                            (10.dp.toPx() + progress * tabW + 3.dp.toPx())
+                                .roundToInt(),
+                            3.dp.roundToPx()
+                        )
+                    }
+                    .width(with(dockDensity) { thumbW.toDp() })
+                    .fillMaxHeight()
+                    .padding(vertical = 3.dp)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(
+                        if (isDark) Color.White.copy(alpha = 0.14f)
+                        else Color.Black.copy(alpha = 0.07f)
+                    )
+                    .border(
+                        1.dp,
+                        if (isDark) Color.White.copy(alpha = 0.14f)
+                        else Color.Black.copy(alpha = 0.05f),
+                        RoundedCornerShape(22.dp)
+                    )
+            )
             Row(
                 Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 2.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
@@ -460,12 +493,7 @@ private fun MainApp(activity: Activity, deviceLine: String) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.clip(RoundedCornerShape(14.dp))
-                                .then(
-                                    if (selected) Modifier.background(
-                                        if (isDark) Color.White.copy(alpha = 0.12f) else Color.Black.copy(alpha = 0.05f),
-                                        RoundedCornerShape(14.dp)
-                                    ) else Modifier
-                                )
+
                                 .jellyPress(Appearance.jelly.value > 0)
                                 .clickable {
                                     scope.launch {
@@ -573,7 +601,7 @@ private fun GeqScreen(deviceLine: String) {
 
         GlassSurface(
             Modifier.fillMaxWidth(),
-            radius = 16
+            radius = Appearance.radius.value
         ) {
             Column(Modifier.padding(14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -610,7 +638,7 @@ private fun GeqScreen(deviceLine: String) {
         Spacer(Modifier.height(10.dp))
         GlassSurface(
             Modifier.fillMaxWidth(),
-            radius = 16
+            radius = Appearance.radius.value
         ) {
             Column(Modifier.padding(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2544,7 +2572,7 @@ private fun EffectsScreen() {
         // ===== 引擎总开关 =====
         GlassSurface(
             Modifier.fillMaxWidth(),
-            radius = 16
+            radius = Appearance.radius.value
         ) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
@@ -2581,7 +2609,7 @@ private fun EffectsScreen() {
         val cEq = Color(0xFF6366F1)
         GlassSurface(
             Modifier.fillMaxWidth().padding(vertical = 4.dp),
-            radius = 16
+            radius = Appearance.radius.value
         ) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -3837,7 +3865,7 @@ private fun LicenseDialogContent(
 ) {
     GlassSurface(
         Modifier.fillMaxHeight(0.9f).fillMaxWidth(),
-        radius = 16
+        radius = Appearance.radius.value
     ) {
         Column(Modifier.fillMaxSize()) {
             Row(

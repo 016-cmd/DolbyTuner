@@ -221,7 +221,7 @@ internal fun CapabilitySection() {
 
     GlassSurface(
         Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        radius = 16
+        radius = Appearance.radius.value
     ) {
         Row(
             Modifier.fillMaxWidth().padding(14.dp),
