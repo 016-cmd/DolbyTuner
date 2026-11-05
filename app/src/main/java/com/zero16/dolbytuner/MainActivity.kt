@@ -93,6 +93,7 @@ import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ArrowBack
@@ -4018,10 +4019,29 @@ private fun SettingsScreen(activity: Activity) {
         }
         item {
         GlassCard(Modifier.fillMaxWidth()) {
-            SettingRow(
-                icon = Icons.Default.Favorite, title = "赞助作者",
-                subtitle = "谢谢你请 Aoi 吃米饭", selected = false
-            ) { showSponsor = true }
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                    .jellyPress(Appearance.jelly.value > 0)
+                    .clickable { showSponsor = true }
+                    .padding(vertical = 10.dp, horizontal = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Favorite, null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("赞助作者", fontSize = 13.sp)
+                    Text("016. · Aoi", fontSize = 10.sp, color = subInk())
+                }
+                Icon(
+                    Icons.Default.KeyboardArrowRight, null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
         }
         item {
