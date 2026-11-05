@@ -3782,27 +3782,6 @@ private fun SettingsScreen(activity: Activity) {
         }
         Spacer(Modifier.height(12.dp))
         GlassCard(Modifier.fillMaxWidth()) {
-            Text("壁纸", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            SettingRow(
-                icon = Icons.Default.Wallpaper, title = "自定义壁纸",
-                subtitle = if (wallpaperUri != null) "已设置" else "未设置",
-                selected = false
-            ) { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
-            if (wallpaperUri != null) {
-                SettingRow(
-                    icon = Icons.Default.RestartAlt, title = "移除壁纸",
-                    selected = false
-                ) {
-                    ThemePrefs.setWallpaperUri(ctx, null)
-                    wallpaperUri = null
-                    activity.recreate()
-                }
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-        GlassCard(Modifier.fillMaxWidth()) {
             Text("关于", fontSize = 13.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             AboutRow("开发者", "016. · Aoi")

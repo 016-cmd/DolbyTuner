@@ -25,13 +25,25 @@ object WallpaperState {
     var scale: Float = 1f
         private set
 
+    /** 当前窗口尺寸（px），卡片按这个把模糊壁纸映射到自己那块区域 */
+    @Volatile
+    var screenW: Int = 1080
+        private set
+
+    @Volatile
+    var screenH: Int = 2400
+        private set
+
     fun set(
         ctx: Context,
         bitmap: Bitmap,
         dark: Boolean,
         screenWidthPx: Int,
+        screenHeightPx: Int,
         blurRadius: Float = 16f
     ) {
+        screenW = screenWidthPx
+        screenH = screenHeightPx
         val oldOriginal = original
         val oldBlurred = blurred
         // 先设置新图，再回收旧图 — 避免 Compose 读已回收 Bitmap 崩溃

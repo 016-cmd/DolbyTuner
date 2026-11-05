@@ -131,6 +131,7 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
 
     // 用 onSizeChanged 获取真实窗口宽度 → WallpaperState.scale（Scene 同款：rootView.width/192）
     var windowWidthPx by remember { mutableIntStateOf(1080) }
+    var windowHeightPx by remember { mutableIntStateOf(2400) }
 
     // 壁纸变化时异步加载 bitmap → 模糊 → WallpaperState
     // 使用 state 计数器触发 Compose 重组（WallpaperState 是非 Compose 对象）
@@ -150,7 +151,9 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
                         BitmapFactory.decodeFile(wallpaperUri)
                     }
                     if (bitmap != null) {
-                        WallpaperState.set(ctx, bitmap, isDark, windowWidthPx, glassBlur.blur)
+                        WallpaperState.set(
+                            ctx, bitmap, isDark, windowWidthPx, windowHeightPx, glassBlur.blur
+                        )
                         // 壁纸取色：卡片图标、拉条、选中态都跟着走
                         val acc = Appearance.computeAccent(bitmap, isDark)
                         withContext(Dispatchers.Main) { Appearance.cacheAccent(ctx, acc) }
@@ -183,15 +186,16 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
         Box(modifier = Modifier
             .fillMaxSize()
             .background(colorScheme.background)
-            .onSizeChanged { size -> windowWidthPx = size.width }
+            .onSizeChanged { size ->
+                windowWidthPx = size.width
+                windowHeightPx = size.height
+            }
         ) {
             // 全屏壁纸：直接用 WallpaperState 原始 Bitmap，与模糊壁纸同一来源
             @Suppress("UNUSED_EXPRESSION")
             version // 读取触发重组
-            // 毛玻璃模式：整屏用预模糊版（卡片模糊感来自这里）；液态模式用原图，保证透亮
-            val useBlur = Appearance.enabled.value && Appearance.mode.value == GlassMode.FROSTED
-            val wallpaperBitmap = if (useBlur) (WallpaperState.blurred ?: WallpaperState.original)
-            else WallpaperState.original
+            // 壁纸永远清晰；模糊只发生在「卡片自己那块区域」内
+            val wallpaperBitmap = WallpaperState.original
             if (wallpaperBitmap != null) {
                 Image(
                     bitmap = wallpaperBitmap.asImageBitmap(),
