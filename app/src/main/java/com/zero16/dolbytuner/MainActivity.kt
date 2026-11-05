@@ -1593,12 +1593,19 @@ private fun FxSection(onStatus: (String) -> Unit = {}) {
             }
         }
         Spacer(Modifier.height(10.dp))
-        OutlinedButton(
+        Button(
             onClick = { showResetConfirm = true },
             modifier = Modifier.fillMaxWidth().height(44.dp),
-            shape = RoundedCornerShape(10.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFB45309))
-        ) { Text("重置为 DSP 默认值（GEQ + 音效）", fontSize = 11.sp) }
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFFEF4444).copy(alpha = 0.88f)
+            )
+        ) {
+            Text(
+                "重置为 DSP 默认值（GEQ + 音效）",
+                fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold
+            )
+        }
 
         Spacer(Modifier.height(10.dp))
         
@@ -2362,7 +2369,7 @@ private fun EffectsScreen() {
     Column(
         Modifier.fillMaxSize().statusBarsPadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp).padding(top = 18.dp).padding(bottom = 180.dp)
+            .padding(horizontal = 14.dp).padding(top = 18.dp).padding(bottom = 96.dp)
     ) {
         androidx.compose.runtime.CompositionLocalProvider(LocalDpOn provides dpOn) {
         Text("DynamicsProcessing音效", fontSize = 22.sp, fontWeight = FontWeight.Bold)
