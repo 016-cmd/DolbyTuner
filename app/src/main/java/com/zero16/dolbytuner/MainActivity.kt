@@ -180,35 +180,56 @@ private fun realModelName(): String {
     return (mkt ?: "${Build.MANUFACTURER} ${Build.MODEL}").trim()
 }
 
-private data class GateResult(val passed: Boolean, val reasons: List<String>, val deviceLine: String)
+internal data class GateResult(val passed: Boolean, val reasons: List<String>, val deviceLine: String)
 private data class DockTab(val label: String, val icon: ImageVector, val resId: Int? = null)
+/** 机型那一行小字：市场名 + 系统版本，取一次就够，不做任何探测 */
+internal fun deviceLineText(): String =
+    "${realModelName()} · Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
+
+/** 有没有杜比引擎：系统属性或已注册的音效实现里能看到 Dolby 就算有 */
+private fun hasDolbyEngine(): Boolean {
+    val byProp = runCatching {
+        val p = ProcessBuilder("getprop").redirectErrorStream(true).start()
+        val txt = p.inputStream.bufferedReader().use { it.readText() }
+        p.waitFor()
+        txt.lineSequence().any { it.contains("dolby", true) }
+    }.getOrDefault(false)
+    if (byProp) return true
+    return runCatching {
+        android.media.audiofx.AudioEffect.queryEffects()?.any { d ->
+            (d.name ?: "").contains("dolby", true) || d.toString().contains("dolby", true)
+        } == true
+    }.getOrDefault(false)
+}
+
+/**
+ * 机型检查：只看「能不能跑」。
+ * 在引导页的「设备检查」那一页现算，启动时不再预先跑一遍。
+ */
+internal fun evaluateDeviceGate(): GateResult {
+    val reasons = mutableListOf<String>()
+    val sdk = Build.VERSION.SDK_INT
+    if (sdk < 36) reasons += "需要 Android 16（API 36）及以上，当前 API $sdk"
+    val brand = Build.BRAND.lowercase()
+    val manufacturer = Build.MANUFACTURER.lowercase()
+    val vendorBrand = sysProp("ro.product.vendor.brand").lowercase()
+    val propBrand = sysProp("ro.product.brand").lowercase()
+    val isXiaomi = listOf(brand, manufacturer, vendorBrand, propBrand).any { v ->
+        ALLOWED_BRANDS.any { it == v } || v.contains("xiaomi") || v.contains("redmi") || v.contains("poco")
+    }
+    if (!isXiaomi) {
+        reasons += "不是小米 / Redmi / POCO 设备，当前：${Build.MANUFACTURER} ${Build.BRAND}"
+    }
+    if (!hasDolbyEngine()) {
+        reasons += "设备没有杜比引擎（未找到 Dolby DAP 音效实现）"
+    }
+    return GateResult(reasons.isEmpty(), reasons, deviceLineText())
+}
 
 class MainActivity : ComponentActivity() {
 
-    private fun prop(key: String): String = runCatching {
-        val p = ProcessBuilder("getprop", key).redirectErrorStream(true).start()
-        val s = p.inputStream.bufferedReader().readText().trim()
-        p.waitFor()
-        s
-    }.getOrDefault("")
-
-    private fun evaluateGate(): GateResult {
-        val reasons = mutableListOf<String>()
-        val sdk = Build.VERSION.SDK_INT
-        if (sdk < 36) reasons += "需要 Android 16（API 36）及以上，当前 API $sdk"
-        val brand = Build.BRAND.lowercase()
-        val manufacturer = Build.MANUFACTURER.lowercase()
-        val vendorBrand = prop("ro.product.vendor.brand").lowercase()
-        val propBrand = prop("ro.product.brand").lowercase()
-        val isXiaomi = listOf(brand, manufacturer, vendorBrand, propBrand).any { v ->
-            ALLOWED_BRANDS.any { it == v } || v.contains("xiaomi") || v.contains("redmi") || v.contains("poco")
-        }
-        if (!isXiaomi) reasons += "仅支持小米 / Redmi / POCO，当前：${Build.MANUFACTURER} ${Build.BRAND}"
-        return GateResult(
-            reasons.isEmpty(), reasons,
-            "${realModelName()} · Android ${Build.VERSION.RELEASE} (API $sdk)"
-        )
-    }
+    /** 机型那一行只在第一次用到时算一次，不参与启动检测 */
+    private val cachedDeviceLine by lazy { deviceLineText() }
 
     override fun onPause() {
         // 只要正常进入过后台/退出，就清掉「会话未收尾」标记，
@@ -264,7 +285,6 @@ class MainActivity : ComponentActivity() {
                     .getBoolean("hide_recents", false)
             ) setHideInRecents(this, true)
         }
-        val gate = evaluateGate()
         setContent {
             DolbyTunerTheme {
                 val obPrefs = remember { getSharedPreferences("dolby_tuner", MODE_PRIVATE) }
@@ -273,9 +293,7 @@ class MainActivity : ComponentActivity() {
                 }
                 if (showOnboard) {
                     OnboardingScreen(
-                        deviceLine = gate.deviceLine,
-                        passed = gate.passed,
-                        reasons = gate.reasons,
+                        onCheck = { evaluateDeviceGate() },
                         baseCaptured = DspBaseline.captured(this),
                         onExit = { finishAffinity() },
                         onDone = {
@@ -284,7 +302,7 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 } else {
-                    MainApp(this, gate.deviceLine)
+                    MainApp(this, cachedDeviceLine)
                 }
             }
         }

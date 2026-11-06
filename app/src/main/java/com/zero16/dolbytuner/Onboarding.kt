@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Waves
@@ -52,6 +53,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,7 +70,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** 介绍页数据 */
 private data class ObPage(
@@ -127,9 +131,7 @@ private val INTRO_PAGES = listOf(
  */
 @Composable
 fun OnboardingScreen(
-    deviceLine: String,
-    passed: Boolean,
-    reasons: List<String>,
+    onCheck: () -> GateResult,
     baseCaptured: Boolean,
     onExit: () -> Unit,
     onDone: () -> Unit
@@ -152,9 +154,21 @@ fun OnboardingScreen(
         ), label = "halo"
     )
 
-    val total = if (passed) INTRO_PAGES.size + 2 else 1
+    val total = INTRO_PAGES.size + 2
     val pager = rememberPagerState { total }
     val fix = remember { ctx.getSharedPreferences("dolby_tuner", Context.MODE_PRIVATE) }
+
+    // 机型检测只在「设备检查」这一页做：滑到该页才开始，不占冷启动时间
+    var gate by remember { mutableStateOf<GateResult?>(null) }
+    var checking by remember { mutableStateOf(false) }
+    LaunchedEffect(pager.currentPage) {
+        if (pager.currentPage == INTRO_PAGES.size && gate == null && !checking) {
+            checking = true
+            val r = withContext(Dispatchers.IO) { onCheck() }
+            gate = r
+            checking = false
+        }
+    }
 
     var busy by remember { mutableStateOf(false) }
     var errMsg by remember { mutableStateOf<String?>(null) }
@@ -255,7 +269,7 @@ fun OnboardingScreen(
                 Modifier.fillMaxWidth().padding(top = 10.dp),
                 horizontalArrangement = Arrangement.End
             ) {
-                if (passed) {
+                if (gate?.passed == true) {
                     Text(
                         "跳过", fontSize = 12.sp, color = subInk(0.85f),
                         modifier = Modifier.clip(RoundedCornerShape(8.dp))
@@ -266,7 +280,12 @@ fun OnboardingScreen(
                 }
             }
 
-            HorizontalPager(state = pager, modifier = Modifier.weight(1f)) { idx ->
+            HorizontalPager(
+                state = pager,
+                modifier = Modifier.weight(1f),
+                // 检测没过就锁在这一页，别让人滑到「记录默认值」那一步
+                userScrollEnabled = gate?.passed != false
+            ) { idx ->
                 val off = (pager.currentPage - idx) + pager.currentPageOffsetFraction
                 Column(
                     Modifier.fillMaxSize().padding(vertical = 6.dp).graphicsLayer {
@@ -288,8 +307,8 @@ fun OnboardingScreen(
                             when {
                                 idx < INTRO_PAGES.size -> IntroBody(INTRO_PAGES[idx], accent, cs, pulse, halo)
                                 idx == INTRO_PAGES.size -> CheckBody(
-                                    deviceLine = deviceLine, passed = passed,
-                                    reasons = reasons, accent = accent, cs = cs,
+                                    gate = gate, checking = checking,
+                                    accent = accent, cs = cs,
                                     pulse = pulse, halo = halo
                                 )
                                 else -> DspBody(
@@ -323,7 +342,7 @@ fun OnboardingScreen(
                 }
             }
 
-            if (!passed) {
+            if (gate?.passed == false) {
                 Button(
                     onClick = onExit,
                     modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -450,26 +469,47 @@ private fun IntroBody(p: ObPage, accent: Color, cs: androidx.compose.material3.C
 
 @Composable
 private fun CheckBody(
-    deviceLine: String, passed: Boolean, reasons: List<String>,
+    gate: GateResult?, checking: Boolean,
     accent: Color, cs: androidx.compose.material3.ColorScheme,
     pulse: Float, halo: Float
 ) {
+    val passed = gate?.passed == true
+    val unknown = gate == null
+    val warn = Color(0xFFEF4444)
     Box(
         Modifier.size(76.dp)
             .graphicsLayer { scaleX = pulse; scaleY = pulse }
             .clip(CircleShape)
-            .background((if (passed) accent else Color(0xFFEF4444)).copy(alpha = halo)),
+            .background((if (unknown) cs.onSurfaceVariant else if (passed) accent else warn).copy(alpha = halo)),
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            if (passed) Icons.Default.CheckCircle else Icons.Default.Warning, null,
-            tint = if (passed) accent else Color(0xFFEF4444), modifier = Modifier.size(38.dp)
+            when {
+                unknown -> Icons.Default.Search
+                passed -> Icons.Default.CheckCircle
+                else -> Icons.Default.Warning
+            },
+            null,
+            tint = if (unknown) cs.onSurfaceVariant else if (passed) accent else warn,
+            modifier = Modifier.size(38.dp)
         )
     }
     Spacer(Modifier.height(18.dp))
     Text("设备检查", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = cs.onSurface)
     Spacer(Modifier.height(8.dp))
-    Text(deviceLine, fontSize = 11.sp, lineHeight = 17.sp, color = subInk(0.9f))
+    if (unknown) {
+        Text(
+            if (checking) "正在检查这台设备…" else "滑到这一页才开始检查。",
+            fontSize = 11.sp, lineHeight = 17.sp, color = subInk(0.9f)
+        )
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "只读取机型、系统版本与杜比引擎信息，不改动任何参数。",
+            fontSize = 10.sp, lineHeight = 16.sp, color = subInk(0.75f)
+        )
+        return
+    }
+    Text(gate!!.deviceLine, fontSize = 11.sp, lineHeight = 17.sp, color = subInk(0.9f))
     Spacer(Modifier.height(14.dp))
     if (passed) {
         Text(
@@ -477,9 +517,9 @@ private fun CheckBody(
             fontSize = 11.sp, lineHeight = 17.sp, color = cs.onSurface
         )
     } else {
-        reasons.forEach { r ->
+        gate.reasons.forEach { r ->
             Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
-                Box(Modifier.padding(top = 6.dp).size(5.dp).clip(CircleShape).background(Color(0xFFEF4444)))
+                Box(Modifier.padding(top = 6.dp).size(5.dp).clip(CircleShape).background(warn))
                 Spacer(Modifier.width(9.dp))
                 Text(r, fontSize = 11.sp, lineHeight = 17.sp, color = cs.onSurface)
             }
