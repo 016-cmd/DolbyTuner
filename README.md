@@ -80,22 +80,6 @@
 
 ---
 
-## 构建
-
-```bash
-# 需要 JDK 17+ 与 Android SDK（compileSdk 37）
-./gradlew :app:assembleRelease
-# 产物：app/build/outputs/apk/release/app-release.apk
-```
-
-仓库内 `app/dolbytuner.jks` 是自用签名（口令 `android`，别名 `androiddebugkey`），
-`debug` 与 `release` 都绑定这一个 key，目的是让 CI 每次产出可直接覆盖安装的 APK。
-**公开发布前请换成你自己的 release keystore，不要把私钥与口令提交进仓库。**
-
-GitHub Actions 会自动编译并上传 APK 产物，见 `.github/workflows/`。
-
----
-
 ## 目录结构
 
 ```text
