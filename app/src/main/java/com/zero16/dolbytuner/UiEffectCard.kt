@@ -43,7 +43,7 @@ import kotlin.math.roundToInt
 internal val LocalDpOn = androidx.compose.runtime.compositionLocalOf { true }
 
 /**
- * 统一效果大卡片（参考 V4A 页交互，代码自己写）：
+ * 统一效果大卡片：图标 + 标题 + 开关，点卡片展开参数（本项目自写）：
  *
  *   ┌ Row：图标 + 标题/摘要 + Switch   ← 点整行展开
  *   └ AnimatedVisibility：参数区

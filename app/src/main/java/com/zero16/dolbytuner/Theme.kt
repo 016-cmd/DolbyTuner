@@ -172,7 +172,7 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
         )
     }
 
-    // 用 onSizeChanged 获取真实窗口宽度 → WallpaperState.scale（Scene 同款：rootView.width/192）
+    // 用 onSizeChanged 获取真实窗口宽度 → WallpaperState.scale（rootView.width / 192）
     var windowWidthPx by remember { mutableIntStateOf(1080) }
     var windowHeightPx by remember { mutableIntStateOf(2400) }
 

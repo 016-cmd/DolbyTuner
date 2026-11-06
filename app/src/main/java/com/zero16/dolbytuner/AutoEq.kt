@@ -3,7 +3,7 @@ package com.zero16.dolbytuner
 /**
  * AutoEQ / GraphicEQ 文本解析，以及 EQ 强度缩放工具。
  *
- * 支持两种常见写法（都来自 AutoEQ 的输出）：
+ * 支持 AutoEq 导出文件的两种常见写法：
  *   GraphicEQ: 20 -1.5; 21 -1.4; 22 -1.6; ...
  *   20 -1.5
  *   21 -1.4

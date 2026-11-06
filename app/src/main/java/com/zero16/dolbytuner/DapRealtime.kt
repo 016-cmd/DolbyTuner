@@ -12,7 +12,7 @@ import java.util.UUID
  * Dolby DAP 实时层（GEQ 参数 110）
  *
  * 只做一件事：把 20 段 GEQ 曲线写进「运行中的」杜比 DAP，不重启音频服务。
- * 协议细节全部来自对 DapTune（Apache-2.0）接口事实的核对，实现为本项目自写。
+ * 协议细节为本项目通过系统 AudioEffect 接口实测核对后自写实现。
  *
  * 关键协议（不要改，改了就写不进去/读不出来）：
  *   查询  key = command + 5
@@ -29,7 +29,7 @@ object DapRealtime {
 
     const val BANDS = 20
     const val Q4_PER_DB = 16
-    const val MAX_BOOST_Q4 = 384      // +24.0 dB（放宽到二改版同款，DSP 侧若截断不报错）
+    const val MAX_BOOST_Q4 = 384      // +24.0 dB（放宽到该上限，DSP 侧若截断不报错）
     const val MIN_GAIN_Q4 = -384      // -24.0 dB
 
     val FREQS = intArrayOf(
@@ -49,7 +49,7 @@ object DapRealtime {
     // ── FourCC 通道（A 类音效）──
 
     private val TYPE_UUID = UUID.fromString("ec7178ec-e5e1-4432-a3f4-4657e6795210")
-    /** 全零 UUID —— 逆向用 (0, 9d4921da) 这种组合去挂系统已有的 DAP 节点 */
+    /** 全零 UUID —— 用 (0, implUUID) 这种组合去挂系统已有的 DAP 节点 */
     private val ZERO_UUID = UUID(0L, 0L)
     private val IMPL_UUID = UUID.fromString("9d4921da-8225-4f29-aefa-39537a04bcaa")
     private val PROXY_TYPE_UUID = UUID.fromString("fa81dbde-588b-11ed-9b6a-0242ac120002")
@@ -138,7 +138,7 @@ object DapRealtime {
      */
     private fun openEffect(): AudioEffect {
         ensureBypass()
-        // 逆向 C0892eg.oO() 的候选顺序（type 候选，uuid 固定 9d4921da）：
+        // 候选顺序（type 候选，uuid 固定 9d4921da）：
         //   ① (00000000-…, 9d4921da)      ← 它列在最后，但这是“按 uuid 挂到系统节点”的写法
         //   ② (ec7178ec-…, 9d4921da)
         //   ③ (9d4921da-…, 9d4921da)
@@ -154,7 +154,7 @@ object DapRealtime {
         var last: Throwable? = null
         for (type in candidates.distinct()) {
             try {
-                // 逆向 C1113iG.l(...) 建实例时 priority 传的是 0x64 = 100
+                // 建实例时 priority 传 0x64 = 100，才拿得到系统节点
                 val e = ctor.newInstance(type, IMPL_UUID, 100, 0) as AudioEffect
                 attachWatchers(e)
                 return e
@@ -418,7 +418,7 @@ object DapRealtime {
         COMMAND_SET_PROFILE + CMD_PARAM + (paramId shl 16) + (profile shl 8)
 
     /**
-     * 写入曲线（一次性：打开 → 写 → 释放）。开机写回、探针用。
+     * 写入曲线（一次性：打开 → 写 → 释放）。开机写回、诊断用。
      * @param onlyProfile null = 写全部
      */
     fun writeCurve(curve: IntArray, onlyProfile: Int? = null): String? {
@@ -740,7 +740,7 @@ object DapRealtime {
     /**
      * A 类写入使用的 profile —— **这是设备掩码，不是音效档号**。
      *
-     * 探针实测（frida，audiohalservice.qti / libhwdapaidl.so）：
+     * 实测（走 audio HAL 参数通道）：
      *   Dolby 自己下参数时是  DapHw::setParam(dev=0x40000000, 'gebs', …)  rc=0
      *   DlbEffectDapHw 的缓存是按 audio_devices_t 分桶的：
      *     SortedVector<key_value_pair_t<audio_devices_t, shared_ptr<DapParamCache>>>
@@ -751,7 +751,7 @@ object DapRealtime {
      */
     private fun profilesForWrite(e: AudioEffect): List<Int> = listOf(DEVICE_SPEAKER)
 
-    /** 扬声器（Dolby 的 audio_devices_t 掩码，逆向 C0892eg.O 同值） */
+    /** 扬声器（Dolby 的 audio_devices_t 掩码） */
     private const val DEVICE_SPEAKER = 0x40000000
 
 

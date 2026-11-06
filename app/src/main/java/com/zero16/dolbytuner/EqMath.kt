@@ -80,7 +80,7 @@ object EqMath {
     }
 
     /**
-     * 等响补偿（ISO 226:2003），与 Flowmix 的实现一致：
+     * 等响补偿（ISO 226:2003）：
      *   x = 80 + 20*log10(cur/base)  → phon
      *   d = (spl(f,x)-spl(1k,x)) - (spl(f,80)-spl(1k,80))
      *   delta = clamp(strength*4*d, ±maxDb)

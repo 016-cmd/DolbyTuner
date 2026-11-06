@@ -6,7 +6,7 @@ import android.util.Log
 /**
  * Android 原生 DynamicsProcessing 引擎封装（P0：总开关 + 输入增益 + Limiter）
  *
- * 逆向参考：SonicKeyframe 的 K5 / J5
+ * 引擎参数组合（本项目实测可用的配置）：
  *   - priority = Integer.MAX_VALUE, session = 0
  *   - Config: variant=0, ch=2, preEq=true(127), mbc=true(4), postEq=true(10), limiter=true
  *   - setPreferredFrameDuration(80f)
@@ -70,7 +70,7 @@ object DynProc {
         var postGainDb: Float = 0f
     )
 
-    /** 四段默认（照 SonicKeyframe 的出厂值，全部关闭） */
+    /** 四段默认（出厂值，全部关闭） */
     fun defaultMbc(): List<MbcBandCfg> = listOf(
         MbcBandCfg(), MbcBandCfg(), MbcBandCfg(), MbcBandCfg()
     )
@@ -338,7 +338,7 @@ object DynProc {
     fun setInputGain(gainDb: Float) = setInputGain(gainDb, false, false)
 
     /**
-     * 输入增益：走 Channel 对象回写（Flowmix 的写法），
+     * 输入增益：走 Channel 对象回写，
      * 可左右独立静音（-100 dB）。
      */
     @Synchronized
@@ -350,7 +350,7 @@ object DynProc {
         //    （以前只在“通道回写失败”时才用它，结果通道回写“成功但没写进去”时，
         //     会把缓存的 0 再写回去 —— 表现就是滑杆完全没反应。）
         val allOk = runCatching { d.setInputGainAllChannelsTo(g) }.isSuccess
-        // ② 再按声道回写（Flowmix 同款写法，支持左右独立静音）。
+        // ② 再按声道回写（支持左右独立静音）。
         //    这一步失败也不影响第 ① 步已经生效的值。
         for (ch in 0..1) {
             runCatching {

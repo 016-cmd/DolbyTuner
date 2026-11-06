@@ -309,7 +309,7 @@ private fun SegRow(
 }
 
 
-/** Flowmix 风格的整宽白底按钮：用来放「从本地选择图片 / 清除本地壁纸」 */
+/** 整宽白底按钮：用来放「从本地选择图片 / 清除本地壁纸」 */
 @Composable
 private fun WallButton(text: String, icon: ImageVector, onClick: () -> Unit) {
     val ink = Color(0xFF1A1A1E)
