@@ -8,6 +8,8 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RadialGradient
 import android.graphics.Shader
+import android.os.Handler
+import android.os.Looper
 
 /**
  * 全局壁纸状态（新系统）。
