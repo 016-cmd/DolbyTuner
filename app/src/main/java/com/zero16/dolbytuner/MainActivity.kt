@@ -3997,35 +3997,10 @@ private fun SettingsScreen(activity: Activity) {
         }
         item {
         GlassCard(Modifier.fillMaxWidth()) {
-            Text("关于", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            AboutRow("开发者", "016. · Aoi")
-            AboutRow("机型", realModelName())
-            AboutRow("版本", "v$verName")
-            SettingRow(
-                icon = Icons.Default.Description, title = "开源许可证",
-                subtitle = "Apache-2.0", selected = false
-            ) { showLicense = true }
-            SettingRow(
-                icon = Icons.Default.Refresh, title = "重新查看引导",
-                subtitle = "再看一遍首次使用说明", selected = false
-            ) {
-                ctx.getSharedPreferences("dolby_tuner", Context.MODE_PRIVATE).edit()
-                    .putBoolean("onboard_done", false).apply()
-                activity.recreate()
-            }
-        }
-        }
-        item {
-        Spacer(Modifier.height(12.dp))
-        }
-        item {
-        GlassCard(Modifier.fillMaxWidth()) {
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
                     .jellyPress(Appearance.jelly.value > 0)
-                    .clickable { showSponsor = true }
-                    .padding(vertical = 10.dp, horizontal = 2.dp),
+                    .clickable { showSponsor = true },
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
@@ -4043,6 +4018,30 @@ private fun SettingsScreen(activity: Activity) {
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp)
                 )
+            }
+        }
+        }
+        item {
+        Spacer(Modifier.height(12.dp))
+        }
+        item {
+        GlassCard(Modifier.fillMaxWidth()) {
+            Text("关于", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            AboutRow("开发者", "016. · Aoi")
+            AboutRow("机型", realModelName())
+            AboutRow("版本", "v$verName")
+            SettingRow(
+                icon = Icons.Default.Description, title = "开源许可证",
+                subtitle = "Apache-2.0", selected = false
+            ) { showLicense = true }
+            SettingRow(
+                icon = Icons.Default.Refresh, title = "重新查看引导",
+                subtitle = "再看一遍首次使用说明", selected = false
+            ) {
+                ctx.getSharedPreferences("dolby_tuner", Context.MODE_PRIVATE).edit()
+                    .putBoolean("onboard_done", false).apply()
+                activity.recreate()
             }
         }
         }
