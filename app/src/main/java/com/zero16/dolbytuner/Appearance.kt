@@ -233,7 +233,14 @@ object Appearance {
 
     // ── 壁纸取色（三色 + 语义派生） ──
     /** 从壁纸取 3 个和谐色：主 / 次 / 第三 */
-    fun computePalette(src: Bitmap, dark: Boolean): List<Color> {
+    fun computePalette(src: Bitmap, dark: Boolean): List<Color> = try {
+        paletteImpl(src, dark)
+    } catch (t: Throwable) {
+        // 壁纸正被换掉时可能读到已回收的 Bitmap，这里退回已有色板，不崩
+        listOf(accent.value, secondary.value, tertiary.value)
+    }
+
+    private fun paletteImpl(src: Bitmap, dark: Boolean): List<Color> {
         val small = runCatching { Bitmap.createScaledBitmap(src, 48, 48, true) }.getOrNull() ?: src
         val buckets = HashMap<Int, FloatArray>()
         val hsv = FloatArray(3)
@@ -331,7 +338,13 @@ object Appearance {
 
     // ── 壁纸取色 ──
     /** 跳过太黑/太白/太灰的像素，按色相分桶，取权重最大的一桶 */
-    fun computeAccent(src: Bitmap, dark: Boolean): Color {
+    fun computeAccent(src: Bitmap, dark: Boolean): Color = try {
+        accentImpl(src, dark)
+    } catch (t: Throwable) {
+        accent.value
+    }
+
+    private fun accentImpl(src: Bitmap, dark: Boolean): Color {
         val small = runCatching { Bitmap.createScaledBitmap(src, 40, 40, true) }.getOrNull() ?: src
         val buckets = HashMap<Int, FloatArray>()
         val hsv = FloatArray(3)

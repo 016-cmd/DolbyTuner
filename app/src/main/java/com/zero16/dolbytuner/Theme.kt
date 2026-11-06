@@ -188,10 +188,9 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
         if (wpKind > 0) {
             // 内置氛围壁纸：代码生成，不联网
             withContext(Dispatchers.IO) {
-                WallpaperState.setBuiltin(
+                val bmp = WallpaperState.setBuiltin(
                     ctx, wpKind, isDark, windowWidthPx, windowHeightPx, blurDp.toFloat()
                 )
-                val bmp = WallpaperState.original
                 if (bmp != null) {
                     val pal = Appearance.computePalette(bmp, isDark)
                     withContext(Dispatchers.Main) { Appearance.cachePalette(ctx, pal) }
@@ -209,10 +208,10 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
                         BitmapFactory.decodeFile(wallpaperUri)
                     }
                     if (bitmap != null) {
-                        WallpaperState.setLocal(
+                        val applied = WallpaperState.setLocal(
                             ctx, bitmap, isDark, windowWidthPx, windowHeightPx, blurDp.toFloat()
                         )
-                        val pal = Appearance.computePalette(bitmap, isDark)
+                        val pal = Appearance.computePalette(applied ?: bitmap, isDark)
                         withContext(Dispatchers.Main) { Appearance.cachePalette(ctx, pal) }
                     }
                 }
@@ -221,10 +220,9 @@ fun DolbyTunerTheme(content: @Composable () -> Unit) {
         } else {
             // 没有本地图 → 用「绝区零」兜底，避免黑屏
             withContext(Dispatchers.IO) {
-                WallpaperState.setBuiltin(
+                val bmp = WallpaperState.setBuiltin(
                     ctx, 1, isDark, windowWidthPx, windowHeightPx, blurDp.toFloat()
                 )
-                val bmp = WallpaperState.original
                 if (bmp != null) {
                     val pal = Appearance.computePalette(bmp, isDark)
                     withContext(Dispatchers.Main) { Appearance.cachePalette(ctx, pal) }

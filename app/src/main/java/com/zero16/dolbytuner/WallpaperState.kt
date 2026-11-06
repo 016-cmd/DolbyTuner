@@ -50,9 +50,10 @@ object WallpaperState {
         screenWidthPx: Int,
         screenHeightPx: Int,
         blurRadius: Float
-    ) {
-        apply(ctx, bitmap, kind = 0, dark = dark, w = screenWidthPx, h = screenHeightPx, blur = blurRadius)
-    }
+    ): Bitmap? = apply(
+        ctx, bitmap, kind = 0, dark = dark,
+        w = screenWidthPx, h = screenHeightPx, blur = blurRadius
+    )
 
     /** 内置壁纸：代码生成，不联网 */
     fun setBuiltin(
@@ -62,12 +63,12 @@ object WallpaperState {
         screenWidthPx: Int,
         screenHeightPx: Int,
         blurRadius: Float
-    ) {
+    ): Bitmap? {
         // 生成 720 宽即可——反正卡片玻璃是模糊采样，屏幕尺寸的锐度没意义
         val w = 720
         val h = (720f * screenHeightPx / screenWidthPx.coerceAtLeast(1)).toInt().coerceIn(720, 2400)
         val bmp = generate(ctx, kind, w, h)
-        apply(ctx, bmp, kind, dark, screenWidthPx, screenHeightPx, blurRadius)
+        return apply(ctx, bmp, kind, dark, screenWidthPx, screenHeightPx, blurRadius)
     }
 
     private fun apply(
@@ -78,7 +79,7 @@ object WallpaperState {
         w: Int,
         h: Int,
         blur: Float
-    ) {
+    ): Bitmap {
         screenW = w
         screenH = h
         this.kind = kind
@@ -88,9 +89,21 @@ object WallpaperState {
         original = bitmap
         blurred = BlurUtils.blur(ctx, bitmap, radius = blur)
         isDark = dark
-        lum = averageLum(bitmap)
-        oldOriginal?.recycle()
-        oldBlurred?.recycle()
+        lum = runCatching { averageLum(bitmap) }.getOrDefault(0.5f)
+        // 旧图不能立刻回收：Compose 可能还在绘制它，启动时可能有另一条取色协程
+        // 正持有它做 getPixel（曾在冷启动偶发 "Can't call getPixel() on a
+        // recycled bitmap" 闪退）。统一延后到主线程再回收。
+        recycleLater(oldOriginal, oldBlurred)
+        return bitmap
+    }
+
+    /** 延迟回收旧壁纸，避开绘制/取色的竞态 */
+    private fun recycleLater(vararg bmps: Bitmap?) {
+        val list = bmps.filterNotNull()
+        if (list.isEmpty()) return
+        Handler(Looper.getMainLooper()).postDelayed({
+            list.forEach { b -> runCatching { if (!b.isRecycled) b.recycle() } }
+        }, 3000L)
     }
 
     fun clear() {
@@ -98,8 +111,7 @@ object WallpaperState {
         val b = blurred
         original = null
         blurred = null
-        o?.recycle()
-        b?.recycle()
+        recycleLater(o, b)
     }
 
     private fun averageLum(b: Bitmap): Float {
