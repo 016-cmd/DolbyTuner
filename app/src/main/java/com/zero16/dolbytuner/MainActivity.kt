@@ -180,7 +180,7 @@ private fun realModelName(): String {
     return (mkt ?: "${Build.MANUFACTURER} ${Build.MODEL}").trim()
 }
 
-internal data class GateResult(val passed: Boolean, val reasons: List<String>, val deviceLine: String)
+data class GateResult(val passed: Boolean, val reasons: List<String>, val deviceLine: String)
 private data class DockTab(val label: String, val icon: ImageVector, val resId: Int? = null)
 /** 机型那一行小字：市场名 + 系统版本，取一次就够，不做任何探测 */
 internal fun deviceLineText(): String =
