@@ -2143,7 +2143,8 @@ private fun EffectsScreen() {
     }
 
     fun finalEq(raw: FloatArray): FloatArray =
-        if (elOn && elBase > 0) {
+        if (!debugOn) raw
+        else if (elOn && elBase > 0) {
             EqMath.applyEqualLoudness(
                 raw, EqMath.FREQ127, curVolPct, elBase,
                 elStrength / 10f, elMaxDb / 10f
@@ -2319,6 +2320,8 @@ private fun EffectsScreen() {
      * AutoEQ 导入 > GEQ(20 段 × 逐段强度) > PEQ，最后统一乘整体强度。
      */
     fun rawCurve(peqOverride: List<PeqBand>? = null): FloatArray {
+        // 未开启 DP 接管时保持平直：曲线、滑杆、切页重进都一致
+        if (!debugOn) return FloatArray(127)
         val ae = aeqCurve
         val base: FloatArray = if (ae != null) {
             ae.copyOf()
@@ -2548,7 +2551,7 @@ private fun EffectsScreen() {
                 } else {
                     val b = loadDolbyGeqBackup(prefs)
                     if (b != null) runCatching { DapRealtime.writeLive(b) }
-                    // 关闭调试：DP 侧自动平直
+                    // 关闭调试：DP 侧曲线与滑杆一起归零
                     runCatching { DynProc.setPreEq(FloatArray(127)) }
                 }
             }
@@ -2557,6 +2560,7 @@ private fun EffectsScreen() {
             if (on) {
                 pushEq()
             } else {
+                eqRaw = FloatArray(127)
                 eqCurve = FloatArray(127)
             }
         }
@@ -2850,7 +2854,7 @@ private fun EffectsScreen() {
                         items(DapRealtime.BANDS) { i ->
                             DapBandSlider(
                                 freqLabel = fmtFreq(DapRealtime.FREQS[i]),
-                                valueQ4 = geqQ4[i],
+                                valueQ4 = if (debugOn) geqQ4[i] else 0,
                                 onChange = { q4 -> pushGeq(i, q4) },
                                 maxAbsQ4 = 320,
                                 trackHeight = 200.dp,
@@ -2858,7 +2862,8 @@ private fun EffectsScreen() {
                                 trackColor = cs.outline.copy(alpha = 0.30f),
                                 tickColor = cs.onSurfaceVariant,
                                 valueColor = cs.onSurfaceVariant,
-                                freqColor = cs.onSurfaceVariant
+                                freqColor = cs.onSurfaceVariant,
+                                enabled = debugOn
                             )
                         }
                     }
