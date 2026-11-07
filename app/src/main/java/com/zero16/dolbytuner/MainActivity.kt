@@ -209,7 +209,7 @@ private fun hasDolbyEngine(): Boolean {
 internal fun evaluateDeviceGate(): GateResult {
     val reasons = mutableListOf<String>()
     val sdk = Build.VERSION.SDK_INT
-    if (sdk < 36) reasons += "需要 Android 16（API 36）及以上，当前 API $sdk"
+    if (sdk < 35) reasons += "需要 Android 15（API 35）及以上，当前 API $sdk"
     val brand = Build.BRAND.lowercase()
     val manufacturer = Build.MANUFACTURER.lowercase()
     val vendorBrand = sysProp("ro.product.vendor.brand").lowercase()
